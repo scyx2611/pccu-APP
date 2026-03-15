@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { clearCourses } from './ScheduleStore';
+import { clearGrades } from './GradeStore';
 
 const API_BASE_URL = 'https://ecampus.pccu.edu.tw/eCampus';
 
@@ -56,4 +57,5 @@ export const logoutPCCU = async () => {
   await SecureStore.deleteItemAsync('user_password');
   await SecureStore.deleteItemAsync('session_cookie');
   await clearCourses();
+  await clearGrades();
 };

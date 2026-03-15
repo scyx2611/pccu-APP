@@ -1,13 +1,12 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../contexts/ThemeContext';
 
 import HomeScreen from '../screens/HomeScreen';
-import ScheduleScreen from '../screens/ScheduleScreen';
-import TodoScreen from '../screens/TodoScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
@@ -15,6 +14,7 @@ const Tab = createBottomTabNavigator();
 // --- 新方案：完全自定義的懸浮毛玻璃 Tab Bar ---
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { theme, isDark } = useTheme();
   
   // 動態計算底部安全距離，如果沒有 Home Indicator (如舊款 iPhone 或 Android)，給予預設 20 的間距
   const bottomPadding = insets.bottom > 0 ? insets.bottom : 20;
@@ -24,10 +24,14 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       {/* 獨立的陰影容器，避免 overflow: hidden 切斷陰影 */}
       <View style={styles.shadowContainer}>
         {/* 核心：完美的毛玻璃膠囊 */}
-        <BlurView intensity={90} tint="light" style={styles.glassCapsule}>
+        <BlurView 
+          intensity={90} 
+          tint={theme.glassTint} 
+          style={[styles.glassCapsule, { backgroundColor: theme.glassBg }]}
+        >
           
           {/* 玻璃邊緣的高光反光效果 */}
-          <View style={styles.glassHighlight} />
+          <View style={[styles.glassHighlight, { borderColor: theme.glassBorder }]} />
 
           {/* 渲染所有 Tab 按鈕 */}
           <View style={styles.tabButtonsContainer}>
@@ -50,8 +54,6 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               // 決定 Icon
               let iconName: any = 'home';
               if (route.name === '首頁') iconName = isFocused ? 'home' : 'home-outline';
-              if (route.name === '課表') iconName = isFocused ? 'calendar' : 'calendar-outline';
-              if (route.name === '代辦') iconName = isFocused ? 'checkmark-circle' : 'checkmark-circle-outline';
               if (route.name === '設定') iconName = isFocused ? 'options' : 'options-outline';
 
               return (
@@ -65,11 +67,11 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                   style={styles.tabButton}
                   activeOpacity={0.6}
                 >
-                  <View style={[styles.iconWrapper, isFocused && styles.iconWrapperActive]}>
+                  <View style={[styles.iconWrapper, isFocused && { backgroundColor: isDark ? 'rgba(10,132,255,0.25)' : 'rgba(10,122,255,0.1)' }] }>
                     <Ionicons 
                       name={iconName} 
                       size={isFocused ? 26 : 24} 
-                      color={isFocused ? '#0A7AFF' : '#8E8E93'} 
+                      color={isFocused ? theme.primary : theme.textSub} 
                     />
                   </View>
                 </TouchableOpacity>
@@ -83,25 +85,27 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TabNavigator() {
+  const { theme, isDark } = useTheme();
+
   return (
     <Tab.Navigator
+      id={undefined}
       // 將我們手刻的元件交給 tabBar 屬性
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerTransparent: true,
         headerBackground: () => (
-          <BlurView tint="light" intensity={85} style={StyleSheet.absoluteFill} />
+          <BlurView tint={theme.glassTint} intensity={85} style={StyleSheet.absoluteFill} />
         ),
         headerTitleStyle: {
           fontSize: 24,
           fontWeight: '800',
           letterSpacing: 0.5,
+          color: theme.text,
         },
       }}
     >
       <Tab.Screen name="首頁" component={HomeScreen} />
-      <Tab.Screen name="課表" component={ScheduleScreen} />
-      <Tab.Screen name="代辦" component={TodoScreen} />
       <Tab.Screen name="設定" component={SettingsScreen} />
     </Tab.Navigator>
   );

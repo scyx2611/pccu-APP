@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CourseData } from './scraper';
 
 const STORAGE_KEY = 'cached_schedule';
+const LAST_STORAGE_KEY = 'cached_schedule_last';
 
 // 記憶體快取
 let cachedCourses: CourseData[] | null = null;
@@ -14,7 +15,9 @@ export async function setCourses(courses: CourseData[], mock: boolean = false): 
   cachedCourses = courses;
   isMockData = mock;
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ courses, mock }));
+    const payload = { courses, mock, updatedAt: Date.now() };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    await AsyncStorage.setItem(LAST_STORAGE_KEY, JSON.stringify(payload));
   } catch (e) {
     console.log('儲存課表快取失敗:', e);
   }
@@ -32,6 +35,13 @@ export async function getCourses(): Promise<{ courses: CourseData[] | null; mock
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
+      cachedCourses = parsed.courses;
+      isMockData = parsed.mock ?? false;
+      return { courses: cachedCourses, mock: isMockData };
+    }
+    const lastStored = await AsyncStorage.getItem(LAST_STORAGE_KEY);
+    if (lastStored) {
+      const parsed = JSON.parse(lastStored);
       cachedCourses = parsed.courses;
       isMockData = parsed.mock ?? false;
       return { courses: cachedCourses, mock: isMockData };
