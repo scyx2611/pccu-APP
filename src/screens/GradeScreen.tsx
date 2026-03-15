@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Dimensions, Animated } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ type Phase = 'idle' | 'load_ecampus' | 'logging_in' | 'wait_redirect' | 'call_gf
 type GradeScreenProps = {
   showDetails?: boolean;
   onToggleDetails?: () => void;
+  onScrollY?: Animated.Value;
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -25,7 +26,7 @@ const formatUpdatedAt = (value?: number | null) => {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export default function GradeScreen({ showDetails, onToggleDetails }: GradeScreenProps) {
+export default function GradeScreen({ showDetails, onToggleDetails, onScrollY }: GradeScreenProps) {
   const [loading, setLoading] = useState(false);
   const [grades, setGrades] = useState<SemesterGrade[]>([]);
   const [preAdmission, setPreAdmission] = useState<SemesterGrade[]>([]);
@@ -629,7 +630,12 @@ export default function GradeScreen({ showDetails, onToggleDetails }: GradeScree
         </View>
       )}
 
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 80 }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 80 }]}
+        onScroll={onScrollY ? Animated.event([{ nativeEvent: { contentOffset: { y: onScrollY } } }], { useNativeDriver: false }) : undefined}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <View style={styles.headerTitleRow}>
             <Text style={[styles.title, { color: theme.text }]}>歷年成績</Text>

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
@@ -94,15 +95,15 @@ export default function TabNavigator() {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerTransparent: true,
+        headerTitle: () => null, // 強制不渲染標題
         headerBackground: () => (
-          <BlurView tint={theme.glassTint} intensity={85} style={StyleSheet.absoluteFill} />
+          <LinearGradient
+            colors={[theme.bg, theme.bg + '00']} // 使用同色系的完全透明，避免黑邊
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+          />
         ),
-        headerTitleStyle: {
-          fontSize: 24,
-          fontWeight: '800',
-          letterSpacing: 0.5,
-          color: theme.text,
-        },
       }}
     >
       <Tab.Screen name="首頁" component={HomeScreen} />

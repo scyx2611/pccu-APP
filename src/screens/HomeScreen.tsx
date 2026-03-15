@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Animated, Dimensions, TouchableOpacity, Easing, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import ScheduleScreen from './ScheduleScreen';
 import { CourseData, SemesterGrade } from '../services/scraper';
@@ -120,6 +121,8 @@ export default function HomeScreen() {
   const gradeAnim = useRef(new Animated.Value(0)).current;
   const gradeCloseTriggeredRef = useRef(false);
   const gradePressAnim = useRef(new Animated.Value(0)).current;
+  const scheduleScrollY = useRef(new Animated.Value(0)).current;
+  const gradeScrollY = useRef(new Animated.Value(0)).current;
 
   const refreshCourses = useCallback(async () => {
     const cached = await getCourses();
@@ -509,7 +512,7 @@ export default function HomeScreen() {
               <ScrollView
                 contentContainerStyle={[styles.expandScroll, { paddingTop: insets.top + 80 }]}
                 showsVerticalScrollIndicator={false}
-                onScroll={handleScheduleScroll}
+                onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scheduleScrollY } } }], { useNativeDriver: false, listener: handleScheduleScroll })}
                 scrollEventThrottle={16}
                 bounces
                 overScrollMode="always"
@@ -589,10 +592,22 @@ export default function HomeScreen() {
                 <Text style={[styles.updatedAtText, { color: theme.textSub }]}>最後更新：{updatedAtText || '尚未更新'}</Text>
                 <View style={{ height: 24 }} />
               </ScrollView>
+              
+              <Animated.View style={{ opacity: scheduleScrollY.interpolate({ inputRange: [60, 100], outputRange: [0, 1], extrapolate: 'clamp' }), position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 80, zIndex: 10 }} pointerEvents="none">
+                <LinearGradient
+                  colors={[theme.bg, theme.bg + '00']}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+              
+              <Animated.View style={[styles.stickyHeader, { top: insets.top + 8, zIndex: 15, opacity: scheduleScrollY.interpolate({ inputRange: [60, 100], outputRange: [0, 1], extrapolate: 'clamp' }) }]}>
+                <Text style={[styles.stickyTitle, { color: theme.text }]}>完整課表</Text>
+              </Animated.View>
             </Animated.View>
+            
             <TouchableOpacity
               onPress={closeSchedule}
-              style={[styles.overlayCloseButton, { backgroundColor: theme.card, borderColor: theme.border, top: insets.top + 8 }]}
+              style={[styles.overlayCloseButton, { backgroundColor: theme.card, borderColor: theme.border, top: insets.top + 8, zIndex: 20 }]}
               activeOpacity={0.7}
             >
               <Ionicons name="close" size={20} color={theme.text} />
@@ -619,10 +634,26 @@ export default function HomeScreen() {
               gradeOverlayStyle,
             ]}
           >
-            <GradeScreen showDetails={showGradeDetails} onToggleDetails={toggleGradeDetails} />
+            <GradeScreen showDetails={showGradeDetails} onToggleDetails={toggleGradeDetails} onScrollY={gradeScrollY} />
+            
+            {/* 漸變遮罩：固定顯示，讓內容往上滑動時自然被覆蓋 */}
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 80, zIndex: 10 }} pointerEvents="none">
+              <LinearGradient
+                colors={[theme.bg, theme.bg + '00']}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+            
+            {/* 常駐頂部的成績標題（不含眼睛）：只有往下滑動時才浮現 */}
+            <Animated.View style={[styles.stickyHeader, { top: insets.top + 8, zIndex: 15, opacity: gradeScrollY.interpolate({ inputRange: [60, 100], outputRange: [0, 1], extrapolate: 'clamp' }) }]}>
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={[styles.stickyTitle, { color: theme.text }]}>歷年成績</Text>
+              </View>
+            </Animated.View>
+
             <TouchableOpacity
               onPress={closeGrades}
-              style={[styles.overlayCloseButton, { backgroundColor: theme.card, borderColor: theme.border, top: insets.top + 8 }]}
+              style={[styles.overlayCloseButton, { backgroundColor: theme.card, borderColor: theme.border, top: insets.top + 8, zIndex: 20 }]}
               activeOpacity={0.7}
             >
               <Ionicons name="close" size={20} color={theme.text} />
@@ -689,6 +720,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     zIndex: 20,
+  },
+  stickyHeader: {
+    position: 'absolute',
+    left: 44, // 配合右邊的關閉按鈕寬度，保持視覺置中
+    right: 44,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickyTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  eyeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    marginLeft: 10,
   },
   expandContent: { flex: 1 },
   scheduleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, width: '100%' },
