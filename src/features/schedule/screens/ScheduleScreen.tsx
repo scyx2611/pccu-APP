@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Platform, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Animated, Platform, InteractionManager } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
 import { BlurView } from 'expo-blur';
@@ -7,7 +7,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { router, Stack } from 'expo-router';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import DebugStamp from '../../../shared/components/DebugStamp';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
@@ -38,7 +37,7 @@ export default function ScheduleScreen() {
   const [debugUrl, setDebugUrl] = useState(DEFAULT_URL);
   const [debugNote, setDebugNote] = useState('');
   const [debugHtmlPreview, setDebugHtmlPreview] = useState('');
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const modalTopInset = Platform.OS === 'ios' ? 12 : Math.max(insets.top, 12);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -466,39 +465,80 @@ export default function ScheduleScreen() {
 
   return (
     <>
-      <Stack.Screen 
-        options={{ 
-          title: '課表',
-          headerShown: true,
-          headerLargeTitle: true,
-          headerTransparent: true,
-          headerShadowVisible: false,
-          headerBlurEffect: isDark ? 'systemMaterialDark' : 'systemMaterialLight',
-          headerRight: () => (
-            <Pressable
-              onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home')}
-              style={({ pressed }) => [{
-                backgroundColor: isDark ? '#3A3A3C' : '#F2F2F7',
-                width: 32, height: 32, borderRadius: 16,
-                justifyContent: 'center', alignItems: 'center',
-                opacity: pressed ? 0.5 : 1
-              }]}
-              hitSlop={15}
-            >
-              <AppSymbol name="xmark" size={16} weight="semibold" tintColor={isDark ? '#FFFFFF' : '#1C1C1E'} fallback={<Text style={{ fontSize: 18, color: isDark ? '#FFFFFF' : '#1C1C1E', fontWeight: 'bold' }}>×</Text>} />
-            </Pressable>
-          ),
-        }} 
-      />
       <View style={{ flex: 1, backgroundColor: theme.bg }}>
         {showWebView && !keepWebViewVisibleForDebug ? <View style={styles.hiddenWebView}>{renderSyncWebView()}</View> : null}
 
+        <Animated.View
+          style={[
+            styles.floatingHeader,
+            {
+              height: floatingHeaderHeight,
+              opacity: headerReveal,
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <MaskedView
+          style={StyleSheet.absoluteFill}
+          maskElement={
+            <LinearGradient
+              colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.4)', 'transparent']}
+              locations={[0, 0.3, 0.7, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          }
+        >
+          <BlurView
+            tint={theme.glassTint}
+            intensity={80}
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={[
+              withAlpha(theme.bg, 0.8),
+              withAlpha(theme.bg, 0.3),
+              'transparent',
+            ]}
+            style={StyleSheet.absoluteFill}
+          />
+        </MaskedView>
+          <Animated.Text
+            style={[
+              styles.floatingHeaderTitle,
+              {
+                color: theme.text,
+                top: modalTopInset + 4,
+                opacity: centerTitleOpacity,
+                transform: [{ translateY: centerTitleTranslateY }],
+              },
+            ]}
+          >
+            課表
+          </Animated.Text>
+        </Animated.View>
+
         <Animated.ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: 24 }]}
-          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 18 }]}
+          contentInsetAdjustmentBehavior="never"
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
           scrollEventThrottle={16}
         >
+          <Animated.View
+            style={[
+              styles.pageTitleWrap,
+              {
+                opacity: pageTitleOpacity,
+                transform: [{ translateY: pageTitleTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.headerRow}>
+              <View>
+                <Text style={[styles.pageTitle, { color: theme.text }]}>課表</Text>
+              </View>
+            </View>
+          </Animated.View>
+
           {keepWebViewVisibleForDebug ? (
             <View style={[styles.debugControls, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={2}>
@@ -587,8 +627,6 @@ const styles = StyleSheet.create({
   pageTitleWrap: { marginBottom: 18 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   pageTitle: { fontSize: 32, fontWeight: '800' },
-  closeButtonContainer: { position: 'absolute', right: 20, zIndex: 30 },
-  closeButton: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   pageSubtitle: { fontSize: 13, marginTop: 4 },
   empty: { alignItems: 'center', marginTop: 100 },
   card: { borderRadius: 24, padding: 24, marginBottom: 16, elevation: 3 },
