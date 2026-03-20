@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Animated, Platform, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Platform, InteractionManager } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
 import { BlurView } from 'expo-blur';
@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import DebugStamp from '../../../shared/components/DebugStamp';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
@@ -517,6 +518,22 @@ export default function ScheduleScreen() {
           </Animated.Text>
         </Animated.View>
 
+        <View style={[styles.closeButtonContainer, { top: modalTopInset + 4 }]} pointerEvents="box-none">
+          <Pressable
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/home');
+              }
+            }}
+            style={({ pressed }) => [styles.closeButton, { opacity: pressed ? 0.5 : 1, backgroundColor: withAlpha(theme.text, 0.1) }]}
+            hitSlop={15}
+          >
+            <AppSymbol name="xmark" size={14} tintColor={withAlpha(theme.text, 0.6)} fallback={<Text style={{ fontSize: 14, fontWeight: 'bold', color: withAlpha(theme.text, 0.6) }}>×</Text>} />
+          </Pressable>
+        </View>
+
         <Animated.ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 18 }]}
           contentInsetAdjustmentBehavior="never"
@@ -627,6 +644,8 @@ const styles = StyleSheet.create({
   pageTitleWrap: { marginBottom: 18 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   pageTitle: { fontSize: 32, fontWeight: '800' },
+  closeButtonContainer: { position: 'absolute', right: 20, zIndex: 30 },
+  closeButton: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   pageSubtitle: { fontSize: 13, marginTop: 4 },
   empty: { alignItems: 'center', marginTop: 100 },
   card: { borderRadius: 24, padding: 24, marginBottom: 16, elevation: 3 },
