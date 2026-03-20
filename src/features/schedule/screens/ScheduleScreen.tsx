@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import DebugStamp from '../../../shared/components/DebugStamp';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
@@ -38,7 +38,7 @@ export default function ScheduleScreen() {
   const [debugUrl, setDebugUrl] = useState(DEFAULT_URL);
   const [debugNote, setDebugNote] = useState('');
   const [debugHtmlPreview, setDebugHtmlPreview] = useState('');
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const modalTopInset = Platform.OS === 'ios' ? 12 : Math.max(insets.top, 12);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -466,96 +466,39 @@ export default function ScheduleScreen() {
 
   return (
     <>
+      <Stack.Screen 
+        options={{ 
+          title: '課表',
+          headerShown: true,
+          headerLargeTitle: true,
+          headerTransparent: true,
+          headerShadowVisible: false,
+          headerBlurEffect: isDark ? 'systemMaterialDark' : 'systemMaterialLight',
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home')}
+              style={({ pressed }) => [{
+                backgroundColor: isDark ? '#EBEBF526' : '#7676801F',
+                width: 30, height: 30, borderRadius: 15,
+                justifyContent: 'center', alignItems: 'center',
+                opacity: pressed ? 0.5 : 1
+              }]}
+              hitSlop={15}
+            >
+              <AppSymbol name="xmark" size={12} weight="bold" tintColor={isDark ? '#EBEBF599' : '#3C3C4399'} fallback={<Text>X</Text>} />
+            </Pressable>
+          ),
+        }} 
+      />
       <View style={{ flex: 1, backgroundColor: theme.bg }}>
         {showWebView && !keepWebViewVisibleForDebug ? <View style={styles.hiddenWebView}>{renderSyncWebView()}</View> : null}
 
-        <Animated.View
-          style={[
-            styles.floatingHeader,
-            {
-              height: floatingHeaderHeight,
-              opacity: headerReveal,
-            },
-          ]}
-          pointerEvents="none"
-        >
-          <MaskedView
-          style={StyleSheet.absoluteFill}
-          maskElement={
-            <LinearGradient
-              colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.4)', 'transparent']}
-              locations={[0, 0.3, 0.7, 1]}
-              style={StyleSheet.absoluteFill}
-            />
-          }
-        >
-          <BlurView
-            tint={theme.glassTint}
-            intensity={80}
-            style={StyleSheet.absoluteFill}
-          />
-          <LinearGradient
-            colors={[
-              withAlpha(theme.bg, 0.8),
-              withAlpha(theme.bg, 0.3),
-              'transparent',
-            ]}
-            style={StyleSheet.absoluteFill}
-          />
-        </MaskedView>
-          <Animated.Text
-            style={[
-              styles.floatingHeaderTitle,
-              {
-                color: theme.text,
-                top: modalTopInset + 4,
-                opacity: centerTitleOpacity,
-                transform: [{ translateY: centerTitleTranslateY }],
-              },
-            ]}
-          >
-            課表
-          </Animated.Text>
-        </Animated.View>
-
-        <View style={[styles.closeButtonContainer, { top: modalTopInset + 4 }]} pointerEvents="box-none">
-          <Pressable
-            onPress={() => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace('/(tabs)/home');
-              }
-            }}
-            style={({ pressed }) => [styles.closeButton, { opacity: pressed ? 0.5 : 1, backgroundColor: withAlpha(theme.text, 0.1) }]}
-            hitSlop={15}
-          >
-            <AppSymbol name="xmark" size={14} tintColor={withAlpha(theme.text, 0.6)} fallback={<Text style={{ fontSize: 14, fontWeight: 'bold', color: withAlpha(theme.text, 0.6) }}>×</Text>} />
-          </Pressable>
-        </View>
-
         <Animated.ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 18 }]}
-          contentInsetAdjustmentBehavior="never"
+          contentContainerStyle={[styles.scrollContent, { paddingTop: 24 }]}
+          contentInsetAdjustmentBehavior="automatic"
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
           scrollEventThrottle={16}
         >
-          <Animated.View
-            style={[
-              styles.pageTitleWrap,
-              {
-                opacity: pageTitleOpacity,
-                transform: [{ translateY: pageTitleTranslateY }],
-              },
-            ]}
-          >
-            <View style={styles.headerRow}>
-              <View>
-                <Text style={[styles.pageTitle, { color: theme.text }]}>課表</Text>
-              </View>
-            </View>
-          </Animated.View>
-
           {keepWebViewVisibleForDebug ? (
             <View style={[styles.debugControls, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={2}>
