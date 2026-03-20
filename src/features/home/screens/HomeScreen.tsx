@@ -1,6 +1,8 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, ActivityIndicator } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -101,7 +103,7 @@ const findNextClass = (courses: CourseData[], now: Date): NextClassInfo | null =
 };
 
 export default function HomeScreen() {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const [courses, setCourses] = useState<CourseData[]>([]);
@@ -116,23 +118,14 @@ export default function HomeScreen() {
   const [backgroundSyncStage, setBackgroundSyncStage] = useState<'idle' | 'schedule' | 'grade' | 'done'>('idle');
   const pressAnim = useRef(new Animated.Value(0)).current;
   const gradePressAnim = useRef(new Animated.Value(0)).current;
-
-  const withAlpha = (hex: string, alpha: number) => {
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const withAlpha = useCallback((hex: string, alpha: number) => {
     const h = hex.replace('#', '');
     const r = parseInt(h.slice(0, 2), 16);
     const g = parseInt(h.slice(2, 4), 16);
     const b = parseInt(h.slice(4, 6), 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
-
-  const topFadeHeight = insets.top + 90;
-  const topGradientColors = isDark
-    ? [
-        (theme as any).ambient1 || theme.bg,
-        withAlpha(theme.bg, 0.75),
-        withAlpha(theme.bg, 0),
-      ] as const
-    : ['#FFFFFF', 'rgba(255,255,255,0.85)', 'rgba(255,255,255,0)'] as const;
+  }, []);
 
   const refreshCourses = useCallback(async () => {
     const cached = await getCourses();
@@ -272,6 +265,32 @@ export default function HomeScreen() {
   const weatherText = weather?.temp !== undefined
     ? `台北約 ${weather.temp}°C，出門前記得留意天氣變化。`
     : '今天也一起把校園資訊整理好。';
+  const headerReveal = scrollY.interpolate({
+    inputRange: [8, 48, 92],
+    outputRange: [0, 0.55, 1],
+    extrapolate: 'clamp',
+  });
+  const centerTitleOpacity = scrollY.interpolate({
+    inputRange: [45, 75, 95],
+    outputRange: [0, 0.8, 1],
+    extrapolate: 'clamp',
+  });
+  const centerTitleTranslateY = scrollY.interpolate({
+    inputRange: [45, 95],
+    outputRange: [10, 0],
+    extrapolate: 'clamp',
+  });
+  const pageTitleOpacity = scrollY.interpolate({
+    inputRange: [0, 15, 45],
+    outputRange: [1, 1, 0],
+    extrapolate: 'clamp',
+  });
+  const pageTitleTranslateY = scrollY.interpolate({
+    inputRange: [0, 78],
+    outputRange: [0, -10],
+    extrapolate: 'clamp',
+  });
+  const floatingHeaderHeight = insets.top + 140;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}> 
@@ -285,16 +304,82 @@ export default function HomeScreen() {
         reloadKey={gradeSyncReloadKey}
         onComplete={handleGradeSyncComplete}
       />
-      <View style={[styles.topGradient, { height: topFadeHeight }]} pointerEvents="none">
-        <LinearGradient colors={topGradientColors} style={StyleSheet.absoluteFill} />
-      </View>
-
-      <ScrollView
-        style={[styles.container, { backgroundColor: 'transparent' }]}
-        contentContainerStyle={styles.content}
-        contentInsetAdjustmentBehavior="automatic"
-        showsVerticalScrollIndicator={false}
+      <Animated.View
+        style={[
+          styles.floatingHeader,
+          {
+            height: floatingHeaderHeight,
+            opacity: headerReveal,
+          },
+        ]}
+        pointerEvents="none"
       >
+        <MaskedView
+          style={StyleSheet.absoluteFill}
+          maskElement={
+            <LinearGradient
+              colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.4)', 'transparent']}
+              locations={[0, 0.3, 0.7, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          }
+        >
+          <BlurView
+            tint={theme.glassTint}
+            intensity={80}
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={[
+              withAlpha(theme.bg, 0.8),
+              withAlpha(theme.bg, 0.3),
+              'transparent',
+            ]}
+            style={StyleSheet.absoluteFill}
+          />
+        </MaskedView>
+        <Animated.Text
+          style={[
+            styles.floatingHeaderTitle,
+            {
+              color: theme.text,
+              top: insets.top + 12,
+              opacity: centerTitleOpacity,
+              transform: [{ translateY: centerTitleTranslateY }],
+            },
+          ]}
+        >
+          首頁
+        </Animated.Text>
+      </Animated.View>
+
+      <Animated.ScrollView
+        style={[styles.container, { backgroundColor: 'transparent' }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 18 }]}
+        contentInsetAdjustmentBehavior="never"
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+      >
+        <Animated.View
+          style={[
+            styles.pageTitleWrap,
+            {
+              opacity: pageTitleOpacity,
+              transform: [{ translateY: pageTitleTranslateY }],
+            },
+          ]}
+        >
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>首頁</Text>
+            </View>
+          </View>
+        </Animated.View>
+
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <View style={styles.cardHeader}>
             <AppSymbol name={greetingIcon} size={28} tintColor={greetingColor} fallback={<Text>Hi</Text>} />
@@ -366,7 +451,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.bottomSpacer} />
-      </ScrollView>
+      </Animated.ScrollView>
 
     </View>
   );
@@ -375,7 +460,28 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
-  topGradient: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, elevation: 2 },
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  floatingHeaderTitle: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  pageTitleWrap: { marginBottom: 18 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+  },
   bottomSpacer: { height: 120 },
   heroCard: {
     borderRadius: 32,

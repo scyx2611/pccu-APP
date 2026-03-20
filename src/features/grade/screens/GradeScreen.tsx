@@ -2,7 +2,9 @@
 import { View, Text, StyleSheet, ActivityIndicator, Animated, Platform } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AppSymbol from '../../../shared/components/AppSymbol';
@@ -47,6 +49,7 @@ export default function GradeScreen({ showPreview = false, onScrollY }: GradeScr
   const [debugHtmlPreview, setDebugHtmlPreview] = useState('');
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const modalTopInset = Platform.OS === 'ios' ? 12 : Math.max(insets.top, 12);
   const scrollY = onScrollY || useRef(new Animated.Value(0)).current;
   const webViewRef = useRef<WebView>(null);
   const credRef = useRef<PCCUCredentials | null>(null);
@@ -69,7 +72,32 @@ export default function GradeScreen({ showPreview = false, onScrollY }: GradeScr
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
-  const topFadeHeight = insets.top + 84;
+  const floatingHeaderHeight = modalTopInset + 140;
+  const headerReveal = scrollY.interpolate({
+    inputRange: [8, 48, 92],
+    outputRange: [0, 0.55, 1],
+    extrapolate: 'clamp',
+  });
+  const centerTitleOpacity = scrollY.interpolate({
+    inputRange: [45, 75, 95],
+    outputRange: [0, 0.8, 1],
+    extrapolate: 'clamp',
+  });
+  const centerTitleTranslateY = scrollY.interpolate({
+    inputRange: [45, 95],
+    outputRange: [10, 0],
+    extrapolate: 'clamp',
+  });
+  const pageTitleOpacity = scrollY.interpolate({
+    inputRange: [0, 15, 45],
+    outputRange: [1, 1, 0],
+    extrapolate: 'clamp',
+  });
+  const pageTitleTranslateY = scrollY.interpolate({
+    inputRange: [0, 78],
+    outputRange: [0, -10],
+    extrapolate: 'clamp',
+  });
   const keepWebViewVisibleForDebug = __DEV__ && showPreview;
   const formattedUpdatedAt = lastUpdatedAt
     ? `${String(new Date(lastUpdatedAt).getFullYear())}/${String(new Date(lastUpdatedAt).getMonth() + 1).padStart(2, '0')}/${String(new Date(lastUpdatedAt).getDate()).padStart(2, '0')} ${String(new Date(lastUpdatedAt).getHours()).padStart(2, '0')}:${String(new Date(lastUpdatedAt).getMinutes()).padStart(2, '0')}`
@@ -385,39 +413,74 @@ export default function GradeScreen({ showPreview = false, onScrollY }: GradeScr
 
         <Animated.View
           style={[
-            styles.topGradient,
+            styles.floatingHeader,
             {
-              height: topFadeHeight,
-              opacity: scrollY.interpolate({
-                inputRange: [0, 80],
-                outputRange: [1, 0],
-                extrapolate: 'clamp',
-              }),
+              height: floatingHeaderHeight,
+              opacity: headerReveal,
             },
           ]}
           pointerEvents="none"
         >
+          <MaskedView
+          style={StyleSheet.absoluteFill}
+          maskElement={
+            <LinearGradient
+              colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.4)', 'transparent']}
+              locations={[0, 0.3, 0.7, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          }
+        >
+          <BlurView
+            tint={theme.glassTint}
+            intensity={80}
+            style={StyleSheet.absoluteFill}
+          />
           <LinearGradient
             colors={[
-              theme.ambient1 || theme.bg,
-              withAlpha(theme.bg, 0.75),
-              withAlpha(theme.bg, 0),
+              withAlpha(theme.bg, 0.8),
+              withAlpha(theme.bg, 0.3),
+              'transparent',
             ]}
             style={StyleSheet.absoluteFill}
           />
+        </MaskedView>
+          <Animated.Text
+            style={[
+              styles.floatingHeaderTitle,
+              {
+                color: theme.text,
+                top: modalTopInset + 12,
+                opacity: centerTitleOpacity,
+                transform: [{ translateY: centerTitleTranslateY }],
+              },
+            ]}
+          >
+            成績
+          </Animated.Text>
         </Animated.View>
 
         <Animated.ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 28 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: modalTopInset + 18 }]}
           contentInsetAdjustmentBehavior="never"
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
           scrollEventThrottle={16}
         >
-          <View style={styles.headerRow}>
-            <View>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>成績</Text>
+          <Animated.View
+            style={[
+              styles.pageTitleWrap,
+              {
+                opacity: pageTitleOpacity,
+                transform: [{ translateY: pageTitleTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.headerRow}>
+              <View>
+                <Text style={[styles.pageTitle, { color: theme.text }]}>成績</Text>
+              </View>
             </View>
-          </View>
+          </Animated.View>
 
           {keepWebViewVisibleForDebug ? (
             <View style={[styles.debugControls, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -514,13 +577,23 @@ export default function GradeScreen({ showPreview = false, onScrollY }: GradeScr
 
 const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20 },
-  topGradient: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  floatingHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 },
+  floatingHeaderTitle: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
   hiddenWebView: { position: 'absolute', width: 1, height: 1, opacity: 0, left: -1000, top: -1000 },
   hiddenWebViewInner: { width: 1, height: 1 },
   debugControls: { borderRadius: 20, borderWidth: 1, padding: 16, marginBottom: 16 },
   debugMeta: { fontSize: 12, lineHeight: 18 },
   debugWebViewCard: { borderRadius: 24, borderWidth: 1, overflow: 'hidden', minHeight: 420, marginBottom: 16 },
   debugWebViewInner: { width: '100%', height: 420 },
+  pageTitleWrap: { marginBottom: 18 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   pageTitle: { fontSize: 32, fontWeight: '800' },
   pageSubtitle: { fontSize: 13, marginTop: 4 },

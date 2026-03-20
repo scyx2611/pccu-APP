@@ -1,6 +1,10 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Switch, Animated } from 'react-native';
 import { router } from 'expo-router';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logoutPCCU } from '../../auth/services/authService';
 import { useTheme, ThemeMode } from '../../../providers/theme/ThemeProvider';
 import AppSymbol from '../../../shared/components/AppSymbol';
@@ -8,7 +12,16 @@ import { getDeveloperDebugEnabled, setDeveloperDebugEnabled } from '../storage/d
 
 export default function SettingsScreen() {
   const { mode, setMode, theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [developerDebugEnabled, setDeveloperDebugEnabledState] = useState(false);
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const withAlpha = React.useCallback((hex: string, alpha: number) => {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -70,15 +83,111 @@ export default function SettingsScreen() {
     light: '淺色模式',
     dark: '深色模式',
   };
+  const headerReveal = scrollY.interpolate({
+    inputRange: [8, 48, 92],
+    outputRange: [0, 0.55, 1],
+    extrapolate: 'clamp',
+  });
+  const centerTitleOpacity = scrollY.interpolate({
+    inputRange: [45, 75, 95],
+    outputRange: [0, 0.8, 1],
+    extrapolate: 'clamp',
+  });
+  const centerTitleTranslateY = scrollY.interpolate({
+    inputRange: [45, 95],
+    outputRange: [10, 0],
+    extrapolate: 'clamp',
+  });
+  const pageTitleOpacity = scrollY.interpolate({
+    inputRange: [0, 15, 45],
+    outputRange: [1, 1, 0],
+    extrapolate: 'clamp',
+  });
+  const pageTitleTranslateY = scrollY.interpolate({
+    inputRange: [0, 78],
+    outputRange: [0, -10],
+    extrapolate: 'clamp',
+  });
+  const floatingHeaderHeight = insets.top + 140;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <ScrollView
-        style={[styles.container, { backgroundColor: theme.bg }]}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+      <Animated.View
+        style={[
+          styles.floatingHeader,
+          {
+            height: floatingHeaderHeight,
+            opacity: headerReveal,
+          },
+        ]}
+        pointerEvents="none"
       >
+        <MaskedView
+          style={StyleSheet.absoluteFill}
+          maskElement={
+            <LinearGradient
+              colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.4)', 'transparent']}
+              locations={[0, 0.3, 0.7, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          }
+        >
+          <BlurView
+            tint={theme.glassTint}
+            intensity={80}
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={[
+              withAlpha(theme.bg, 0.8),
+              withAlpha(theme.bg, 0.3),
+              'transparent',
+            ]}
+            style={StyleSheet.absoluteFill}
+          />
+        </MaskedView>
+        <Animated.Text
+          style={[
+            styles.floatingHeaderTitle,
+            {
+              color: theme.text,
+              top: insets.top + 12,
+              opacity: centerTitleOpacity,
+              transform: [{ translateY: centerTitleTranslateY }],
+            },
+          ]}
+        >
+          設置
+        </Animated.Text>
+      </Animated.View>
+
+      <Animated.ScrollView
+        style={[styles.container, { backgroundColor: theme.bg }]}
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 18 }]}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+      >
+        <Animated.View
+          style={[
+            styles.pageTitleWrap,
+            {
+              opacity: pageTitleOpacity,
+              transform: [{ translateY: pageTitleTranslateY }],
+            },
+          ]}
+        >
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>設置</Text>
+            </View>
+          </View>
+        </Animated.View>
+
         <Text style={[styles.sectionTitle, { color: theme.textSub }]}>應用程式設定</Text>
         <View style={[styles.insetGroup, { backgroundColor: theme.card }]}>
           <TouchableOpacity style={styles.cellRow} onPress={() => router.push('/settings/notifications')}>
@@ -164,7 +273,7 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.bottomSpacer} />
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 }
@@ -172,6 +281,36 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingTop: 16 },
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  floatingHeaderTitle: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  pageTitleWrap: {
+    marginBottom: 18,
+    paddingHorizontal: 20,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+  },
 
   sectionTitle: {
     fontSize: 14,
