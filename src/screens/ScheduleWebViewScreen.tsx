@@ -33,7 +33,7 @@ export default function ScheduleWebView({ onCoursesLoaded, onClose }: ScheduleWe
 
   const handleLoadEnd = (navState: any) => {
     setLoading(false);
-    
+
     if (navState.url.includes('queryByStudent')) {
       // 頁面加載完成，嘗試注入 JS 來提取課表數據
       setTimeout(() => {
@@ -41,7 +41,7 @@ export default function ScheduleWebView({ onCoursesLoaded, onClose }: ScheduleWe
           (function() {
             var tables = document.querySelectorAll('table');
             var result = { found: false, html: '' };
-            
+
             tables.forEach(function(table) {
               var text = table.innerText || '';
               if (text.includes('(必)') || text.includes('(選)')) {
@@ -50,7 +50,7 @@ export default function ScheduleWebView({ onCoursesLoaded, onClose }: ScheduleWe
                 return;
               }
             });
-            
+
             window.ReactNativeWebView.postMessage(JSON.stringify(result));
           })();
           true;
@@ -79,7 +79,7 @@ export default function ScheduleWebView({ onCoursesLoaded, onClose }: ScheduleWe
     return (
       <View style={styles.container}>
         <View style={styles.headerSpacer} />
-        
+
         <View style={styles.headerRow}>
           <Text style={styles.pageTitle}>我的課表</Text>
           <TouchableOpacity onPress={() => setShowWebView(true)} style={styles.refreshBtn}>
@@ -95,16 +95,16 @@ export default function ScheduleWebView({ onCoursesLoaded, onClose }: ScheduleWe
           <Text style={styles.emptyText}>
             學校系統有驗證碼保護，請選擇以下方式查看課表：
           </Text>
-          
-          <TouchableOpacity 
-            style={styles.primaryButton} 
+
+          <TouchableOpacity
+            style={styles.primaryButton}
             onPress={() => setShowWebView(true)}
           >
             <Ionicons name="browsers" size={20} color="#fff" style={{marginRight: 8}} />
             <Text style={styles.primaryButtonText}>用 WebView 開啟</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.secondaryButton}
             onPress={handleOpenExternal}
           >
@@ -114,7 +114,7 @@ export default function ScheduleWebView({ onCoursesLoaded, onClose }: ScheduleWe
         </View>
 
         <Text style={styles.mockLabel}>或使用示範資料：</Text>
-        
+
         <View style={styles.mockCourses}>
           {MOCK_COURSES.slice(0, 3).map((course, index) => (
             <View key={index} style={styles.courseCard}>
@@ -148,14 +148,14 @@ export default function ScheduleWebView({ onCoursesLoaded, onClose }: ScheduleWe
           <Ionicons name="open-outline" size={24} color="#0A7AFF" />
         </TouchableOpacity>
       </View>
-      
+
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#0A7AFF" />
           <Text style={styles.loadingText}>載入中...</Text>
         </View>
       )}
-      
+
       <WebView
         ref={webViewRef}
         source={{ uri: scheduleUrl }}
@@ -173,8 +173,8 @@ export default function ScheduleWebView({ onCoursesLoaded, onClose }: ScheduleWe
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     backgroundColor: '#F5F5F9',
     paddingHorizontal: 20,
   },
@@ -183,21 +183,21 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 34, fontWeight: '800', color: '#1C1C1E', letterSpacing: 0.5 },
   refreshBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8 },
-  
+
   emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 32, padding: 24, alignItems: 'center', marginTop: 20 },
   iconCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#1C1C1E', marginBottom: 8 },
   emptyText: { fontSize: 15, color: '#8E8E93', textAlign: 'center', lineHeight: 22, marginBottom: 20 },
-  
+
   primaryButton: { flexDirection: 'row', backgroundColor: '#0A7AFF', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 14, alignItems: 'center', marginBottom: 12, width: '100%', justifyContent: 'center' },
   primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  
+
   secondaryButton: { flexDirection: 'row', backgroundColor: '#F2F2F7', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 14, alignItems: 'center', width: '100%', justifyContent: 'center' },
   secondaryButtonText: { color: '#0A7AFF', fontSize: 16, fontWeight: '600' },
 
   mockLabel: { fontSize: 14, color: '#8E8E93', marginTop: 20, marginBottom: 12, marginLeft: 4 },
   mockCourses: {},
-  
+
   courseCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, marginBottom: 12 },
   courseHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginRight: 8 },

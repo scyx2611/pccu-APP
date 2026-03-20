@@ -1,0 +1,10 @@
+{
+  "popupUrl": "https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse",
+  "frames": [
+    {
+      "index": 0,
+      "url": "https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse",
+      "name": ""
+    }
+  ]
+}

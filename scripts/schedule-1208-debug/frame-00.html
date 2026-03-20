@@ -1,0 +1,419 @@
+<html><head>
+<meta http-equiv="Content-Type" content="text/html; charset=big5">
+<!--引用另開視窗的JavaScript-->
+<script language="JavaScript" src="gfOpenCourse.js"></script>
+<title>學生課表查詢</title>
+<!--update 2009/12/03-->
+<!--引用列印時套用的css-->
+<link href="print.css" rel="stylesheet" type="text/css" media="print">
+<script language="JavaScript">
+<!--
+function ToPrint(){
+  //隱藏查詢選項及Menu
+  if (document.getElementById("TrMainMenu")){
+     document.getElementById("TrMainMenu").style.display='none';
+  }
+  if (document.getElementById("tdRightLink")){
+     document.getElementById("tdRightLink").style.display='none';
+  }
+  document.getElementById("tbTitle").style.display='none';  
+  document.getElementById("tbLine").style.display='none';
+  if (document.queryCommandSupported('print')){ 
+     document.execCommand('print',false,null); 
+  } 
+  else { 
+     window.print(); 
+  };
+  if (document.getElementById("TrMainMenu")){
+     document.getElementById("TrMainMenu").style.display='';
+  }  
+  if (document.getElementById("tdRightLink")){
+     document.getElementById("tdRightLink").style.display='';
+  }
+  document.getElementById("tbTitle").style.display='';  
+  document.getElementById("tbLine").style.display='';
+}
+
+function ToSearch(meform,actStr){
+
+  if (actStr!="searchBatchByStd"){
+  //需選擇查詢條件
+  if(document.getElementById("scdfYYM").value=="" || document.getElementById("StdNoName").value=="" ) 
+	{
+	  alert('請選擇查詢條件！');
+	  return false;
+	}
+
+  if (isNaN(document.getElementById("StdNoName").value)==false && document.getElementById("StdNoName").value.length!=8)
+	{
+	  alert('學生學號格式錯誤,請重新輸入！');
+	  return false;
+	}
+	}
+  document.getElementById("hidChkSearch").value=actStr;
+  document.getElementById("hidStdName").value="";
+  document.getElementById("hidStdNo").value="";
+  document.getElementById("hidStdDept").value="";
+  meform.submit();
+}
+
+//點選學生查詢
+function lfSearchStudent(meform,StdName,StdNo,StdDept){
+  document.getElementById("hidStdName").value=StdName;
+  document.getElementById("hidStdNo").value=StdNo;
+  document.getElementById("hidStdDept").value=StdDept;
+  meform.submit();
+}
+//-->
+</script>
+<link href="/queryCourse/queryCourse.css" rel="stylesheet" type="text/css"><link href="/SCASeat/SCASeat.css" rel="stylesheet" type="text/css"><meta http-equiv="Content-Type" content="text/html; charset=big5"><script language="javascript" src="/webPublic/jsFunction.js"></script><script language="javascript">
+<!--
+ //設定顏色
+ lvColor="#5A5A96";
+ lvVisitedColor="#D7559C";
+ lvMouseOverColor="#6077C6";
+ lvBackgroundImg="/webPublic/images/SubMenuBg.jpg";
+
+
+/*------------------設定功能選單狀態-------------------*/
+function gfSetMenuStyle(MainMenuIndex,SubMenuIndex) { 
+ 
+   /*----設定主功能選單初始狀態----*/
+   //for (tagObj in document.all.tags("td")) 
+   //for (tagObj in document.getElementsByTagName("td")) 
+   var td_objcol = document.getElementsByTagName("td");
+   for(i=0; i < td_objcol.length; i++)
+   {
+	 //主功能選單
+	 id_str = td_objcol[i].id;
+	 if (id_str.substr(0,8) == "MainMenu")
+	 {
+ 	    //document.getElementById(tagObj).style.color=lvColor;
+ 	    //document.getElementById(tagObj).style.cursor="pointer";		
+     	//document.getElementById(tagObj).style.backgroundImage="none";
+ 	    td_objcol[i].style.color=lvColor;
+ 	    if (document.all)
+ 	    	td_objcol[i].style.cursor="pointer";
+ 	    else
+ 	    	td_objcol[i].style.cursor="pointer";
+     	td_objcol[i].style.backgroundImage="none";
+	 }
+   }
+
+   /*----設定子層功能選單初始狀態----*/
+   //for (tagObj in document.all.tags("span")) 
+   var span_objcol = document.getElementsByTagName("span");
+
+   //for (tagObj in document.getElementsByTagName("span"))
+   for(i=0; i < span_objcol.length; i++) 
+   {
+   	  id_str = span_objcol[i].id;
+     //子層功能選單群組,預設關閉
+     
+     if (id_str.substr(0,12) == "SubMenuGroup")
+	 { 
+	 	
+       //document.getElementById(tagObj).style.display = "none";
+       //document.getElementById(tagObj).style.cursor="pointer";
+        span_objcol[i].style.display ="none";
+        if (document.all)
+        	span_objcol[i].style.cursor="pointer";
+        else
+        	span_objcol[i].style.cursor="pointer";
+ 
+     }
+	 //子層功能選單
+	 else if (id_str.substr(0,7) == "SubMenu")
+	 {
+	   span_objcol[i].style.color=lvColor;
+	   if (document.all)
+ 	   	span_objcol[i].style.cursor="pointer";
+ 	   else
+ 	   	span_objcol[i].style.cursor="pointer";
+       //document.getElementById(tagObj).style.color=lvColor;
+       //document.getElementById(tagObj).style.cursor="pointer";
+	 }
+   }
+
+   /*----將SubMenuLeft移到滑鼠指到的主功能選項下方,使滑鼠移動到該主功能選項下方時可以恢復選單狀態----*/
+   if (document.getElementById("MainMenu"+MainMenuIndex) && document.getElementById("SubMenuLeft"))
+   {
+	  var lvMainMenuWidth=document.getElementById("MainMenu"+MainMenuIndex).offsetWidth;
+      var lvMainLeft=document.getElementById("MainMenu"+MainMenuIndex).offsetLeft;
+	  document.getElementById("SubMenuLeft").style.width=lvMainMenuWidth;  
+	  document.getElementById("SubMenuLeft").style.left=lvMainLeft;  
+   }
+
+   /*----開啟滑鼠指到or目前已點選的子層功能選單----*/
+   gfShowSubMenu (MainMenuIndex);
+   if (isNaN(eval(MainMenuIndex))==true)
+   {
+       gfShowSubMenu ("3");
+   }
+
+   /*----開啟滑鼠指到or目前已點選的主功能選項/子層功能選單/子層功能選項狀態----*/
+   gfChgMenuStyle(MainMenuIndex,SubMenuIndex);
+   gfChgMenuStyle("3","");
+}
+
+/*-------開啟滑鼠指到or目前點選的子層功能選單-------*/
+function gfShowSubMenu (MenuIndex)
+{
+   //開啟滑鼠指到的子層功能選單
+   if (document.getElementById("SubMenuGroup"+MenuIndex))
+   {  
+      document.getElementById("SubMenuGroup"+MenuIndex).style.display='inline';
+	  //指定位置-子層功能選單寬度vs.功能列寬度:
+	  //1.未超過:則對齊該主功能選項
+	  //2.超過:則對齊功能列左邊
+	  var lvMenuBarWidth=document.getElementById("MenuBar").offsetWidth;
+      var lvMainLeft=document.getElementById("MainMenu"+MenuIndex).offsetLeft;
+      var lvSubWidth=document.getElementById("SubMenuGroup"+MenuIndex).offsetWidth;
+      document.getElementById("SubMenuLeft").style.width=5;  
+	  //1.未超過:則對齊該主功能選項	  
+	  if (lvMainLeft+lvSubWidth <= lvMenuBarWidth)
+	  {
+	     document.getElementById("SubMenuGroup"+MenuIndex).style.left=lvMainLeft-17;
+		 //SubMenuLeft 起始點於開啟的SubMenuGroup左邊5px處
+		 document.getElementById("SubMenuLeft").style.left=(lvMainLeft-17)-5;
+		 //SubMenuRight 起始點於開啟的SubMenuGroup右邊5px處
+		 document.getElementById("SubMenuRight").style.left=(lvMainLeft+lvSubWidth)+5;
+      }
+	  //2.超過:則對齊功能列左邊
+	  else
+	  {
+	     document.getElementById("SubMenuGroup"+MenuIndex).style.left=lvMenuBarWidth-lvSubWidth;
+		 //SubMenuLeft 起始點於開啟的SubMenuGroup右邊5px處
+		 document.getElementById("SubMenuLeft").style.left=lvSubWidth+5;
+		 //SubMenuRight 起始點於開啟的SubMenuGroup右邊5px處
+		 document.getElementById("SubMenuRight").style.left=lvSubWidth+5;	         		 
+      }
+   }
+}
+
+/*-------設定滑鼠指到or目前點選的主功能選項/子層功能選單/子層功能選項狀態-------*/
+function gfChgMenuStyle(MainIndex,SubIndex)
+{
+   /*----設定主功能選項狀態----*/
+   if (document.getElementById("MainMenu"+MainIndex))
+   {
+     //滑鼠指到的字體顏色
+     if (MainIndex!="3")
+	 {
+	    document.getElementById("MainMenu"+MainIndex).style.color=lvMouseOverColor;
+     }
+	 //目前點選的字體顏色
+	 else
+	 {
+	    document.getElementById("MainMenu"+MainIndex).style.color=lvVisitedColor;
+	 }
+ 	 document.getElementById("MainMenu"+MainIndex).style.backgroundImage="url('"+lvBackgroundImg+"')";
+   }
+
+   /*----設定子層功能選單狀態----*/
+   if (document.getElementById("SubMenuGroup"+MainIndex))
+   {
+     document.getElementById("SubMenuGroup"+MainIndex).style.backgroundImage="url('"+lvBackgroundImg+"')";
+   }
+
+   /*----設定子層功能選項狀態----*/
+   if (document.getElementById("SubMenu"+SubIndex))
+   {
+     //滑鼠指到的字體顏色
+     if (SubIndex!="")
+	 {
+        document.getElementById("SubMenu"+SubIndex).style.color=lvMouseOverColor;
+     }
+	 //目前點選的字體顏色
+	 else
+	 {
+	    document.getElementById("SubMenu"+SubIndex).style.color=lvVisitedColor;
+	 }
+   }
+}
+//-->
+</script></head>
+
+<!------------------------->
+<!--引用公用頁首,並傳入參數-->
+<!------------------------->
+
+
+<!--引用課程查詢css-->
+
+<!--引用選座位css-->
+
+
+
+
+<!--避免中文錯誤-->
+
+
+
+
+
+<body bgcolor="#FFFFFF" onload="window.focus();">  <!--94/04/25 abby-->
+<!--引用共同的css-->
+
+<link href="/webPublic/pubCss.css" rel="stylesheet" type="text/css">
+
+<!-- 標頭-->
+<table id="tbTitle" width="100%" border="0" align="center" cellspacing="0" cellpadding="0" class="pubContent">
+	<!--顯示標題及子標題-->
+    <tbody><tr onmouseover="gfShowSubMenu('','')">
+      <td>&nbsp;</td>
+      <td class="pubProjTitle" width="49%" rowspan="2" nowrap=""><b><span><img src="/webPublic/images/titleItem.gif">
+	  課程 / 課表查詢 <img src="/webPublic/images/titleSubItem.gif"> 學生課表查詢</span></b></td>
+      <td colspan="2">&nbsp;</td>
+    </tr>
+
+	<!--顯示連結-->
+    <tr onmouseover="gfSetMenuStyle('','')">
+      <td width="3%">&nbsp;</td>
+      <td id="tdRightLink" width="43%" align="right" class="pubContent">
+      
+	  </td>
+      <td width="8">&nbsp;</td>
+    </tr>
+
+	<!--顯示功能選單-->
+	
+    <tr id="TrMainMenu" height="25">
+      <td onmouseover="gfSetMenuStyle('','')" width="3%" background="/webPublic/images/MainMenuBg.jpg">&nbsp;</td>
+      <td id="MenuBar" colspan="2" background="/webPublic/images/MainMenuBg.jpg">
+	  <table height="100%" cellspacing="0" cellpadding="0" class="pubMenu"><tbody><tr>
+      <td>&nbsp;|</td><td id="MainMenu0" class="pubMenuLink" onmouseover="gfSetMenuStyle(0,&quot;&quot;)" onclick="window.location.href='queryByCourse.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=0'" style="color: rgb(90, 90, 150); cursor: pointer; background-image: none;">&nbsp;課程查詢&nbsp;</td><td>|</td><td id="MainMenu1" class="pubMenuLink" onmouseover="gfSetMenuStyle(1,&quot;&quot;)" onclick="window.location.href='queryByClass.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=1'" style="color: rgb(90, 90, 150); cursor: pointer; background-image: none;">&nbsp;班級課表查詢&nbsp;</td><td>|</td><td id="MainMenu2" class="pubMenuLink" onmouseover="gfSetMenuStyle(2,&quot;&quot;)" onclick="window.location.href='queryByTeacher.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=2'" style="color: rgb(90, 90, 150); cursor: pointer; background-image: none;">&nbsp;教師課表查詢&nbsp;</td><td>|</td><td id="MainMenu3" class="pubMenuLink" onmouseover="gfSetMenuStyle(3,&quot;&quot;)" onclick="window.location.href='queryByStudent.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=3'" style="color: rgb(215, 85, 156); cursor: pointer; background-image: url(&quot;/webPublic/images/SubMenuBg.jpg&quot;);">&nbsp;學生課表查詢&nbsp;</td><td>|</td><td id="MainMenu4" class="pubMenuLink" onmouseover="gfSetMenuStyle(4,&quot;&quot;)" onclick="window.location.href='queryByRoom.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=4'" style="color: rgb(90, 90, 150); cursor: pointer; background-image: none;">&nbsp;教室課表查詢&nbsp;</td><td>|&nbsp;</td>
+	  <td onmouseover="gfSetMenuStyle(&quot;&quot;,&quot;&quot;)">&nbsp;</td></tr></tbody></table>
+	  </td>
+      <td onmouseover="gfSetMenuStyle('','')" width="8" background="/webPublic/images/MainMenuBg.jpg">&nbsp;</td>
+    </tr>
+
+	<!--顯示子層功能選單-->
+      
+</tbody></table>
+
+<!--顯示分隔線-->
+<table id="tbLine" onmouseover="gfSetMenuStyle('','')" width="98%" border="0" align="center" cellspacing="0" cellpadding="0">
+<tbody><tr><td align="center" valign="top" width="100%" height="10" background="/webPublic/images/pointLine.gif"></td>
+</tr>
+</tbody></table>
+<span id="msgs"></span>
+<script language="JavaScript">
+<!--
+gfSetMenuStyle("3","");
+//點選指定的功能選單
+gfClickMenu();
+//-->
+</script>
+ 
+
+<!--內文開始-->
+
+
+
+
+<table id="SearchTable" class="SearchTable" width="40%" border="0" align="center">
+<tbody><tr><td bgcolor="#FFFFFF" align="center">
+    <form method="post" name="queryByStudent" action="queryByStudent.asp?QuerySource=queryCourse">
+       <input type="hidden" id="hidChkSearch" name="hidChkSearch" value="" style="">
+       <input type="hidden" id="hidStdName" name="hidStdName" value="" style="">	   
+       <input type="hidden" id="hidStdNo" name="hidStdNo" value="" style="">	   
+       <input type="hidden" id="hidStdDept" name="hidStdDept" value="" style=""> 
+
+    <table width="40%" border="1" cellspacing="0" bordercolor="#FFCC33" align="center" class="pubTable">
+    <tbody><tr height="30">
+      <td width="7%" align="center" nowrap="" class="pubTdItem">學年期</td>
+        <td nowrap="" width="7%">&nbsp;
+		<select class="pubContent" id="scdfYYM" name="scdfYYM" size="1" value="1142">
+<option value="1142" selected="">1142</option><option value="1141">1141</option><option value="1136">1136</option>
+		</select>
+        </td>  
+
+		   <input type="hidden" id="StdNoName" name="StdNoName" value="B4218448" style=""> 
+
+    </tr></tbody></table>
+  </form></td>
+	
+
+     <td style="vertical-align:text-bottom;">
+        <input class="pubContent" type="button" id="Search" name="Search" onclick="ToSearch(queryByStudent,'searchByStudent')" value="&nbsp;&nbsp;查詢&nbsp;&nbsp;" style="">&nbsp;
+
+   	        <input class="pubContent" type="button" id="PrintResult" style="" title="列印課表" name="PrintResult" onclick="ToPrint()" value="列印課表">
+
+     </td>
+
+  </tr>
+  </tbody></table>
+  
+  
+
+   <!------------------------->
+   <!--顯示查詢結果          -->
+   <!------------------------->
+   
+   <table width="95%" border="0" cellspacing="0" cellpadding="3" align="center">
+   <tbody><tr><td nowrap="" width="35%" valign="bottom"><font style="font-size: 12px;" color="#CC3300"></font></td> 
+   <td nowrap="" id="PrintTitle" class="pubContent" align="center"><font style="font-size: 12px;" color="#0033CC">114 學年第2學期 商學院資管系 1A B4218448 <span class="PccuEudcFont">蔡侑軒</span></font>   </td>
+   <td nowrap="" width="35%" align="right" valign="bottom"></td></tr>
+   </tbody></table>   
+<table id="MemoTable" class="pubContent" width="95%" border="0" cellspacing="0" cellpadding="3" align="center"><tbody><tr height="10"><td valign="bottom"><font style="font-size: 12px;" color="#CC3300">註：點選課程名稱，可顯示教學大綱；點選授課教師，可顯示教師課表(含輔導時間)</font></td></tr></tbody></table>   
+   <table width="95%" border="1" cellspacing="0" cellpadding="3" bordercolor="#FFCC33" align="center" class="pubTable">
+   <!--update 2010/04/09 批次查詢教室課表顯示星期n-->
+   <tbody><tr><td width="5%" colspan="2" class="pubTdItem_Period" align="center">&nbsp;</td>
+       <td width="13%" class="pubTdItem" align="center">一</td>
+       <td width="13%" class="pubTdItem" align="center">二</td>
+       <td width="13%" class="pubTdItem" align="center">三</td>
+	   <td width="12%" class="pubTdItem" align="center">四</td>
+       <td width="12%" class="pubTdItem" align="center">五</td>
+       <td width="12%" class="pubTdItem" align="center">六</td>
+	   <td width="12%" class="pubTdItem" align="center">日</td>
+   </tr>
+<tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">01</td><td width="3%" align="center" class="pubTdItem_Period">08:10<br>09:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">02</td><td width="3%" align="center" class="pubTdItem_Period">09:10<br>10:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392875%26scode%3D392875%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  D903 程式設計（二）</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=9402195&amp;scdfYYM=1142')"><span class="PccuEudcFont">余平</span></a><font style="color: #666666;"> 大義      0402 </font><font style="color: #666666;">（58人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392201%26scode%3D392201%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 中文    1   CA14 國文 (29)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=A900528&amp;scdfYYM=1142')"><span class="PccuEudcFont">高荻華</span></a><font style="color: #666666;"> 大孝      0412 </font><font style="color: #666666;">（60人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D393983%26scode%3D393983%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 外文領域1   CB47 外文︰英文閱讀與聽講(一) (24)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=7802455&amp;scdfYYM=1142')"><span class="PccuEudcFont">李翠蘋</span></a><font style="color: #666666;"> 大典      0009 </font><font style="color: #666666;">（52人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D401342%26scode%3D401342%23syllpage" class="red" target="_blank"><font color="#CC3300">(選) 資管系  1A  M353 Unity遊戲程式設計</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=9402195&amp;scdfYYM=1142')"><span class="PccuEudcFont">余平</span></a><font style="color: #666666;"> 大義      0419 </font><font style="color: #666666;">（50人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D393790%26scode%3D393790%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 通識    0   CE61 社會通識︰智慧財產權</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=B400073&amp;scdfYYM=1142')"><span class="PccuEudcFont">張智堯</span></a><font style="color: #666666;"> 大賢      0101 </font><font style="color: #666666;">（32人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">03</td><td width="3%" align="center" class="pubTdItem_Period">10:10<br>11:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392875%26scode%3D392875%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  D903 程式設計（二）</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=9402195&amp;scdfYYM=1142')"><span class="PccuEudcFont">余平</span></a><font style="color: #666666;"> 大義      0402 </font><font style="color: #666666;">（58人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392201%26scode%3D392201%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 中文    1   CA14 國文 (29)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=A900528&amp;scdfYYM=1142')"><span class="PccuEudcFont">高荻華</span></a><font style="color: #666666;"> 大孝      0412 </font><font style="color: #666666;">（60人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D393983%26scode%3D393983%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 外文領域1   CB47 外文︰英文閱讀與聽講(一) (24)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=7802455&amp;scdfYYM=1142')"><span class="PccuEudcFont">李翠蘋</span></a><font style="color: #666666;"> 大典      0009 </font><font style="color: #666666;">（52人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D401342%26scode%3D401342%23syllpage" class="red" target="_blank"><font color="#CC3300">(選) 資管系  1A  M353 Unity遊戲程式設計</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=9402195&amp;scdfYYM=1142')"><span class="PccuEudcFont">余平</span></a><font style="color: #666666;"> 大義      0419 </font><font style="color: #666666;">（50人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D393790%26scode%3D393790%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 通識    0   CE61 社會通識︰智慧財產權</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=B400073&amp;scdfYYM=1142')"><span class="PccuEudcFont">張智堯</span></a><font style="color: #666666;"> 大賢      0101 </font><font style="color: #666666;">（32人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">04</td><td width="3%" align="center" class="pubTdItem_Period">11:10<br>12:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392875%26scode%3D392875%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  D903 程式設計（二）</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=9402195&amp;scdfYYM=1142')"><span class="PccuEudcFont">余平</span></a><font style="color: #666666;"> 大義      0402 </font><font style="color: #666666;">（58人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392874%26scode%3D392874%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  4026 企業管理</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8601771&amp;scdfYYM=1142')"><span class="PccuEudcFont">郭乃文</span></a><font style="color: #666666;"> 大恩      0611 </font><font style="color: #666666;">（53人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D393983%26scode%3D393983%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 外文領域1   CB47 外文︰英文閱讀與聽講(一) (24)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=7802455&amp;scdfYYM=1142')"><span class="PccuEudcFont">李翠蘋</span></a><font style="color: #666666;"> 大典      0009 </font><font style="color: #666666;">（52人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D401342%26scode%3D401342%23syllpage" class="red" target="_blank"><font color="#CC3300">(選) 資管系  1A  M353 Unity遊戲程式設計</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=9402195&amp;scdfYYM=1142')"><span class="PccuEudcFont">余平</span></a><font style="color: #666666;"> 大義      0419 </font><font style="color: #666666;">（50人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">05</td><td width="3%" align="center" class="pubTdItem_Period">12:10<br>13:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392874%26scode%3D392874%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  4026 企業管理</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8601771&amp;scdfYYM=1142')"><span class="PccuEudcFont">郭乃文</span></a><font style="color: #666666;"> 大恩      0611 </font><font style="color: #666666;">（53人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">06</td><td width="3%" align="center" class="pubTdItem_Period">13:10<br>14:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392876%26scode%3D392876%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  D904 商用軟體應用與設計</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8601771&amp;scdfYYM=1142')"><span class="PccuEudcFont">郭乃文</span></a><font style="color: #666666;"> 大義      0418 </font><font style="color: #666666;">（64人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392873%26scode%3D392873%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  3464 資訊管理導論</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8501521&amp;scdfYYM=1142')"><span class="PccuEudcFont">陳武倚</span></a><font style="color: #666666;"> 大恩      0608 </font><font style="color: #666666;">（58人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">07</td><td width="3%" align="center" class="pubTdItem_Period">14:10<br>15:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392876%26scode%3D392876%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  D904 商用軟體應用與設計</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8601771&amp;scdfYYM=1142')"><span class="PccuEudcFont">郭乃文</span></a><font style="color: #666666;"> 大義      0418 </font><font style="color: #666666;">（64人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D403498%26scode%3D403498%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 體育    1   PPE2 體育（二） (19)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8800421&amp;scdfYYM=1142')"><span class="PccuEudcFont">廖俊強</span></a><font style="color: #666666;"> </font><font style="color: #666666;">（60人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392877%26scode%3D392877%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  G201 中華文化專題(一)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8601771&amp;scdfYYM=1142')"><span class="PccuEudcFont">郭乃文</span></a><font style="color: #666666;"> 大恩      0713 </font><font style="color: #666666;">（45人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392873%26scode%3D392873%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  3464 資訊管理導論</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8501521&amp;scdfYYM=1142')"><span class="PccuEudcFont">陳武倚</span></a><font style="color: #666666;"> 大恩      0608 </font><font style="color: #666666;">（58人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">08</td><td width="3%" align="center" class="pubTdItem_Period">15:10<br>16:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392876%26scode%3D392876%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  D904 商用軟體應用與設計</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8601771&amp;scdfYYM=1142')"><span class="PccuEudcFont">郭乃文</span></a><font style="color: #666666;"> 大義      0418 </font><font style="color: #666666;">（64人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D403498%26scode%3D403498%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 體育    1   PPE2 體育（二） (19)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8800421&amp;scdfYYM=1142')"><span class="PccuEudcFont">廖俊強</span></a><font style="color: #666666;"> </font><font style="color: #666666;">（60人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392877%26scode%3D392877%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  G201 中華文化專題(一)</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8601771&amp;scdfYYM=1142')"><span class="PccuEudcFont">郭乃文</span></a><font style="color: #666666;"> 大恩      0713 </font><font style="color: #666666;">（45人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392873%26scode%3D392873%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 資管系  1A  3464 資訊管理導論</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8501521&amp;scdfYYM=1142')"><span class="PccuEudcFont">陳武倚</span></a><font style="color: #666666;"> 大恩      0608 </font><font style="color: #666666;">（58人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">09</td><td width="3%" align="center" class="pubTdItem_Period">16:10<br>17:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D391351%26scode%3D391351%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 通識    0   CEG5 自然通識︰AI計算創新應用</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8802815&amp;scdfYYM=1142')"><span class="PccuEudcFont">何志昌</span></a><font style="color: #666666;"> 大恩      0602 </font><font style="color: #666666;">（50人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">10</td><td width="3%" align="center" class="pubTdItem_Period">17:10<br>18:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px"><a title="顯示教學大綱" href="/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D391351%26scode%3D391351%23syllpage" class="red" target="_blank"><font color="#CC3300">(必) 通識    0   CEG5 自然通識︰AI計算創新應用</font></a><br><a title="顯示教師課表" href="#" class="blue2" onclick="lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=8802815&amp;scdfYYM=1142')"><span class="PccuEudcFont">何志昌</span></a><font style="color: #666666;"> 大恩      0602 </font><font style="color: #666666;">（50人）</font></td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">11</td><td width="3%" align="center" class="pubTdItem_Period">18:10<br>19:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">12</td><td width="3%" align="center" class="pubTdItem_Period">19:10<br>20:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">13</td><td width="3%" align="center" class="pubTdItem_Period">20:10<br>21:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr><tr><td width="2%" align="center" class="pubTdItem" style="background-color: #FEFE8D;">14</td><td width="3%" align="center" class="pubTdItem_Period">21:10<br>22:00</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td><td class="pubContent" align="left" valign="top" style="font-size=12px">&nbsp;</td></tr>
+</tbody></table>
+
+
+<script type="text/javascript">
+     //若有查詢結果,才顯示列印按鈕
+     if (document.getElementById("PrintTitle")){
+	     if (document.getElementById("PrintResult")){
+             document.getElementById("PrintResult").style.display="";
+ 	     } 
+	 }
+	 else {
+	     if (document.getElementById("PrintResult")){
+             document.getElementById("PrintResult").style.display="none";
+ 	     } 
+	 }
+//-->
+</script>
+
+   <!--加入座位系統共用Functioin-->
+   
+   <!--加入選課系統共用Functioin-->
+   
+<!--內文結束-->
+<p>
+<!------------------------->
+<!--引用公用頁尾          -->
+<!------------------------->
+
+
+<!--顯示分隔線-->
+<table id="tbLine_Footer" width="98%" border="0" align="center" cellspacing="0" cellpadding="0">
+<tbody><tr><td align="center" valign="top" width="100%" height="10" background="/webPublic/images/pointLine.gif"></td>
+</tr>
+</tbody></table>
+
+<!--顯示說明-->
+<table id="tbTitle_Footer" width="80%" border="0" align="center" cellpadding="0" cellspacing="0" class="pubFooter">
+<tbody><tr><td width="100%" valign="middle" align="left">
+承辦單位：綜合業務組<br>
+如有問題請洽 (02) 2861-0511 轉11202&nbsp;<span class="PccuEudcFont">、11208、11211</span>&nbsp;或請 Mail 到 <a href="mailto:cuafd@dep.pccu.edu.tw" class="headerA">cuafd@dep.pccu.edu.tw</a><br>
+
+</td></tr>
+</tbody></table>
+
+
+
+
+</p></body></html>

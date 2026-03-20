@@ -1,0 +1,76 @@
+{
+  "url": "https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse",
+  "tableCount": 10,
+  "tables": [
+    {
+      "index": 0,
+      "className": "pubContent",
+      "id": "tbTitle",
+      "text": "課程 / 課表查詢 學生課表查詢 | 課程查詢 | 班級課表查詢 | 教師課表查詢 | 學生課表查詢 | 教室課表查詢 |",
+      "html": "<table id=\"tbTitle\" width=\"100%\" border=\"0\" align=\"center\" cellspacing=\"0\" cellpadding=\"0\" class=\"pubContent\">\n\t<!--顯示標題及子標題-->\n    <tbody><tr onmouseover=\"gfShowSubMenu('','')\">\n      <td>&nbsp;</td>\n      <td class=\"pubProjTitle\" width=\"49%\" rowspan=\"2\" nowrap=\"\"><b><span><img src=\"/webPublic/images/titleItem.gif\">\n\t  課程 / 課表查詢 <img src=\"/webPublic/images/titleSubItem.gif\"> 學生課表查詢</span></b></td>\n      <td colspan=\"2\">&nbsp;</td>\n    </tr>\n\n\t<!--顯示連結-->\n    <tr onmouseover=\"gfSetMenuStyle('','')\">\n      <td width=\"3%\">&nbsp;</td>\n      <td id=\"tdRightLink\" width=\"43%\" align=\"right\" class=\"pubContent\">\n      \n\t  </td>\n      <td width=\"8\">&nbsp;</td>\n    </tr>\n\n\t<!--顯示功能選單-->\n\t\n    <tr id=\"TrMainMenu\" height=\"25\">\n      <td onmouseover=\"gfSetMenuStyle('','')\" width=\"3%\" background=\"/webPublic/images/MainMenuBg.jpg\">&nbsp;</td>\n      <td id=\"MenuBar\" colspan=\"2\" background=\"/webPublic/images/MainMenuBg.jpg\">\n\t  <table height=\"100%\" cellspacing=\"0\" cellpadding=\"0\" class=\"pubMenu\"><tbody><tr>\n      <td>&nbsp;|</td><td id=\"MainMenu0\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(0,&quot;&quot;)\" onclick=\"window.location.href='queryByCourse.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=0'\" style=\"color: rgb(90, 90, 150); cursor: pointer; background-image: none;\">&nbsp;課程查詢&nbsp;</td><td>|</td><td id=\"MainMenu1\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(1,&quot;&quot;)\" onclick=\"window.location.href='queryByClass.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=1'\" style=\"color: rgb(90, 90, 150); cursor: pointer; background-image: none;\">&nbsp;班級課表查詢&nbsp;</td><td>|</td><td id=\"MainMenu2\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(2,&quot;&quot;)\" onclick=\"window.location.href='queryByTeacher.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=2'\" style=\"color: rgb(90, 90, 150); cursor: pointer; background-image: none;\">&nbsp;教師課表查詢&nbsp;</td><td>|</td><td id=\"MainMenu3\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(3,&quot;&quot;)\" onclick=\"window.location.href='queryByStudent.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=3'\" style=\"color: rgb(215, 85, 156); cursor: pointer; background-image: url(&quot;/webPublic/images/SubMenuBg.jpg&quot;);\">&nbsp;學生課表"
+    },
+    {
+      "index": 1,
+      "className": "pubMenu",
+      "id": "",
+      "text": "| 課程查詢 | 班級課表查詢 | 教師課表查詢 | 學生課表查詢 | 教室課表查詢 |",
+      "html": "<table height=\"100%\" cellspacing=\"0\" cellpadding=\"0\" class=\"pubMenu\"><tbody><tr>\n      <td>&nbsp;|</td><td id=\"MainMenu0\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(0,&quot;&quot;)\" onclick=\"window.location.href='queryByCourse.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=0'\" style=\"color: rgb(90, 90, 150); cursor: pointer; background-image: none;\">&nbsp;課程查詢&nbsp;</td><td>|</td><td id=\"MainMenu1\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(1,&quot;&quot;)\" onclick=\"window.location.href='queryByClass.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=1'\" style=\"color: rgb(90, 90, 150); cursor: pointer; background-image: none;\">&nbsp;班級課表查詢&nbsp;</td><td>|</td><td id=\"MainMenu2\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(2,&quot;&quot;)\" onclick=\"window.location.href='queryByTeacher.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=2'\" style=\"color: rgb(90, 90, 150); cursor: pointer; background-image: none;\">&nbsp;教師課表查詢&nbsp;</td><td>|</td><td id=\"MainMenu3\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(3,&quot;&quot;)\" onclick=\"window.location.href='queryByStudent.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=3'\" style=\"color: rgb(215, 85, 156); cursor: pointer; background-image: url(&quot;/webPublic/images/SubMenuBg.jpg&quot;);\">&nbsp;學生課表查詢&nbsp;</td><td>|</td><td id=\"MainMenu4\" class=\"pubMenuLink\" onmouseover=\"gfSetMenuStyle(4,&quot;&quot;)\" onclick=\"window.location.href='queryByRoom.asp?QuerySource=queryCourse&amp;NoCache=2026%2F3%2F19+%A4U%A4%C8+07%3A41%3A47&amp;lvMainMenuIndex=4'\" style=\"color: rgb(90, 90, 150); cursor: pointer; background-image: none;\">&nbsp;教室課表查詢&nbsp;</td><td>|&nbsp;</td>\n\t  <td onmouseover=\"gfSetMenuStyle(&quot;&quot;,&quot;&quot;)\">&nbsp;</td></tr></tbody></table>"
+    },
+    {
+      "index": 2,
+      "className": "",
+      "id": "tbLine",
+      "text": "",
+      "html": "<table id=\"tbLine\" onmouseover=\"gfSetMenuStyle('','')\" width=\"98%\" border=\"0\" align=\"center\" cellspacing=\"0\" cellpadding=\"0\">\n<tbody><tr><td align=\"center\" valign=\"top\" width=\"100%\" height=\"10\" background=\"/webPublic/images/pointLine.gif\"></td>\n</tr>\n</tbody></table>"
+    },
+    {
+      "index": 3,
+      "className": "SearchTable",
+      "id": "SearchTable",
+      "text": "學年期 1142 1141 1136",
+      "html": "<table id=\"SearchTable\" class=\"SearchTable\" width=\"40%\" border=\"0\" align=\"center\">\n<tbody><tr><td bgcolor=\"#FFFFFF\" align=\"center\">\n    <form method=\"post\" name=\"queryByStudent\" action=\"queryByStudent.asp?QuerySource=queryCourse\">\n       <input type=\"hidden\" id=\"hidChkSearch\" name=\"hidChkSearch\" value=\"\" style=\"\">\n       <input type=\"hidden\" id=\"hidStdName\" name=\"hidStdName\" value=\"\" style=\"\">\t   \n       <input type=\"hidden\" id=\"hidStdNo\" name=\"hidStdNo\" value=\"\" style=\"\">\t   \n       <input type=\"hidden\" id=\"hidStdDept\" name=\"hidStdDept\" value=\"\" style=\"\"> \n\n    <table width=\"40%\" border=\"1\" cellspacing=\"0\" bordercolor=\"#FFCC33\" align=\"center\" class=\"pubTable\">\n    <tbody><tr height=\"30\">\n      <td width=\"7%\" align=\"center\" nowrap=\"\" class=\"pubTdItem\">學年期</td>\n        <td nowrap=\"\" width=\"7%\">&nbsp;\n\t\t<select class=\"pubContent\" id=\"scdfYYM\" name=\"scdfYYM\" size=\"1\" value=\"1142\">\n<option value=\"1142\" selected=\"\">1142</option><option value=\"1141\">1141</option><option value=\"1136\">1136</option>\n\t\t</select>\n        </td>  \n\n\t\t   <input type=\"hidden\" id=\"StdNoName\" name=\"StdNoName\" value=\"B4218448\" style=\"\"> \n\n    </tr></tbody></table>\n  </form></td>\n\t\n\n     <td style=\"vertical-align:text-bottom;\">\n        <input class=\"pubContent\" type=\"button\" id=\"Search\" name=\"Search\" onclick=\"ToSearch(queryByStudent,'searchByStudent')\" value=\"&nbsp;&nbsp;查詢&nbsp;&nbsp;\" style=\"\">&nbsp;\n\n   \t        <input class=\"pubContent\" type=\"button\" id=\"PrintResult\" style=\"\" title=\"列印課表\" name=\"PrintResult\" onclick=\"ToPrint()\" value=\"列印課表\">\n\n     </td>\n\n  </tr>\n  </tbody></table>"
+    },
+    {
+      "index": 4,
+      "className": "pubTable",
+      "id": "",
+      "text": "學年期 1142 1141 1136",
+      "html": "<table width=\"40%\" border=\"1\" cellspacing=\"0\" bordercolor=\"#FFCC33\" align=\"center\" class=\"pubTable\">\n    <tbody><tr height=\"30\">\n      <td width=\"7%\" align=\"center\" nowrap=\"\" class=\"pubTdItem\">學年期</td>\n        <td nowrap=\"\" width=\"7%\">&nbsp;\n\t\t<select class=\"pubContent\" id=\"scdfYYM\" name=\"scdfYYM\" size=\"1\" value=\"1142\">\n<option value=\"1142\" selected=\"\">1142</option><option value=\"1141\">1141</option><option value=\"1136\">1136</option>\n\t\t</select>\n        </td>  \n\n\t\t   <input type=\"hidden\" id=\"StdNoName\" name=\"StdNoName\" value=\"B4218448\" style=\"\"> \n\n    </tr></tbody></table>"
+    },
+    {
+      "index": 5,
+      "className": "",
+      "id": "",
+      "text": "114 學年第2學期 商學院資管系 1A B4218448 蔡侑軒",
+      "html": "<table width=\"95%\" border=\"0\" cellspacing=\"0\" cellpadding=\"3\" align=\"center\">\n   <tbody><tr><td nowrap=\"\" width=\"35%\" valign=\"bottom\"><font style=\"font-size: 12px;\" color=\"#CC3300\"></font></td> \n   <td nowrap=\"\" id=\"PrintTitle\" class=\"pubContent\" align=\"center\"><font style=\"font-size: 12px;\" color=\"#0033CC\">114 學年第2學期 商學院資管系 1A B4218448 <span class=\"PccuEudcFont\">蔡侑軒</span></font>   </td>\n   <td nowrap=\"\" width=\"35%\" align=\"right\" valign=\"bottom\"></td></tr>\n   </tbody></table>"
+    },
+    {
+      "index": 6,
+      "className": "pubContent",
+      "id": "MemoTable",
+      "text": "註：點選課程名稱，可顯示教學大綱；點選授課教師，可顯示教師課表(含輔導時間)",
+      "html": "<table id=\"MemoTable\" class=\"pubContent\" width=\"95%\" border=\"0\" cellspacing=\"0\" cellpadding=\"3\" align=\"center\"><tbody><tr height=\"10\"><td valign=\"bottom\"><font style=\"font-size: 12px;\" color=\"#CC3300\">註：點選課程名稱，可顯示教學大綱；點選授課教師，可顯示教師課表(含輔導時間)</font></td></tr></tbody></table>"
+    },
+    {
+      "index": 7,
+      "className": "pubTable",
+      "id": "",
+      "text": "一 二 三 四 五 六 日 01 08:10 09:00 02 09:10 10:00 (必) 資管系 1A D903 程式設計（二） 余平 大義 0402 （58人） (必) 中文 1 CA14 國文 (29) 高荻華 大孝 0412 （60人） (必) 外文領域1 CB47 外文︰英文閱讀與聽講(一) (24) 李翠蘋 大典 0009 （52人） (選) 資管系 1A M353 Unity遊戲程式設計 余平 大義 0419 （50人） (必) 通識 0 CE61 社會通識︰智慧財產權 張智堯 大賢 0101 （32人） 03 10:10 11:00 (必) 資管系 1A D903 程式設計（二） 余平 大義 0402 （58人） (必) 中文 1 CA14 國文 (29) 高荻華 大孝 0412 （60人） (必) 外文領域1 CB47 外文︰英文閱讀與聽講(一) (24) 李翠蘋 大典 0009 （52人） (選) 資管系 1A M353 Unity遊戲程式設計 余平 大義 0419 （50人） (必) 通識 0 CE61 社會通識︰智慧財產權 張智堯 大賢 0101 （32人） 04 11:10 12:00 (必) 資管系 1A D903 程式設計（二） 余平 大義 0402 （58人） (必) 資管系 1A 4026 企業管理 郭乃文 大恩 0611 （53人） (必) 外文領域1 CB47 外文︰英文閱讀與聽講(一) (24) 李翠蘋 大典 0009 （52人） (選) 資管系 1A M353 Unity遊戲程式設計 余平 大義 0419 （50人） 05 12:10 13:00 (必) 資管系 1A 4026 企業管理 郭乃文 大恩 0611 （53人） 06 13:10 14:00 (必) 資管系 1A D904 商用軟體應用與設計 郭乃文 大義 0418 （64人） (必) 資管系 1A 3464 資訊管理導論 陳武倚 大恩 0608 （58人） 07 14:10 15:00 (必) 資管系 1A D904 商用軟體應用與設計 郭乃文 大義 0418 （64人） (必) 體育 1 PPE2 體育（二） (19) 廖俊強 （60人） (必) 資管系 1A G201 中華文化專題(一) 郭乃文 大恩 0713 （45人） (必) 資管系 1A 3464 資訊管理導論 陳武倚 大恩 0608 （58人） 08 15:10 16:00 (必) 資管系 1A D904 商用軟體應用與設計 郭乃文 大義 0418 （64人） (必) 體育 1 PPE2 體育（二） (19) 廖俊強 （60人） (必) 資管系 1A G201 中華文化專題(一) 郭乃文 大恩 0713 （45人） (必) 資管系 1A 3464 資訊管理導論 陳武倚 大恩 0608 （",
+      "html": "<table width=\"95%\" border=\"1\" cellspacing=\"0\" cellpadding=\"3\" bordercolor=\"#FFCC33\" align=\"center\" class=\"pubTable\">\n   <!--update 2010/04/09 批次查詢教室課表顯示星期n-->\n   <tbody><tr><td width=\"5%\" colspan=\"2\" class=\"pubTdItem_Period\" align=\"center\">&nbsp;</td>\n       <td width=\"13%\" class=\"pubTdItem\" align=\"center\">一</td>\n       <td width=\"13%\" class=\"pubTdItem\" align=\"center\">二</td>\n       <td width=\"13%\" class=\"pubTdItem\" align=\"center\">三</td>\n\t   <td width=\"12%\" class=\"pubTdItem\" align=\"center\">四</td>\n       <td width=\"12%\" class=\"pubTdItem\" align=\"center\">五</td>\n       <td width=\"12%\" class=\"pubTdItem\" align=\"center\">六</td>\n\t   <td width=\"12%\" class=\"pubTdItem\" align=\"center\">日</td>\n   </tr>\n<tr><td width=\"2%\" align=\"center\" class=\"pubTdItem\" style=\"background-color: #FEFE8D;\">01</td><td width=\"3%\" align=\"center\" class=\"pubTdItem_Period\">08:10<br>09:00</td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\">&nbsp;</td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\">&nbsp;</td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\">&nbsp;</td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\">&nbsp;</td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\">&nbsp;</td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\">&nbsp;</td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\">&nbsp;</td></tr><tr><td width=\"2%\" align=\"center\" class=\"pubTdItem\" style=\"background-color: #FEFE8D;\">02</td><td width=\"3%\" align=\"center\" class=\"pubTdItem_Period\">09:10<br>10:00</td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\"><a title=\"顯示教學大綱\" href=\"/webPublic/ApSessionTrans/SessionTransfer.asp?dir=2aspx&amp;site=https://icas.pccu.edu.tw/cfp&amp;path=%2F%3Fccode%3D392875%26scode%3D392875%23syllpage\" class=\"red\" target=\"_blank\"><font color=\"#CC3300\">(必) 資管系  1A  D903 程式設計（二）</font></a><br><a title=\"顯示教師課表\" href=\"#\" class=\"blue2\" onclick=\"lfOpenCourseWindow('/queryCourse/queryByTeacher.asp?QuerySource=Profile&amp;hidChkSearch=searchByTeacher&amp;PsnNoName=9402195&amp;scdfYYM=1142')\"><span class=\"PccuEudcFont\">余平</span></a><font style=\"color: #666666;\"> 大義      0402 </font><font style=\"color: #666666;\">（58人）</font></td><td class=\"pubContent\" align=\"left\" valign=\"top\" style=\"font-size=12px\"><a title=\"顯示教學大綱\" href=\"/webPublic/A"
+    },
+    {
+      "index": 8,
+      "className": "",
+      "id": "tbLine_Footer",
+      "text": "",
+      "html": "<table id=\"tbLine_Footer\" width=\"98%\" border=\"0\" align=\"center\" cellspacing=\"0\" cellpadding=\"0\">\n<tbody><tr><td align=\"center\" valign=\"top\" width=\"100%\" height=\"10\" background=\"/webPublic/images/pointLine.gif\"></td>\n</tr>\n</tbody></table>"
+    },
+    {
+      "index": 9,
+      "className": "pubFooter",
+      "id": "tbTitle_Footer",
+      "text": "承辦單位：綜合業務組 如有問題請洽 (02) 2861-0511 轉11202 、11208、11211 或請 Mail 到 cuafd@dep.pccu.edu.tw",
+      "html": "<table id=\"tbTitle_Footer\" width=\"80%\" border=\"0\" align=\"center\" cellpadding=\"0\" cellspacing=\"0\" class=\"pubFooter\">\n<tbody><tr><td width=\"100%\" valign=\"middle\" align=\"left\">\n承辦單位：綜合業務組<br>\n如有問題請洽 (02) 2861-0511 轉11202&nbsp;<span class=\"PccuEudcFont\">、11208、11211</span>&nbsp;或請 Mail 到 <a href=\"mailto:cuafd@dep.pccu.edu.tw\" class=\"headerA\">cuafd@dep.pccu.edu.tw</a><br>\n\n</td></tr>\n</tbody></table>"
+    }
+  ]
+}

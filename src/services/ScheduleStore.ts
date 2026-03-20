@@ -1,74 +1,83 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CourseData } from './scraper';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CourseData, hasSuspiciousCourseNames, sanitizeCourseList } from './scraper';
 
 const STORAGE_KEY = 'cached_schedule';
 const LAST_STORAGE_KEY = 'cached_schedule_last';
 
-// 記憶體快取
 let cachedCourses: CourseData[] | null = null;
+let cachedUpdatedAt: number | null = null;
 let isMockData = false;
 
-/**
- * 設定課表資料（同時寫入記憶體 + AsyncStorage）
- */
-export async function setCourses(courses: CourseData[], mock: boolean = false): Promise<void> {
-  cachedCourses = courses;
+export async function setCourses(
+  courses: CourseData[],
+  mock: boolean = false,
+  updatedAt: number = Date.now()
+): Promise<void> {
+  const normalizedCourses = sanitizeCourseList(courses);
+  cachedCourses = normalizedCourses;
+  cachedUpdatedAt = updatedAt;
   isMockData = mock;
+
   try {
-    const payload = { courses, mock, updatedAt: Date.now() };
+    const payload = { courses: normalizedCourses, mock, updatedAt };
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     await AsyncStorage.setItem(LAST_STORAGE_KEY, JSON.stringify(payload));
-  } catch (e) {
-    console.log('儲存課表快取失敗:', e);
+  } catch (error) {
+    console.log('Save schedule cache failed:', error);
   }
 }
 
-/**
- * 取得課表資料（優先記憶體，其次 AsyncStorage）
- */
-export async function getCourses(): Promise<{ courses: CourseData[] | null; mock: boolean }> {
+export async function getCourses(): Promise<{ courses: CourseData[] | null; mock: boolean; updatedAt: number | null }> {
   if (cachedCourses) {
-    return { courses: cachedCourses, mock: isMockData };
+    return { courses: cachedCourses, mock: isMockData, updatedAt: cachedUpdatedAt };
   }
 
   try {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      cachedCourses = parsed.courses;
+      cachedCourses = sanitizeCourseList(parsed.courses || []);
+      cachedUpdatedAt = typeof parsed.updatedAt === 'number' ? parsed.updatedAt : null;
+      if (hasSuspiciousCourseNames(cachedCourses)) {
+        await clearCourses();
+        return { courses: null, mock: false, updatedAt: null };
+      }
       isMockData = parsed.mock ?? false;
-      return { courses: cachedCourses, mock: isMockData };
+      return { courses: cachedCourses, mock: isMockData, updatedAt: cachedUpdatedAt };
     }
+
     const lastStored = await AsyncStorage.getItem(LAST_STORAGE_KEY);
     if (lastStored) {
       const parsed = JSON.parse(lastStored);
-      cachedCourses = parsed.courses;
+      cachedCourses = sanitizeCourseList(parsed.courses || []);
+      cachedUpdatedAt = typeof parsed.updatedAt === 'number' ? parsed.updatedAt : null;
+      if (hasSuspiciousCourseNames(cachedCourses)) {
+        await clearCourses();
+        return { courses: null, mock: false, updatedAt: null };
+      }
       isMockData = parsed.mock ?? false;
-      return { courses: cachedCourses, mock: isMockData };
+      return { courses: cachedCourses, mock: isMockData, updatedAt: cachedUpdatedAt };
     }
-  } catch (e) {
-    console.log('讀取課表快取失敗:', e);
+  } catch (error) {
+    console.log('Load schedule cache failed:', error);
   }
 
-  return { courses: null, mock: false };
+  return { courses: null, mock: false, updatedAt: null };
 }
 
-/**
- * 記憶體中是否有快取
- */
 export function hasCache(): boolean {
   return cachedCourses !== null && cachedCourses.length > 0;
 }
 
-/**
- * 清除快取（登出時呼叫）
- */
 export async function clearCourses(): Promise<void> {
   cachedCourses = null;
+  cachedUpdatedAt = null;
   isMockData = false;
+
   try {
     await AsyncStorage.removeItem(STORAGE_KEY);
-  } catch (e) {
-    console.log('清除課表快取失敗:', e);
+    await AsyncStorage.removeItem(LAST_STORAGE_KEY);
+  } catch (error) {
+    console.log('Clear schedule cache failed:', error);
   }
 }
