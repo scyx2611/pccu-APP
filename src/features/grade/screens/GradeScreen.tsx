@@ -72,7 +72,7 @@ export default function GradeScreen({ showPreview = false, onScrollY }: GradeScr
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
-  const floatingHeaderHeight = modalTopInset + 140;
+  const floatingHeaderHeight = insets.top + 140;
   const headerReveal = scrollY.interpolate({
     inputRange: [8, 48, 92],
     outputRange: [0, 0.55, 1],
@@ -461,7 +461,7 @@ export default function GradeScreen({ showPreview = false, onScrollY }: GradeScr
         </Animated.View>
 
         <Animated.ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: modalTopInset + 18 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 18 }]}
           contentInsetAdjustmentBehavior="never"
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
           scrollEventThrottle={16}
