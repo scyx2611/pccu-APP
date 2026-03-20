@@ -421,14 +421,14 @@ export default function GradeScreen({ showPreview = false, onScrollY }: GradeScr
             <Pressable
               onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home')}
               style={({ pressed }) => [{
-                backgroundColor: isDark ? '#EBEBF526' : '#7676801F',
-                width: 30, height: 30, borderRadius: 15,
+                backgroundColor: isDark ? '#3A3A3C' : '#F2F2F7',
+                width: 32, height: 32, borderRadius: 16,
                 justifyContent: 'center', alignItems: 'center',
                 opacity: pressed ? 0.5 : 1
               }]}
               hitSlop={15}
             >
-              <AppSymbol name="xmark" size={12} weight="bold" tintColor={isDark ? '#EBEBF599' : '#3C3C4399'} fallback={<Text>X</Text>} />
+              <AppSymbol name="xmark" size={16} weight="semibold" tintColor={isDark ? '#FFFFFF' : '#1C1C1E'} fallback={<Text style={{ fontSize: 18, color: isDark ? '#FFFFFF' : '#1C1C1E', fontWeight: 'bold' }}>×</Text>} />
             </Pressable>
           ),
         }} 
