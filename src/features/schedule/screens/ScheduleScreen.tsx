@@ -507,7 +507,7 @@ export default function ScheduleScreen() {
               styles.floatingHeaderTitle,
               {
                 color: theme.text,
-                top: modalTopInset + 12,
+                top: modalTopInset + 4,
                 opacity: centerTitleOpacity,
                 transform: [{ translateY: centerTitleTranslateY }],
               },
