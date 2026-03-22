@@ -7,13 +7,17 @@ export default function SettingsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false,
+        headerLargeTitle: true,
+        headerShadowVisible: false,
+        headerTransparent: true,
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen name="index" />
-      <Stack.Screen name="about" />
-      <Stack.Screen name="notifications" />
+      <Stack.Screen name="index" options={{ title: '設置' }} />
+      <Stack.Screen name="appearance" options={{ title: '外觀', headerLargeTitle: false }} />
+      <Stack.Screen name="developer" options={{ title: '開發者', headerLargeTitle: false }} />
+      <Stack.Screen name="about" options={{ title: '關於', headerLargeTitle: false }} />
+      <Stack.Screen name="notifications" options={{ title: '通知', headerLargeTitle: false }} />
     </Stack>
   );
 }

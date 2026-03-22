@@ -28,15 +28,18 @@ const ICON_MAP: Record<string, string> = {
   'arrow.clockwise': 'refresh',
   'info.circle.fill': 'information-circle',
   'doc.text.magnifyingglass': 'document-text',
+  checkmark: 'checkmark',
   'chevron.right': 'chevron-forward',
   'bell.fill': 'notifications',
   'moon.fill': 'moon',
+  'sun.max': 'sunny-outline',
   'sun.max.fill': 'sunny',
   'person.crop.circle.fill': 'person-circle',
   gear: 'settings',
   'house.fill': 'home',
   ribbon: 'ribbon',
   time: 'time',
+  'chevron.up.chevron.down': 'swap-vertical-outline',
 };
 
 export default function AppSymbol({

@@ -12,7 +12,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.scyx2611.pccuapp",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -30,6 +35,13 @@
       "expo-router",
       "expo-secure-store"
     ],
-    "scheme": "pccuapp"
+    "scheme": "pccuapp",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "dc413c31-cdd4-4b2b-bd80-cc5da38dafed"
+      }
+    },
+    "owner": "scyx2611"
   }
 }

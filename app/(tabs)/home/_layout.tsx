@@ -7,11 +7,13 @@ export default function HomeLayout() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false,
+        headerLargeTitle: true,
+        headerShadowVisible: false,
+        headerTransparent: true,
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen name="index" />
+      <Stack.Screen name="index" options={{ title: '首頁' }} />
     </Stack>
   );
 }

@@ -1,10 +1,32 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
+import { getDeveloperDebugEnabled, setDeveloperDebugEnabled } from '../storage/developerSettings';
 
-export default function NotificationsScreen() {
+export default function DeveloperScreen() {
   const { theme } = useTheme();
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
+  const [developerDebugEnabled, setDeveloperDebugEnabledState] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadSettings = async () => {
+      const debugEnabled = await getDeveloperDebugEnabled();
+      if (!active) return;
+      setDeveloperDebugEnabledState(debugEnabled);
+    };
+
+    void loadSettings();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleDeveloperDebugToggle = async (value: boolean) => {
+    setDeveloperDebugEnabledState(value);
+    await setDeveloperDebugEnabled(value);
+  };
 
   return (
     <ScrollView
@@ -13,28 +35,28 @@ export default function NotificationsScreen() {
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.sectionTitle, { color: theme.textSub }]}>通知偏好</Text>
+      <Text style={[styles.sectionTitle, { color: theme.textSub }]}>開發者選項</Text>
       <View style={[styles.insetGroup, { backgroundColor: theme.card }]}>
         <View style={styles.switchRow}>
           <View style={styles.textWrap}>
-            <Text style={[styles.cellTitle, { color: theme.text }]}>推播通知</Text>
+            <Text style={[styles.cellTitle, { color: theme.text }]}>開發者模式</Text>
             <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
-              接收成績、課表同步與其他校園資訊提醒。
+              顯示課表與成績同步預覽，方便測試同步流程與畫面狀態。
             </Text>
           </View>
           <Switch
-            value={notificationsEnabled}
-            onValueChange={setNotificationsEnabled}
-            trackColor={{ false: theme.border, true: theme.primary }}
+            value={developerDebugEnabled}
+            onValueChange={(value) => void handleDeveloperDebugToggle(value)}
+            trackColor={{ false: theme.border, true: '#34C759' }}
             thumbColor="#FFFFFF"
           />
         </View>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: theme.textSub }]}>狀態</Text>
+      <Text style={[styles.sectionTitle, { color: theme.textSub }]}>說明</Text>
       <View style={[styles.noteCard, { backgroundColor: theme.card }]}>
         <Text style={[styles.noteText, { color: theme.textSub }]}>
-          目前此頁為 App 內偏好設定。若後續接入系統通知權限，會在這裡繼續整合。
+          開啟後會顯示給測試用途的同步預覽資訊。一般使用情況下可維持關閉。
         </Text>
       </View>
 
@@ -67,15 +89,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     minHeight: 72,
   },
-  textWrap: { flex: 1, paddingRight: 16 },
-  cellTitle: { fontSize: 17, fontWeight: '500', marginBottom: 4 },
-  cellSubtitle: { fontSize: 13, lineHeight: 18 },
+  textWrap: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  cellTitle: {
+    fontSize: 17,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  cellSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
   noteCard: {
     marginHorizontal: 20,
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 16,
   },
-  noteText: { fontSize: 14, lineHeight: 21 },
+  noteText: {
+    fontSize: 14,
+    lineHeight: 21,
+  },
   bottomSpacer: { height: 80 },
 });

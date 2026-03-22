@@ -1,9 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, ActivityIndicator } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import MaskedView from '@react-native-masked-view/masked-view';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, Animated, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
@@ -104,7 +100,6 @@ const findNextClass = (courses: CourseData[], now: Date): NextClassInfo | null =
 
 export default function HomeScreen() {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const [courses, setCourses] = useState<CourseData[]>([]);
   const [scheduleLoading, setScheduleLoading] = useState(true);
@@ -118,14 +113,6 @@ export default function HomeScreen() {
   const [backgroundSyncStage, setBackgroundSyncStage] = useState<'idle' | 'schedule' | 'grade' | 'done'>('idle');
   const pressAnim = useRef(new Animated.Value(0)).current;
   const gradePressAnim = useRef(new Animated.Value(0)).current;
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const withAlpha = useCallback((hex: string, alpha: number) => {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }, []);
 
   const refreshCourses = useCallback(async () => {
     const cached = await getCourses();
@@ -265,35 +252,14 @@ export default function HomeScreen() {
   const weatherText = weather?.temp !== undefined
     ? `台北約 ${weather.temp}°C，出門前記得留意天氣變化。`
     : '今天也一起把校園資訊整理好。';
-  const headerReveal = scrollY.interpolate({
-    inputRange: [8, 48, 92],
-    outputRange: [0, 0.55, 1],
-    extrapolate: 'clamp',
-  });
-  const centerTitleOpacity = scrollY.interpolate({
-    inputRange: [45, 75, 95],
-    outputRange: [0, 0.8, 1],
-    extrapolate: 'clamp',
-  });
-  const centerTitleTranslateY = scrollY.interpolate({
-    inputRange: [45, 95],
-    outputRange: [10, 0],
-    extrapolate: 'clamp',
-  });
-  const pageTitleOpacity = scrollY.interpolate({
-    inputRange: [0, 15, 45],
-    outputRange: [1, 1, 0],
-    extrapolate: 'clamp',
-  });
-  const pageTitleTranslateY = scrollY.interpolate({
-    inputRange: [0, 78],
-    outputRange: [0, -10],
-    extrapolate: 'clamp',
-  });
-  const floatingHeaderHeight = insets.top + 140;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}> 
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.bg }]}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+      showsVerticalScrollIndicator={false}
+    >
       <ScheduleSyncAgent
         enabled={isFocused && backgroundSyncStage === 'schedule' && scheduleSyncReloadKey > 0}
         reloadKey={scheduleSyncReloadKey}
@@ -304,184 +270,84 @@ export default function HomeScreen() {
         reloadKey={gradeSyncReloadKey}
         onComplete={handleGradeSyncComplete}
       />
-      <Animated.View
-        style={[
-          styles.floatingHeader,
-          {
-            height: floatingHeaderHeight,
-            opacity: headerReveal,
-          },
-        ]}
-        pointerEvents="none"
-      >
-        <MaskedView
-          style={StyleSheet.absoluteFill}
-          maskElement={
-            <LinearGradient
-              colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.4)', 'transparent']}
-              locations={[0, 0.3, 0.7, 1]}
-              style={StyleSheet.absoluteFill}
-            />
-          }
-        >
-          <BlurView
-            tint={theme.glassTint}
-            intensity={80}
-            style={StyleSheet.absoluteFill}
-          />
-          <LinearGradient
-            colors={[
-              withAlpha(theme.bg, 0.8),
-              withAlpha(theme.bg, 0.3),
-              'transparent',
-            ]}
-            style={StyleSheet.absoluteFill}
-          />
-        </MaskedView>
-        <Animated.Text
-          style={[
-            styles.floatingHeaderTitle,
-            {
-              color: theme.text,
-              top: insets.top + 12,
-              opacity: centerTitleOpacity,
-              transform: [{ translateY: centerTitleTranslateY }],
-            },
-          ]}
-        >
-          首頁
-        </Animated.Text>
-      </Animated.View>
+      <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+        <View style={styles.cardHeader}>
+          <AppSymbol name={greetingIcon} size={28} tintColor={greetingColor} fallback={<Text>Hi</Text>} />
+          <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{greeting}，{userName}</Text>
+        </View>
+        <Text style={[styles.cardText, { color: theme.textSub }]}>{weatherText}</Text>
+      </View>
 
-      <Animated.ScrollView
-        style={[styles.container, { backgroundColor: 'transparent' }]}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 18 }]}
-        contentInsetAdjustmentBehavior="never"
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-      >
-        <Animated.View
-          style={[
-            styles.pageTitleWrap,
-            {
-              opacity: pageTitleOpacity,
-              transform: [{ translateY: pageTitleTranslateY }],
-            },
-          ]}
+      <View style={styles.gridContainer}>
+        <View style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <AppSymbol name="bus.fill" size={32} tintColor={theme.warning} style={styles.gridIcon} fallback={<Text>Bus</Text>} />
+          <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>交通</Text>
+          <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>紅 5 / 校車資訊</Text>
+        </View>
+
+        <View style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <AppSymbol name="books.vertical.fill" size={32} tintColor={theme.purple} style={styles.gridIcon} fallback={<Text>Book</Text>} />
+          <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>學習資源</Text>
+          <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>圖書館 / Moodle</Text>
+        </View>
+
+        <AnimatedPressable
+          onPress={openSchedule}
+          onPressIn={() => Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true }).start()}
+          onPressOut={() => Animated.spring(pressAnim, { toValue: 0, useNativeDriver: true }).start()}
+          style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }, pressStyle]}
         >
-          <View style={styles.headerRow}>
-            <View>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>首頁</Text>
+          <AppSymbol name="clock.fill" size={32} tintColor={theme.primary} style={styles.gridIcon} fallback={<Text>課表</Text>} />
+          <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>下節課</Text>
+          {nextClass ? (
+            <>
+              <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>{normalizeText(nextClass.course.name)}</Text>
+              <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>{normalizeText(nextClass.course.location) || '未知地點'}</Text>
+              <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>{`${nextClass.dayLabel} ${nextClass.startLabel}-${nextClass.endLabel}`}</Text>
+            </>
+          ) : scheduleLoading ? (
+            <View style={styles.gridLoadingRow}>
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.gridMeta, { color: theme.textSub, marginLeft: 6 }]}>讀取快取中...</Text>
             </View>
-          </View>
-        </Animated.View>
+          ) : (
+            <Text style={[styles.gridSub, { color: theme.textSub }]}>尚未同步課表</Text>
+          )}
+        </AnimatedPressable>
 
-        <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-          <View style={styles.cardHeader}>
-            <AppSymbol name={greetingIcon} size={28} tintColor={greetingColor} fallback={<Text>Hi</Text>} />
-            <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{greeting}，{userName}</Text>
-          </View>
-          <Text style={[styles.cardText, { color: theme.textSub }]}>{weatherText}</Text>
-        </View>
+        <AnimatedPressable
+          onPress={openGrades}
+          onPressIn={() => Animated.spring(gradePressAnim, { toValue: 1, useNativeDriver: true }).start()}
+          onPressOut={() => Animated.spring(gradePressAnim, { toValue: 0, useNativeDriver: true }).start()}
+          style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }, gradePressStyle]}
+        >
+          <AppSymbol name="graduationcap.fill" size={32} tintColor={theme.warning} style={styles.gridIcon} fallback={<Text>成績</Text>} />
+          <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>成績</Text>
+          {gradeSummary ? (
+            <>
+              <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>平均 {gradeSummary.avg || '--'}</Text>
+              <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>班排 {gradeSummary.classRank || '--'}</Text>
+              <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>系排 {gradeSummary.deptRank || '--'}</Text>
+            </>
+          ) : gradeLoading ? (
+            <View style={styles.gridLoadingRow}>
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.gridMeta, { color: theme.textSub, marginLeft: 6 }]}>讀取成績中...</Text>
+            </View>
+          ) : (
+            <Text style={[styles.gridSub, { color: theme.textSub }]}>尚未同步成績</Text>
+          )}
+        </AnimatedPressable>
+      </View>
 
-        <View style={styles.gridContainer}>
-          <View style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-            <AppSymbol name="bus.fill" size={32} tintColor={theme.warning} style={styles.gridIcon} fallback={<Text>Bus</Text>} />
-            <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>交通</Text>
-            <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>紅 5 / 校車資訊</Text>
-          </View>
-
-          <View style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-            <AppSymbol name="books.vertical.fill" size={32} tintColor={theme.purple} style={styles.gridIcon} fallback={<Text>Book</Text>} />
-            <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>學習資源</Text>
-            <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>圖書館 / Moodle</Text>
-          </View>
-
-          <AnimatedPressable
-            onPress={openSchedule}
-            onPressIn={() => Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true }).start()}
-            onPressOut={() => Animated.spring(pressAnim, { toValue: 0, useNativeDriver: true }).start()}
-            style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }, pressStyle]}
-          >
-            <AppSymbol name="clock.fill" size={32} tintColor={theme.primary} style={styles.gridIcon} fallback={<Text>課表</Text>} />
-            <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>下節課</Text>
-            {nextClass ? (
-              <>
-                <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>{normalizeText(nextClass.course.name)}</Text>
-                <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>{normalizeText(nextClass.course.location) || '未知地點'}</Text>
-                <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>{`${nextClass.dayLabel} ${nextClass.startLabel}-${nextClass.endLabel}`}</Text>
-              </>
-            ) : scheduleLoading ? (
-              <View style={styles.gridLoadingRow}>
-                <ActivityIndicator size="small" color={theme.primary} />
-                <Text style={[styles.gridMeta, { color: theme.textSub, marginLeft: 6 }]}>讀取快取中...</Text>
-              </View>
-            ) : (
-              <Text style={[styles.gridSub, { color: theme.textSub }]}>尚未同步課表</Text>
-            )}
-          </AnimatedPressable>
-
-          <AnimatedPressable
-            onPress={openGrades}
-            onPressIn={() => Animated.spring(gradePressAnim, { toValue: 1, useNativeDriver: true }).start()}
-            onPressOut={() => Animated.spring(gradePressAnim, { toValue: 0, useNativeDriver: true }).start()}
-            style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }, gradePressStyle]}
-          >
-            <AppSymbol name="graduationcap.fill" size={32} tintColor={theme.warning} style={styles.gridIcon} fallback={<Text>成績</Text>} />
-            <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>成績</Text>
-            {gradeSummary ? (
-              <>
-                <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>平均 {gradeSummary.avg || '--'}</Text>
-                <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>班排 {gradeSummary.classRank || '--'}</Text>
-                <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>系排 {gradeSummary.deptRank || '--'}</Text>
-              </>
-            ) : gradeLoading ? (
-              <View style={styles.gridLoadingRow}>
-                <ActivityIndicator size="small" color={theme.primary} />
-                <Text style={[styles.gridMeta, { color: theme.textSub, marginLeft: 6 }]}>讀取成績中...</Text>
-              </View>
-            ) : (
-              <Text style={[styles.gridSub, { color: theme.textSub }]}>尚未同步成績</Text>
-            )}
-          </AnimatedPressable>
-        </View>
-
-        <View style={styles.bottomSpacer} />
-      </Animated.ScrollView>
-
-    </View>
+      <View style={styles.bottomSpacer} />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
-  floatingHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-  },
-  floatingHeaderTitle: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  pageTitleWrap: { marginBottom: 18 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  pageTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-  },
   bottomSpacer: { height: 120 },
   heroCard: {
     borderRadius: 32,
