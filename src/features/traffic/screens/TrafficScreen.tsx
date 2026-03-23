@@ -42,7 +42,7 @@ export default function TrafficScreen() {
 
   const updatedAtText = buildUpdatedAtText({
     updatedAt: traffic.snapshot?.updatedAt ?? null,
-    isUpdating: traffic.refreshing,
+    isUpdating: traffic.pullRefreshing,
     updatingLabel: '正在更新交通動態...',
     emptyLabel: '尚未同步交通資訊',
   });
@@ -82,8 +82,8 @@ export default function TrafficScreen() {
       showsVerticalScrollIndicator={false}
       refreshControl={(
         <RefreshControl
-          refreshing={traffic.refreshing}
-          onRefresh={traffic.refresh}
+          refreshing={traffic.pullRefreshing}
+          onRefresh={() => traffic.refresh('manual')}
           tintColor={theme.primary}
           colors={[theme.primary]}
         />

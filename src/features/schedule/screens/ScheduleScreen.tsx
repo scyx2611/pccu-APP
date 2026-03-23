@@ -174,7 +174,7 @@ export default function ScheduleScreen() {
   const keepWebViewVisibleForDebug = __DEV__ && developerDebugEnabled;
   const updatedAtLineText = buildUpdatedAtText({
     updatedAt: lastUpdatedAt,
-    isUpdating: loading,
+    isUpdating: pullRefreshing,
     updatingLabel: '正在更新課表...',
     emptyLabel: '尚未同步課表',
   });

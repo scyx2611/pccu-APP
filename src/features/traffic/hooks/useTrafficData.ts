@@ -16,9 +16,11 @@ export function useTrafficData({
   const [snapshot, setSnapshot] = useState<TrafficSnapshot | null>(null);
   const [cacheLoaded, setCacheLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const refreshingRef = useRef(false);
+  const refreshModeRef = useRef<'manual' | 'auto'>('auto');
 
   const loadSnapshot = useCallback(async () => {
     const cached = await getTrafficSnapshot();
@@ -27,18 +29,21 @@ export function useTrafficData({
     return cached;
   }, []);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((mode: 'manual' | 'auto' = 'manual') => {
     if (refreshingRef.current) return;
 
     refreshingRef.current = true;
+    refreshModeRef.current = mode;
     setError(null);
     setRefreshing(true);
+    setPullRefreshing(mode === 'manual');
     setReloadKey((value) => value + 1);
   }, []);
 
   const handleSyncComplete = useCallback(async (result: TrafficSyncResult) => {
     refreshingRef.current = false;
     setRefreshing(false);
+    setPullRefreshing(false);
     await loadSnapshot();
 
     if (result.success) {
@@ -58,11 +63,11 @@ export function useTrafficData({
 
     const hasFreshSnapshot = snapshot && Date.now() - snapshot.updatedAt <= staleAfterMs;
     if (!hasFreshSnapshot) {
-      refresh();
+      refresh('auto');
     }
 
     const intervalId = setInterval(() => {
-      refresh();
+      refresh('auto');
     }, refreshIntervalMs);
 
     return () => clearInterval(intervalId);
@@ -77,6 +82,8 @@ export function useTrafficData({
     snapshot,
     loading: !cacheLoaded || (!snapshot && refreshing),
     refreshing,
+    pullRefreshing,
+    backgroundRefreshing: refreshing && !pullRefreshing,
     error,
     isStale,
     refresh,

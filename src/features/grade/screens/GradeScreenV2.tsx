@@ -130,7 +130,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
   const latestSemester = grades[0] || null;
   const updatedAtText = buildUpdatedAtText({
     updatedAt: lastUpdatedAt,
-    isUpdating: loading,
+    isUpdating: pullRefreshing,
     updatingLabel: '正在更新成績...',
     emptyLabel: '尚未同步成績',
   });
