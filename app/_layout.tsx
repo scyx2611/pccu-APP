@@ -1,11 +1,34 @@
-import React from 'react';
+import 'expo-dev-client';
+import React, { useMemo } from 'react';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
+import {
+  DarkTheme as NavigationDarkTheme,
+  DefaultTheme as NavigationDefaultTheme,
+  ThemeProvider as NavigationThemeProvider,
+} from '@react-navigation/native';
 import { ThemeProvider, useTheme } from '../src/providers/theme/ThemeProvider';
 
 function RootLayoutNav() {
   const { isDark, theme } = useTheme();
+  const navigationTheme = useMemo(() => {
+    const baseTheme = isDark ? NavigationDarkTheme : NavigationDefaultTheme;
+
+    return {
+      ...baseTheme,
+      dark: isDark,
+      colors: {
+        ...baseTheme.colors,
+        primary: theme.primary,
+        background: theme.bg,
+        card: theme.card,
+        text: theme.text,
+        border: theme.border,
+        notification: theme.primary,
+      },
+    };
+  }, [isDark, theme]);
   const iosVersion = typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10);
   const iosCloseHeaderItem = Platform.OS === 'ios'
     ? () => [
@@ -21,41 +44,43 @@ function RootLayoutNav() {
     : undefined;
 
   return (
-    <>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          contentStyle: { backgroundColor: theme.bg },
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="loading" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="schedule"
-          options={{
-            presentation: 'card',
+    <NavigationThemeProvider value={navigationTheme}>
+      <>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Stack
+          screenOptions={{
             headerShown: false,
+            animation: 'slide_from_right',
             contentStyle: { backgroundColor: theme.bg },
           }}
-        />
-        <Stack.Screen
-          name="grade"
-          options={{
-            presentation: 'card',
-            headerShown: false,
-            contentStyle: { backgroundColor: theme.bg },
-          }}
-        />
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: Platform.OS === 'ios' ? 'formSheet' : 'modal' }}
-        />
-      </Stack>
-    </>
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="loading" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="schedule"
+            options={{
+              presentation: 'card',
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.bg },
+            }}
+          />
+          <Stack.Screen
+            name="grade"
+            options={{
+              presentation: 'card',
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.bg },
+            }}
+          />
+          <Stack.Screen
+            name="modal"
+            options={{ presentation: Platform.OS === 'ios' ? 'formSheet' : 'modal' }}
+          />
+        </Stack>
+      </>
+    </NavigationThemeProvider>
   );
 }
 

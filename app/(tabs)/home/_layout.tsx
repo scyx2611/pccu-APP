@@ -10,6 +10,12 @@ export default function HomeLayout() {
         headerLargeTitle: true,
         headerShadowVisible: false,
         headerTransparent: true,
+        headerTintColor: theme.text,
+        headerTitleStyle: { color: theme.text },
+        headerLargeTitleStyle: { color: theme.text },
+        scrollEdgeEffects: {
+          top: 'automatic',
+        },
         contentStyle: { backgroundColor: theme.bg },
       }}
     >

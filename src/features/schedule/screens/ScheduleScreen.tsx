@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  AppState,
   Platform,
   RefreshControl,
   InteractionManager,
@@ -39,6 +40,7 @@ const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = 
   { start: [9, 10], end: [10, 0] },
   { start: [10, 10], end: [11, 0] },
   { start: [11, 10], end: [12, 0] },
+  { start: [12, 10], end: [13, 0] },
   { start: [13, 10], end: [14, 0] },
   { start: [14, 10], end: [15, 0] },
   { start: [15, 10], end: [16, 0] },
@@ -49,6 +51,7 @@ const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = 
   { start: [20, 10], end: [21, 0] },
   { start: [21, 10], end: [22, 0] },
   { start: [22, 10], end: [23, 0] },
+  { start: [23, 10], end: [23, 59] },
 ];
 
 type Phase = 'idle' | 'load_ecampus' | 'logging_in' | 'open_schedule' | 'syncing' | 'done';
@@ -119,6 +122,12 @@ const formatSummaryMeta = (summary: CourseSummary | null) => {
 const formatPeriodLabel = (course: CourseData) =>
   course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 節` : `第 ${course.startPeriod}-${course.endPeriod} 節`;
 
+const formatCourseStartTime = (course: CourseData) => {
+  const slot = PERIOD_TIMES[course.startPeriod - 1];
+  if (!slot) return '';
+  return formatTime(slot.start[0], slot.start[1]);
+};
+
 export default function ScheduleScreen() {
   const [loading, setLoading] = useState(false);
   const [courses, setCoursesState] = useState<CourseData[]>([]);
@@ -164,8 +173,18 @@ export default function ScheduleScreen() {
   }, [courses]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60 * 1000);
-    return () => clearInterval(timer);
+    const refreshNow = () => setNow(new Date());
+    const timer = setInterval(refreshNow, 15 * 1000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refreshNow();
+      }
+    });
+
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
   }, []);
 
   const clearPendingTimeout = () => {
@@ -549,7 +568,12 @@ export default function ScheduleScreen() {
                 {[course.location || '地點未提供', course.teacher].filter(Boolean).join(' / ')}
               </Text>
             </View>
-            <Text style={[styles.arrivalEta, { color: theme.primary }]}>{formatPeriodLabel(course)}</Text>
+            <View style={styles.arrivalEtaBlock}>
+              <Text style={[styles.arrivalEta, { color: theme.primary }]}>{formatPeriodLabel(course)}</Text>
+              <Text style={[styles.arrivalEtaTime, { color: theme.textSub }]}>
+                {formatCourseStartTime(course)}
+              </Text>
+            </View>
           </View>
         ))}
       </View>
@@ -608,7 +632,9 @@ export default function ScheduleScreen() {
 
           <View style={styles.summaryStack}>
             <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
-              <Text style={[styles.summaryLabel, { color: theme.textSub }]}>上課中</Text>
+              <View style={[styles.summaryPill, styles.summaryPillActive, { backgroundColor: theme.primary }]}>
+                <Text style={styles.summaryPillActiveText}>上課中</Text>
+              </View>
               <Text style={[styles.summaryCourse, { color: theme.text }]}> 
                 {currentCourse ? currentCourse.course.name : '目前沒有上課中的課程'}
               </Text>
@@ -618,7 +644,9 @@ export default function ScheduleScreen() {
             </View>
 
             <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
-              <Text style={[styles.summaryLabel, { color: theme.textSub }]}>下節課</Text>
+              <View style={[styles.summaryPill, styles.summaryPillUpcoming, { backgroundColor: 'rgba(10, 102, 255, 0.16)' }]}>
+                <Text style={[styles.summaryPillUpcomingText, { color: theme.primary }]}>下節課</Text>
+              </View>
               <Text style={[styles.summaryCourse, { color: theme.text }]}> 
                 {nextCourse ? nextCourse.course.name : '目前沒有下一節課'}
               </Text>
@@ -628,7 +656,6 @@ export default function ScheduleScreen() {
             </View>
           </View>
 
-          <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtLineText || '尚未同步課表'}</Text>
         </View>
 
         {loading && courses.length === 0 ? (
@@ -653,6 +680,10 @@ export default function ScheduleScreen() {
         ) : null}
 
         {[1, 2, 3, 4, 5, 6, 0].map((dayIndex) => renderSection(dayIndex, WEEKDAY_LABELS[dayIndex]))}
+
+        <Text style={[styles.updatedText, { color: theme.textSub }]}>
+          {updatedAtLineText || '尚未同步課表'}
+        </Text>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -689,10 +720,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  summaryLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  summaryPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  summaryPillActive: {
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  summaryPillActiveText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  summaryPillUpcoming: {},
+  summaryPillUpcomingText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   summaryCourse: { fontSize: 16, fontWeight: '700', lineHeight: 22 },
   summaryMeta: { fontSize: 13, lineHeight: 18, marginTop: 4 },
-  updatedText: { marginTop: 14, fontSize: 13 },
+  updatedText: { marginTop: 4, marginBottom: 8, fontSize: 13, textAlign: 'center' },
   statusCard: {
     borderRadius: 24,
     padding: 18,
@@ -727,17 +780,19 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 14 },
   arrivalRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(0,0,0,0.08)',
   },
   arrivalTextBlock: { flex: 1, marginRight: 12 },
+  arrivalEtaBlock: { alignItems: 'flex-end' },
   courseTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   arrivalStop: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
   arrivalMeta: { fontSize: 13 },
-  arrivalEta: { fontSize: 18, fontWeight: '700' },
+  arrivalEta: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
+  arrivalEtaTime: { fontSize: 13, marginTop: 4 },
   badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   emptyState: { alignItems: 'center', marginTop: 40, marginBottom: 40 },
   emptyText: { marginTop: 16, fontSize: 14 },

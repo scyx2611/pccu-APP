@@ -35,6 +35,7 @@ const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = 
   { start: [9, 10], end: [10, 0] },
   { start: [10, 10], end: [11, 0] },
   { start: [11, 10], end: [12, 0] },
+  { start: [12, 10], end: [13, 0] },
   { start: [13, 10], end: [14, 0] },
   { start: [14, 10], end: [15, 0] },
   { start: [15, 10], end: [16, 0] },
@@ -45,6 +46,7 @@ const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = 
   { start: [20, 10], end: [21, 0] },
   { start: [21, 10], end: [22, 0] },
   { start: [22, 10], end: [23, 0] },
+  { start: [23, 10], end: [23, 59] },
 ];
 
 const DAY_LABELS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];

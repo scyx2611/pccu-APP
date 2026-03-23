@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -69,6 +69,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (savedMode) setModeState(savedMode as ThemeMode);
     });
   }, []);
+
+  useEffect(() => {
+    if (mode === 'system') {
+      Appearance.setColorScheme(null);
+      return;
+    }
+
+    Appearance.setColorScheme(mode);
+  }, [mode]);
 
   const setMode = (newMode: ThemeMode) => {
     setModeState(newMode);
