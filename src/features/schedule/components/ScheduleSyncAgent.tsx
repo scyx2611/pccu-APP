@@ -16,6 +16,7 @@ import {
   parseScheduleFromHtml,
   sanitizeCourseList,
 } from '../../pccu/parsers/pccuScraper';
+import { refreshScheduledCourseReminders } from '../../notifications/services/courseReminderService';
 
 const DEFAULT_URL = 'https://ecampus.pccu.edu.tw/eCampus/default.aspx';
 const INSIDE_URL = 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx';
@@ -108,6 +109,7 @@ export default function ScheduleSyncAgent({
 
     const updatedAt = Date.now();
     await saveCourses(parsed, false, updatedAt);
+    await refreshScheduledCourseReminders(parsed);
     finish({
       success: true,
       updatedAt,

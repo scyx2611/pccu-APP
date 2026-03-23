@@ -3,12 +3,22 @@ import React, { useMemo } from 'react';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import {
   DarkTheme as NavigationDarkTheme,
   DefaultTheme as NavigationDefaultTheme,
   ThemeProvider as NavigationThemeProvider,
 } from '@react-navigation/native';
 import { ThemeProvider, useTheme } from '../src/providers/theme/ThemeProvider';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 function RootLayoutNav() {
   const { isDark, theme } = useTheme();

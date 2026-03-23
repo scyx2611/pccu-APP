@@ -15,6 +15,8 @@ export default function SettingsLayout() {
     >
       <Stack.Screen name="index" options={{ title: '設置' }} />
       <Stack.Screen name="appearance" options={{ title: '外觀', headerLargeTitle: false }} />
+      <Stack.Screen name="security" options={{ title: '安全性', headerLargeTitle: false }} />
+      <Stack.Screen name="privacy" options={{ title: '隱私', headerLargeTitle: false }} />
       <Stack.Screen name="developer" options={{ title: '開發者', headerLargeTitle: false }} />
       <Stack.Screen name="about" options={{ title: '關於', headerLargeTitle: false }} />
       <Stack.Screen name="notifications" options={{ title: '通知', headerLargeTitle: false }} />

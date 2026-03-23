@@ -2,9 +2,8 @@
 import {
   ActivityIndicator,
   Animated,
-  Linking,
   Platform,
-  Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +25,7 @@ import {
   PCCUCredentials,
 } from '../../pccu/sync/pccuSyncScripts';
 import { SemesterGrade, parseGradesFromHtml } from '../../pccu/parsers/pccuScraper';
+import { buildUpdatedAtText } from '../../../utils/updatedAt';
 
 const DEFAULT_URL = 'https://ecampus.pccu.edu.tw/eCampus/default.aspx';
 const INSIDE_URL = 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx';
@@ -45,13 +45,51 @@ const isFailScore = (value: string) => {
   return Number.isFinite(num) && num < 60;
 };
 
-const formatUpdatedAt = (updatedAt: number | null) => {
-  if (!updatedAt) return '';
-  const date = new Date(updatedAt);
-  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+const shouldUseFailColor = (semesterTitle: string, score: string) => {
+  if (semesterTitle.includes('入學前抵免')) return false;
+  return isFailScore(score);
+};
+
+const formatCourseScore = (semesterTitle: string, score: string) => {
+  const normalizedScore = score.trim().toUpperCase();
+
+  if (semesterTitle.includes('入學前抵免') && score.trim() === '2') {
+    return '抵免';
+  }
+
+  if (normalizedScore === 'P') {
+    return '通過';
+  }
+
+  if (normalizedScore === 'F') {
+    return '未通過';
+  }
+
+  return score || '--';
 };
 
 const normalizeRank = (value?: string) => (value ? value.replace(/\s+/g, '') : '');
+const isPreEnrollmentSemester = (title: string) => title.includes('入學前抵免');
+const getSemesterCredits = (semester: SemesterGrade) => {
+  if (semester.stats.earnedCredits) return semester.stats.earnedCredits;
+
+  const total = semester.courses.reduce((sum, course) => {
+    const credits = Number(course.credits);
+    return Number.isFinite(credits) ? sum + credits : sum;
+  }, 0);
+
+  if (!total) return '';
+  return Number.isInteger(total) ? String(total) : total.toFixed(1);
+};
+const getCumulativeCredits = (semesters: SemesterGrade[]) => {
+  const total = semesters.reduce((sum, semester) => {
+    const credits = Number(getSemesterCredits(semester));
+    return Number.isFinite(credits) ? sum + credits : sum;
+  }, 0);
+
+  if (!total) return '';
+  return Number.isInteger(total) ? String(total) : total.toFixed(1);
+};
 
 export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
   const [loading, setLoading] = useState(false);
@@ -63,6 +101,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
   const [debugNote, setDebugNote] = useState('');
   const [debugHtmlPreview, setDebugHtmlPreview] = useState('');
   const [resolvedShowPreview, setResolvedShowPreview] = useState(showPreview ?? false);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const { theme } = useTheme();
   const webViewRef = useRef<WebView>(null);
   const credRef = useRef<PCCUCredentials | null>(null);
@@ -89,13 +128,14 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
   }, [showPreview]);
 
   const latestSemester = grades[0] || null;
-  const formattedUpdatedAt = formatUpdatedAt(lastUpdatedAt);
-  const updatedAtText = loading
-    ? '正在更新成績...'
-    : formattedUpdatedAt
-      ? `最後更新 ${formattedUpdatedAt}`
-      : '尚未同步成績';
+  const updatedAtText = buildUpdatedAtText({
+    updatedAt: lastUpdatedAt,
+    isUpdating: loading,
+    updatingLabel: '正在更新成績...',
+    emptyLabel: '尚未同步成績',
+  });
   const shouldShowNotice = !loading && !!statusText && (grades.length === 0 || statusText.includes('失敗') || statusText.includes('保留舊資料'));
+  const summaryIconTint = theme.warning;
 
   const summaryItems = useMemo(() => {
     if (!latestSemester) return [];
@@ -103,9 +143,24 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
       { label: '平均', value: latestSemester.stats.average || '--' },
       { label: '班排', value: normalizeRank(latestSemester.stats.classRank) || '--' },
       { label: '系排', value: normalizeRank(latestSemester.stats.deptRank) || '--' },
-      { label: '學分', value: latestSemester.stats.earnedCredits || '--' },
+      { label: '累計學分', value: getCumulativeCredits(grades) || '--' },
     ];
-  }, [latestSemester]);
+  }, [grades, latestSemester]);
+
+  const orderedGrades = useMemo(() => {
+    const preEnrollment: SemesterGrade[] = [];
+    const regular: SemesterGrade[] = [];
+
+    grades.forEach((semester) => {
+      if (isPreEnrollmentSemester(semester.title)) {
+        preEnrollment.push(semester);
+      } else {
+        regular.push(semester);
+      }
+    });
+
+    return [...preEnrollment, ...regular];
+  }, [grades]);
 
   const normalizeGradeUrl = (url: string) =>
     (url || '')
@@ -136,6 +191,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     lastInjectAtRef.current = 0;
     phaseRef.current = 'done';
     setLoading(false);
+    setPullRefreshing(false);
     setStatusText(message);
   }, []);
 
@@ -176,17 +232,19 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     return true;
   }, []);
 
-  const startSync = useCallback(async (options: { silent?: boolean; hasCachedGrades?: boolean } = {}) => {
+  const startSync = useCallback(async (options: { silent?: boolean; hasCachedGrades?: boolean; manual?: boolean } = {}) => {
     const savedCredentials = await getSavedPCCUCredentials();
 
     if (!savedCredentials) {
       setLoading(false);
+      setPullRefreshing(false);
       setStatusText('請先登入後再同步成績');
       return;
     }
 
     const hasCachedGrades = !!options.hasCachedGrades || gradesRef.current.length > 0;
     const silent = !!options.silent && hasCachedGrades;
+    const manual = !!options.manual;
     credRef.current = savedCredentials;
     retryRef.current = 0;
     lastHandledUrlRef.current = '';
@@ -198,6 +256,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     setDebugNote(silent ? 'background sync' : 'start sync');
     setDebugHtmlPreview('');
     setLoading(true);
+    setPullRefreshing(manual);
     setStatusText(silent && hasCachedGrades ? '背景更新成績中...' : '開始同步成績...');
 
     if (!webReady) return;
@@ -396,17 +455,11 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     />
   );
 
-  const openSource = () => {
-    void Linking.openURL(DEFAULT_URL);
-  };
-
   const renderSummaryCard = () => {
     if (!latestSemester) return null;
 
     return (
-      <View style={[styles.summaryCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>整體摘要</Text>
-        <Text style={[styles.summaryTerm, { color: theme.textSub }]}>{latestSemester.title}</Text>
+      <View style={styles.summaryStack}>
         <View style={styles.summaryGrid}>
           {summaryItems.map((item) => (
             <View
@@ -422,6 +475,14 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     );
   };
 
+  const handlePullRefresh = () => {
+    void startSync({
+      silent: false,
+      hasCachedGrades: gradesRef.current.length > 0,
+      manual: true,
+    });
+  };
+
   return (
     <>
       <ScrollView
@@ -429,30 +490,23 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={pullRefreshing}
+            onRefresh={handlePullRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        )}
       >
         {!keepWebViewVisibleForDebug ? <View style={styles.hiddenWebView}>{renderSyncWebView()}</View> : null}
 
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <View style={styles.heroHeader}>
-            <AppSymbol name="graduationcap.fill" size={28} tintColor={theme.primary} />
-            <Text style={[styles.heroTitle, { color: theme.text }]}>歷年成績</Text>
+            <AppSymbol name="medal.fill" size={28} tintColor={summaryIconTint} />
+            <Text style={[styles.heroTitle, { color: theme.text }]}>概覽</Text>
           </View>
-          <Text style={[styles.heroText, { color: theme.textSub }]}>
-            顯示目前已同步的學期成績摘要，進頁後會優先讀取快取，再於背景更新最新資料。
-          </Text>
-          <View style={styles.actionRow}>
-            <Pressable style={[styles.actionButton, { backgroundColor: theme.syncBtnBg }]} onPress={() => void startSync()}>
-              <AppSymbol name="arrow.clockwise" size={16} tintColor={theme.primary} />
-              <Text style={[styles.actionText, { color: theme.primary }]}>
-                {loading ? '更新中...' : '重新整理'}
-              </Text>
-            </Pressable>
-            <Pressable style={[styles.actionButton, { backgroundColor: theme.syncBtnBg }]} onPress={openSource}>
-              <AppSymbol name="doc.text.magnifyingglass" size={16} tintColor={theme.text} />
-              <Text style={[styles.actionText, { color: theme.text }]}>官方頁面</Text>
-            </Pressable>
-          </View>
-          <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtText}</Text>
+          {renderSummaryCard()}
         </View>
 
         {loading && grades.length === 0 ? (
@@ -488,8 +542,6 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
           </View>
         ) : null}
 
-        {renderSummaryCard()}
-
         {grades.length === 0 && !loading ? (
           <View style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
             <Text style={[styles.cardTitle, { color: theme.text }]}>暫無成績資料</Text>
@@ -497,42 +549,54 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
           </View>
         ) : null}
 
-        {grades.map((semester, index) => (
-          <View
-            key={`${semester.title}-${index}`}
-            style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
-          >
-            <View style={styles.sectionHeader}>
+        {orderedGrades.map((semester, index) => {
+          const isPreEnrollment = isPreEnrollmentSemester(semester.title);
+          const metaItems = [
+            !isPreEnrollment ? `平均 ${semester.stats.average || '--'}` : '',
+            semester.stats.classRank ? `班排 ${normalizeRank(semester.stats.classRank)}` : '',
+            semester.stats.deptRank ? `系排 ${normalizeRank(semester.stats.deptRank)}` : '',
+          ].filter(Boolean);
+
+          return (
+            <View
+              key={`${semester.title}-${index}`}
+              style={[
+                styles.sectionCard,
+                isPreEnrollment ? styles.preEnrollmentCard : null,
+                { backgroundColor: theme.card, shadowColor: theme.text },
+              ]}
+            >
+            <View style={[styles.sectionHeader, isPreEnrollment ? styles.preEnrollmentHeader : null]}>
               <View style={styles.sectionHeading}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>{semester.title}</Text>
-                <Text style={[styles.sectionMeta, { color: theme.textSub }]}>{semester.courses.length} 門課</Text>
+                <Text style={[styles.sectionMeta, { color: theme.textSub }]}>
+                  {isPreEnrollment ? `${semester.courses.length} 筆抵免` : `${semester.courses.length} 門課`}
+                </Text>
               </View>
-              <Text style={[styles.sectionAverage, { color: theme.primary }]}>平均 {semester.stats.average || '--'}</Text>
             </View>
 
-            <View style={styles.metaRow}>
-              {semester.stats.classRank ? (
-                <Text style={[styles.metaPill, { color: theme.textSub, backgroundColor: theme.syncBtnBg }]}>
-                  班排 {normalizeRank(semester.stats.classRank)}
-                </Text>
-              ) : null}
-              {semester.stats.deptRank ? (
-                <Text style={[styles.metaPill, { color: theme.textSub, backgroundColor: theme.syncBtnBg }]}>
-                  系排 {normalizeRank(semester.stats.deptRank)}
-                </Text>
-              ) : null}
-              {semester.stats.earnedCredits ? (
-                <Text style={[styles.metaPill, { color: theme.textSub, backgroundColor: theme.syncBtnBg }]}>
-                  學分 {semester.stats.earnedCredits}
-                </Text>
-              ) : null}
-            </View>
+            {metaItems.length > 0 ? (
+              <View style={[styles.metaRow, isPreEnrollment ? styles.preEnrollmentMetaRow : null]}>
+                {metaItems.map((item) => (
+                  <Text
+                    key={`${semester.title}-${item}`}
+                    style={[styles.metaPill, { color: theme.textSub, backgroundColor: theme.syncBtnBg }]}
+                  >
+                    {item}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
 
-            <View style={styles.courseStack}>
+            <View style={[styles.courseStack, isPreEnrollment ? styles.preEnrollmentCourseStack : null]}>
               {semester.courses.map((course, courseIndex) => (
                 <View
                   key={`${semester.title}-${course.code}-${courseIndex}`}
-                  style={[styles.courseCard, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}
+                  style={[
+                    styles.courseCard,
+                    isPreEnrollment ? styles.preEnrollmentCourseCard : null,
+                    { backgroundColor: theme.syncBtnBg, borderColor: theme.border },
+                  ]}
                 >
                   <View style={styles.courseHeader}>
                     <View style={styles.courseMain}>
@@ -550,17 +614,20 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
                     <Text
                       style={[
                         styles.courseScore,
-                        { color: isFailScore(course.score) ? theme.danger : theme.text },
+                        { color: shouldUseFailColor(semester.title, course.score) ? theme.danger : theme.text },
                       ]}
                     >
-                      {course.score || '--'}
+                      {formatCourseScore(semester.title, course.score)}
                     </Text>
                   </View>
                 </View>
               ))}
             </View>
           </View>
-        ))}
+          );
+        })}
+
+        <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtText}</Text>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -585,18 +652,8 @@ const styles = StyleSheet.create({
   },
   heroHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   heroTitle: { fontSize: 24, fontWeight: '700', marginLeft: 8 },
-  heroText: { fontSize: 15, lineHeight: 22 },
-  actionRow: { flexDirection: 'row', marginTop: 16 },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginRight: 10,
-  },
-  actionText: { fontSize: 14, fontWeight: '600', marginLeft: 6 },
-  updatedText: { marginTop: 14, fontSize: 13 },
+  summaryStack: { marginTop: 14 },
+  updatedText: { marginTop: 6, fontSize: 13, textAlign: 'center' },
   statusCard: {
     borderRadius: 24,
     padding: 18,
@@ -622,27 +679,17 @@ const styles = StyleSheet.create({
   debugText: { fontSize: 12, lineHeight: 18 },
   debugWebViewCard: { borderRadius: 24, borderWidth: 1, overflow: 'hidden', minHeight: 420, marginBottom: 16 },
   debugWebViewInner: { width: '100%', height: 420 },
-  summaryCard: {
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
-  },
   cardTitle: { fontSize: 18, fontWeight: '700' },
-  summaryTerm: { fontSize: 14, marginTop: 8, marginBottom: 14 },
-  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
   summaryChip: {
-    width: '47%',
+    width: '48%',
     borderRadius: 18,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   summaryChipLabel: { fontSize: 12, fontWeight: '600' },
-  summaryChipValue: { fontSize: 18, fontWeight: '700', marginTop: 4 },
+  summaryChipValue: { fontSize: 18, fontWeight: '700', marginTop: 6 },
   sectionCard: {
     borderRadius: 24,
     padding: 20,
@@ -652,11 +699,13 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
+  preEnrollmentCard: { paddingTop: 18, paddingBottom: 18 },
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
+  preEnrollmentHeader: { marginBottom: 10 },
   sectionHeading: { flex: 1, paddingRight: 12 },
   sectionMeta: { marginTop: 6, fontSize: 13 },
-  sectionAverage: { fontSize: 15, fontWeight: '700' },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  preEnrollmentMetaRow: { marginBottom: 12 },
   metaPill: {
     borderRadius: 999,
     overflow: 'hidden',
@@ -666,7 +715,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   courseStack: { gap: 10 },
+  preEnrollmentCourseStack: { gap: 8 },
   courseCard: { borderRadius: 20, borderWidth: 1, padding: 16 },
+  preEnrollmentCourseCard: { paddingVertical: 14 },
   courseHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   courseMain: { flex: 1, paddingRight: 16 },
   courseName: { fontSize: 16, fontWeight: '700', lineHeight: 22 },

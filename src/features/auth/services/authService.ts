@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { clearCourses } from '../../schedule/storage/scheduleStorage';
 import { clearGrades } from '../../grade/storage/gradeStorage';
@@ -11,9 +11,11 @@ const PASSWORD_KEY = 'user_password';
 const CREDENTIALS_CACHE_KEY = 'user_credentials_cache_v1';
 
 type SavedCredentials = { account: string; password: string };
+type LoginOptions = { persistCredentials?: boolean };
 
 let savedCredentialsCache: SavedCredentials | null | undefined;
 let savedCredentialsLoadPromise: Promise<SavedCredentials | null> | null = null;
+let sessionCredentialsCache: SavedCredentials | null = null;
 let sessionWarmPromise: Promise<{ success: boolean; message?: string }> | null = null;
 let sessionWarmAt = 0;
 let credentialsExplicitlyCleared = false;
@@ -31,6 +33,25 @@ const clearCredentialsMirror = async () => {
   await AsyncStorage.removeItem(CREDENTIALS_CACHE_KEY);
 };
 
+const setSessionCredentials = (credentials: SavedCredentials | null) => {
+  sessionCredentialsCache = credentials;
+};
+
+export const clearSessionPCCUCredentials = () => {
+  setSessionCredentials(null);
+};
+
+const persistSavedCredentials = async (credentials: SavedCredentials) => {
+  await Promise.all([
+    SecureStore.setItemAsync(ACCOUNT_KEY, credentials.account),
+    SecureStore.setItemAsync(PASSWORD_KEY, credentials.password),
+  ]);
+  await writeCredentialsMirror(credentials);
+  credentialsExplicitlyCleared = false;
+  savedCredentialsCache = credentials;
+  savedCredentialsLoadPromise = null;
+};
+
 const readCredentialsMirror = async (): Promise<SavedCredentials | null> => {
   try {
     const stored = await AsyncStorage.getItem(CREDENTIALS_CACHE_KEY);
@@ -40,7 +61,7 @@ const readCredentialsMirror = async (): Promise<SavedCredentials | null> => {
     const password = normalizeCredential(parsed?.password ?? null);
     if (!account || !password) return null;
     return { account, password };
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -54,7 +75,7 @@ const readSavedCredentialsFromStore = async (): Promise<SavedCredentials | null>
         SecureStore.setItemAsync(ACCOUNT_KEY, mirroredCredentials.account),
         SecureStore.setItemAsync(PASSWORD_KEY, mirroredCredentials.password),
       ]);
-    } catch (error) {}
+    } catch {}
 
     return mirroredCredentials;
   }
@@ -85,25 +106,22 @@ const readSavedCredentialsFromStore = async (): Promise<SavedCredentials | null>
   return null;
 };
 
-/**
- * 登入 PCCU（只做帳密驗證和保存）
- * 課表獲取改由 ScheduleScreen 的 WebView 處理
- */
 export const loginPCCU = async (
   account: string,
-  password: string
+  password: string,
+  options: LoginOptions = {}
 ): Promise<{ success: boolean; message?: string }> => {
   try {
     const normalizedAccount = normalizeCredential(account);
     const normalizedPassword = normalizeCredential(password);
-    console.log('發送登入請求...');
+    const shouldPersistCredentials = options.persistCredentials ?? true;
 
     const response = await fetch(API_BASE_URL + '/default.aspx/gfChkLogin', {
       method: 'POST',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Content-Type': 'application/json; charset=utf-8',
-        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
       },
       body: JSON.stringify({
@@ -119,43 +137,73 @@ export const loginPCCU = async (
     const data = await response.json();
 
     if (data?.d && data.d.HasError === false) {
-      console.log('登入成功');
       const previousAccount = await SecureStore.getItemAsync(ACCOUNT_KEY);
       if (previousAccount && previousAccount !== normalizedAccount) {
         await clearCourses();
         await clearGrades();
       }
-      await SecureStore.setItemAsync(ACCOUNT_KEY, normalizedAccount);
-      await SecureStore.setItemAsync(PASSWORD_KEY, normalizedPassword);
-      await writeCredentialsMirror({
-        account: normalizedAccount,
-        password: normalizedPassword,
-      });
-      credentialsExplicitlyCleared = false;
-      savedCredentialsCache = {
+
+      const credentials = {
         account: normalizedAccount,
         password: normalizedPassword,
       };
-      savedCredentialsLoadPromise = null;
+
+      setSessionCredentials(credentials);
+
+      if (shouldPersistCredentials) {
+        await persistSavedCredentials(credentials);
+      }
+
       return { success: true };
-    } else {
-      return {
-        success: false,
-        message: data?.d?.MessageKey || '登入失敗，請檢查帳號密碼',
-      };
     }
-  } catch (error: any) {
+
+    return {
+      success: false,
+      message: data?.d?.MessageKey || '登入失敗，請確認學號與密碼是否正確。',
+    };
+  } catch (error) {
     console.error('Login Error:', error);
-    return { success: false, message: '網路連線失敗，請稍後再試' };
+    return { success: false, message: '登入時發生問題，請稍後再試。' };
   }
+};
+
+export const savePCCUCredentials = async (account: string, password: string) => {
+  const normalizedAccount = normalizeCredential(account);
+  const normalizedPassword = normalizeCredential(password);
+
+  if (!normalizedAccount || !normalizedPassword) {
+    return;
+  }
+
+  const credentials = {
+    account: normalizedAccount,
+    password: normalizedPassword,
+  };
+
+  setSessionCredentials(credentials);
+  await persistSavedCredentials(credentials);
+};
+
+export const clearPersistedPCCUCredentials = async () => {
+  credentialsExplicitlyCleared = true;
+  savedCredentialsCache = null;
+  savedCredentialsLoadPromise = null;
+  await SecureStore.deleteItemAsync(ACCOUNT_KEY);
+  await SecureStore.deleteItemAsync(PASSWORD_KEY);
+  await clearCredentialsMirror();
+};
+
+export const clearSavedPCCUCredentials = async () => {
+  await clearPersistedPCCUCredentials();
+  clearSessionPCCUCredentials();
 };
 
 export const ensurePCCUSession = async (
   credentials?: SavedCredentials | null
 ): Promise<{ success: boolean; message?: string }> => {
-  const resolvedCredentials = credentials || (await getSavedPCCUCredentials());
+  const resolvedCredentials = credentials || sessionCredentialsCache || (await getSavedPCCUCredentials());
   if (!resolvedCredentials) {
-    return { success: false, message: '找不到登入憑證' };
+    return { success: false, message: '找不到可用的登入憑證。' };
   }
 
   if (Date.now() - sessionWarmAt < 45 * 1000) {
@@ -163,7 +211,9 @@ export const ensurePCCUSession = async (
   }
 
   if (!sessionWarmPromise) {
-    sessionWarmPromise = loginPCCU(resolvedCredentials.account, resolvedCredentials.password)
+    sessionWarmPromise = loginPCCU(resolvedCredentials.account, resolvedCredentials.password, {
+      persistCredentials: false,
+    })
       .then((result) => {
         if (result.success) {
           sessionWarmAt = Date.now();
@@ -179,6 +229,10 @@ export const ensurePCCUSession = async (
 };
 
 export const getSavedPCCUCredentials = async (): Promise<{ account: string; password: string } | null> => {
+  if (sessionCredentialsCache) {
+    return sessionCredentialsCache;
+  }
+
   if (credentialsExplicitlyCleared) {
     return null;
   }
@@ -192,6 +246,7 @@ export const getSavedPCCUCredentials = async (): Promise<{ account: string; pass
       .then((credentials) => {
         if (credentials) {
           savedCredentialsCache = credentials;
+          sessionCredentialsCache = credentials;
         }
         return credentials;
       })
@@ -204,15 +259,10 @@ export const getSavedPCCUCredentials = async (): Promise<{ account: string; pass
 };
 
 export const logoutPCCU = async () => {
-  credentialsExplicitlyCleared = true;
-  savedCredentialsCache = null;
-  savedCredentialsLoadPromise = null;
+  await clearSavedPCCUCredentials();
   sessionWarmPromise = null;
   sessionWarmAt = 0;
   clearPostLoginSyncHandled();
-  await SecureStore.deleteItemAsync(ACCOUNT_KEY);
-  await SecureStore.deleteItemAsync(PASSWORD_KEY);
-  await clearCredentialsMirror();
   await SecureStore.deleteItemAsync('session_cookie');
   await SecureStore.deleteItemAsync('user_name');
 };

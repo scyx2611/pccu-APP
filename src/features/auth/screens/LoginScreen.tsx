@@ -12,10 +12,18 @@ import {
   ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
-import { ensurePCCUSession, getSavedPCCUCredentials, loginPCCU } from '../services/authService';
+import {
+  clearPersistedPCCUCredentials,
+  ensurePCCUSession,
+  getSavedPCCUCredentials,
+  loginPCCU,
+  savePCCUCredentials,
+} from '../services/authService';
 import { getBootstrapCacheSnapshot } from '../services/bootstrapCache';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
+import { getBiometricLoginEnabled, getRememberCredentialsEnabled } from '../../settings/storage/securitySettings';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 export default function LoginScreen() {
   const [account, setAccount] = useState('');
@@ -25,17 +33,69 @@ export default function LoginScreen() {
   const { theme } = useTheme();
   const busy = isLoading;
 
+  const authenticateLoginAccess = async () => {
+    const biometricLoginEnabled = await getBiometricLoginEnabled();
+    if (!biometricLoginEnabled) {
+      return true;
+    }
+
+    const [hasHardware, isEnrolled, supportedTypes] = await Promise.all([
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+      LocalAuthentication.supportedAuthenticationTypesAsync(),
+    ]);
+
+    const supportsBiometric =
+      Platform.OS === 'ios'
+        ? supportedTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
+        : supportedTypes.length > 0;
+
+    if (!hasHardware || !isEnrolled || !supportsBiometric) {
+      Alert.alert(
+        Platform.OS === 'ios' ? '無法使用 Face ID 登入' : '無法使用生物辨識登入',
+        Platform.OS === 'ios'
+          ? '這台裝置尚未設定 Face ID，或目前執行環境不支援。'
+          : '這台裝置尚未設定生物辨識，或目前執行環境不支援。'
+      );
+      return false;
+    }
+
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: Platform.OS === 'ios' ? '驗證 Face ID 以登入' : '驗證生物辨識以登入',
+      cancelLabel: '取消',
+      disableDeviceFallback: false,
+    });
+
+    if (!result.success) {
+      Alert.alert('驗證未完成', '需通過生物辨識驗證後才能登入。');
+      return false;
+    }
+
+    return true;
+  };
+
   useEffect(() => {
     let active = true;
 
     const loadSavedCredentials = async () => {
+      const biometricLoginEnabled = await getBiometricLoginEnabled();
       const savedCredentials = await getSavedPCCUCredentials();
 
       if (!active) return;
 
+      if (biometricLoginEnabled) {
+        setBootstrappingSavedLogin(false);
+        return;
+      }
+
       if (savedCredentials) {
         setAccount(savedCredentials.account);
         setPassword(savedCredentials.password);
+        const passedBiometricAuth = await authenticateLoginAccess();
+        if (!active || !passedBiometricAuth) {
+          setBootstrappingSavedLogin(false);
+          return;
+        }
         await ensurePCCUSession(savedCredentials);
         if (!active) return;
         const cacheSnapshot = await getBootstrapCacheSnapshot();
@@ -54,7 +114,7 @@ export default function LoginScreen() {
     };
   }, []);
 
-  const handleLogin = async () => {
+  const performLogin = async () => {
     if (!account || !password) {
       Alert.alert('無法登入', '請輸入學號與密碼');
       return;
@@ -63,20 +123,46 @@ export default function LoginScreen() {
     setIsLoading(true);
 
     try {
-      const result = await loginPCCU(account, password);
+      const rememberCredentialsEnabled = await getRememberCredentialsEnabled();
+      const result = await loginPCCU(account, password, { persistCredentials: false });
       if (!result.success) {
         setIsLoading(false);
         Alert.alert('登入失敗', result.message || '請確認學號與密碼是否正確');
         return;
       }
 
+      if (rememberCredentialsEnabled) {
+        await savePCCUCredentials(account, password);
+      } else {
+        await clearPersistedPCCUCredentials();
+      }
+
       setIsLoading(false);
-      const cacheSnapshot = await getBootstrapCacheSnapshot();
-      router.replace(cacheSnapshot.hasAnyCache ? '/(tabs)/home' : '/loading');
+      Alert.alert(
+        '登入提醒',
+        '本 App 僅供學習、研究與個人使用參考，並非中國文化大學官方服務。資料若有落差，仍應以校方系統、公告與正式通知為準。\n\n繼續使用即代表你已閱讀並同意上述免責聲明。',
+        [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '同意並繼續',
+            onPress: () => {
+              void (async () => {
+                const cacheSnapshot = await getBootstrapCacheSnapshot();
+                router.replace(cacheSnapshot.hasAnyCache ? '/(tabs)/home' : '/loading');
+              })();
+            },
+          },
+        ]
+      );
     } catch (error) {
       setIsLoading(false);
       Alert.alert('發生錯誤', '登入時發生問題，請稍後再試');
     }
+  };
+
+  const handleLogin = () => {
+    if (busy) return;
+    void performLogin();
   };
 
   if (bootstrappingSavedLogin) {
@@ -106,7 +192,11 @@ export default function LoginScreen() {
             fallback={<Text style={{ fontSize: 80, color: theme.primary }}>CCU</Text>}
           />
           <Text style={[styles.title, { color: theme.text }]}>登入 MyCCU</Text>
-          <Text style={[styles.subtitle, { color: theme.textSub }]}>使用 PCCU 帳號登入，會先進首頁顯示快取資料，並在背景自動更新課表與成績。</Text>
+          <Text style={[styles.subtitle, { color: theme.textSub }]}>
+            使用 PCCU 帳號登入後，
+            {'\n'}
+            可快速查看課表、成績與校園資訊。
+          </Text>
         </View>
 
         <View style={styles.formContainer}>
@@ -152,10 +242,6 @@ export default function LoginScreen() {
               <Text style={styles.loginButtonText}>登入</Text>
             )}
           </TouchableOpacity>
-
-          <Text style={[styles.footerText, { color: theme.textSub }]}>
-            登入後會直接進首頁，若已有快取會先顯示，再於背景自動更新。
-          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -203,10 +289,4 @@ const styles = StyleSheet.create({
   },
   loginButtonDisabled: { opacity: 0.6 },
   loginButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
-  footerText: {
-    fontSize: 13,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-    lineHeight: 20,
-  },
 });

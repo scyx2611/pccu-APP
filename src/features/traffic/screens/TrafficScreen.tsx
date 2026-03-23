@@ -1,25 +1,26 @@
-import React, { useMemo } from 'react';
+﻿import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   Linking,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
-import AppSymbol from '../../../components/AppSymbol';
-import { useTheme } from '../../../contexts/ThemeContext';
+import AppSymbol from '../../../shared/components/AppSymbol';
+import { useTheme } from '../../../providers/theme/ThemeProvider';
 import TrafficSyncAgent from '../components/TrafficSyncAgent';
 import { useTrafficData } from '../hooks/useTrafficData';
 import {
   TRAFFIC_SOURCE_URL,
   TrafficDirection,
   TrafficStopArrival,
-  formatTrafficUpdatedAt,
   sortTrafficArrivals,
 } from '../types';
+import { buildUpdatedAtText } from '../../../utils/updatedAt';
 
 function renderArrivalMeta(arrival: TrafficStopArrival) {
   return `${arrival.stopName} · ${arrival.branchLabel}`;
@@ -39,6 +40,13 @@ export default function TrafficScreen() {
     [traffic.snapshot]
   );
 
+  const updatedAtText = buildUpdatedAtText({
+    updatedAt: traffic.snapshot?.updatedAt ?? null,
+    isUpdating: traffic.refreshing,
+    updatingLabel: '正在更新交通動態...',
+    emptyLabel: '尚未同步交通資訊',
+  });
+
   const openSource = () => {
     void Linking.openURL(TRAFFIC_SOURCE_URL);
   };
@@ -50,7 +58,7 @@ export default function TrafficScreen() {
         <Text style={[styles.sectionEmpty, { color: theme.textSub }]}>暫無即時資料</Text>
       ) : (
         items.map((arrival) => (
-          <View style={styles.arrivalRow} key={`${direction}-${arrival.stopName}`}>
+          <View style={styles.arrivalRow} key={`${direction}-${arrival.stopName}-${arrival.branchLabel}`}>
             <View style={styles.arrivalTextBlock}>
               <Text style={[styles.arrivalStop, { color: theme.text }]}>{arrival.stopName}</Text>
               <Text style={[styles.arrivalMeta, { color: theme.textSub }]} numberOfLines={1}>
@@ -72,6 +80,14 @@ export default function TrafficScreen() {
       contentContainerStyle={styles.content}
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
+      refreshControl={(
+        <RefreshControl
+          refreshing={traffic.refreshing}
+          onRefresh={traffic.refresh}
+          tintColor={theme.primary}
+          colors={[theme.primary]}
+        />
+      )}
     >
       <TrafficSyncAgent
         enabled={traffic.sync.enabled}
@@ -79,51 +95,38 @@ export default function TrafficScreen() {
         onComplete={traffic.sync.onComplete}
       />
 
-      <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+      <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
         <View style={styles.heroHeader}>
           <AppSymbol name="bus.fill" size={28} tintColor={theme.warning} fallback={<Text>Bus</Text>} />
-          <Text style={[styles.heroTitle, { color: theme.text }]}>紅 5 交通動態</Text>
+          <Text style={[styles.heroTitle, { color: theme.text }]}>交通動態</Text>
         </View>
-        <Text style={[styles.heroText, { color: theme.textSub }]}>
-          直接抓取大臺北公車官方頁面，顯示文化大學與文化大學一兩個校園站牌的即時到站資訊。
-        </Text>
+        <Text style={[styles.heroText, { color: theme.textSub }]}>以大臺北公車紅 5 經文大路線為主，整理上下山校園站點的即時到站資訊。</Text>
         <View style={styles.actionRow}>
-          <Pressable style={[styles.actionButton, { backgroundColor: theme.syncBtnBg }]} onPress={traffic.refresh}>
-            <AppSymbol name="arrow.clockwise" size={16} tintColor={theme.primary} fallback={<Text>R</Text>} />
-            <Text style={[styles.actionText, { color: theme.primary }]}>
-              {traffic.refreshing ? '更新中...' : '重新整理'}
-            </Text>
-          </Pressable>
           <Pressable style={[styles.actionButton, { backgroundColor: theme.syncBtnBg }]} onPress={openSource}>
             <AppSymbol name="doc.text.magnifyingglass" size={16} tintColor={theme.text} fallback={<Text>i</Text>} />
-            <Text style={[styles.actionText, { color: theme.text }]}>官方頁面</Text>
+            <Text style={[styles.actionText, { color: theme.text }]}>官方來源</Text>
           </Pressable>
         </View>
-        <Text style={[styles.updatedText, { color: theme.textSub }]}>
-          {traffic.snapshot
-            ? `${traffic.error ? '較早資料' : '最後更新'} ${formatTrafficUpdatedAt(traffic.snapshot.updatedAt)}`
-            : '尚未取得交通資料'}
-        </Text>
       </View>
 
       {traffic.loading && !traffic.snapshot ? (
         <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={[styles.statusText, { color: theme.textSub }]}>讀取紅 5 即時資訊中...</Text>
+          <Text style={[styles.statusText, { color: theme.textSub }]}>正在載入紅 5 即時資訊...</Text>
         </View>
       ) : null}
 
       {traffic.error ? (
         <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-          <Text style={[styles.noticeTitle, { color: theme.text }]}>更新提醒</Text>
-          <Text style={[styles.noticeText, { color: theme.textSub }]}>
-            {traffic.error}
-          </Text>
+          <Text style={[styles.noticeTitle, { color: theme.text }]}>同步狀態</Text>
+          <Text style={[styles.noticeText, { color: theme.textSub }]}>{traffic.error}</Text>
         </View>
       ) : null}
 
-      {renderSection('下山 · 往劍潭', 'downhill', downhill)}
-      {renderSection('上山 · 往陽明山', 'uphill', uphill)}
+      {renderSection('下山 · 往劍潭方向', 'downhill', downhill)}
+      {renderSection('上山 · 往陽明山方向', 'uphill', uphill)}
+
+      <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtText}</Text>
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
@@ -154,7 +157,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   actionText: { fontSize: 14, fontWeight: '600', marginLeft: 6 },
-  updatedText: { marginTop: 14, fontSize: 13 },
+  updatedText: { marginTop: 4, marginBottom: 8, fontSize: 13, textAlign: 'center' },
   statusCard: {
     borderRadius: 24,
     padding: 18,

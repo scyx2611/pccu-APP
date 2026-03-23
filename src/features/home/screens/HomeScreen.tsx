@@ -20,6 +20,7 @@ import {
 } from '../../traffic/types';
 import { SemesterGrade } from '../../../services/scraper';
 import { getGrades } from '../../../services/GradeStore';
+import { getHideHomeGradeDetails } from '../../settings/storage/privacySettings';
 
 type NextClassInfo = {
   course: CourseData;
@@ -66,6 +67,11 @@ const formatTrafficSummaryLine = (prefix: string, arrival: TrafficStopArrival | 
   if (!arrival) return `${prefix} 暫無資料`;
   return `${prefix} ${arrival.stopName} ${arrival.etaText}`;
 };
+
+const HIDDEN_AVERAGE_VALUE = '•••';
+const HIDDEN_RANK_VALUE = '••/••';
+const maskAverageValue = (value?: string | null) => (value ? HIDDEN_AVERAGE_VALUE : '--');
+const maskRankValue = (value?: string | null) => (value ? HIDDEN_RANK_VALUE : '--');
 
 const findNextClass = (courses: CourseData[], now: Date): NextClassInfo | null => {
   if (!courses || courses.length === 0) return null;
@@ -120,6 +126,7 @@ export default function HomeScreen() {
   const [scheduleLoading, setScheduleLoading] = useState(true);
   const [grades, setGrades] = useState<SemesterGrade[]>([]);
   const [gradeLoading, setGradeLoading] = useState(true);
+  const [hideHomeGradeDetails, setHideHomeGradeDetails] = useState(false);
   const [weather, setWeather] = useState<{ temp?: number; code?: number } | null>(null);
   const [userName, setUserName] = useState('');
   const [now, setNow] = useState(new Date());
@@ -153,6 +160,11 @@ export default function HomeScreen() {
     setUserName(name || '同學');
   }, []);
 
+  const refreshPrivacy = useCallback(async () => {
+    const hide = await getHideHomeGradeDetails();
+    setHideHomeGradeDetails(hide);
+  }, []);
+
   const handleScheduleSyncComplete = useCallback(() => {
     void refreshCourses();
     setBackgroundSyncStage('grade');
@@ -168,7 +180,8 @@ export default function HomeScreen() {
     void refreshCourses();
     void refreshGrades();
     void refreshUser();
-  }, [refreshCourses, refreshGrades, refreshUser]);
+    void refreshPrivacy();
+  }, [refreshCourses, refreshGrades, refreshPrivacy, refreshUser]);
 
   useEffect(() => {
     let active = true;
@@ -200,7 +213,8 @@ export default function HomeScreen() {
       void refreshCourses();
       void refreshGrades();
       void refreshUser();
-    }, [refreshCourses, refreshGrades, refreshUser])
+      void refreshPrivacy();
+    }, [refreshCourses, refreshGrades, refreshPrivacy, refreshUser])
   );
 
   useEffect(() => {
@@ -239,11 +253,11 @@ export default function HomeScreen() {
   const gradeSummary = useMemo(() => {
     if (!latestGrade) return null;
     return {
-      avg: latestGrade.stats?.average,
-      classRank: latestGrade.stats?.classRank,
-      deptRank: latestGrade.stats?.deptRank,
+      avg: hideHomeGradeDetails ? maskAverageValue(latestGrade.stats?.average) : latestGrade.stats?.average,
+      classRank: hideHomeGradeDetails ? maskRankValue(latestGrade.stats?.classRank) : latestGrade.stats?.classRank,
+      deptRank: hideHomeGradeDetails ? maskRankValue(latestGrade.stats?.deptRank) : latestGrade.stats?.deptRank,
     };
-  }, [latestGrade]);
+  }, [hideHomeGradeDetails, latestGrade]);
 
   const downhillSummary = useMemo(
     () => pickBestTrafficArrival(traffic.snapshot?.downhill || []),
@@ -387,7 +401,7 @@ export default function HomeScreen() {
           onPressOut={() => Animated.spring(gradePressAnim, { toValue: 0, useNativeDriver: true }).start()}
           style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }, gradePressStyle]}
         >
-          <AppSymbol name="graduationcap.fill" size={32} tintColor={theme.warning} style={styles.gridIcon} fallback={<Text>成績</Text>} />
+          <AppSymbol name="medal.fill" size={32} tintColor={theme.warning} style={styles.gridIcon} fallback={<Text>成績</Text>} />
           <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>成績</Text>
           {gradeSummary ? (
             <>

@@ -31,6 +31,8 @@ import {
   parseScheduleFromHtml,
   sanitizeCourseList,
 } from '../../pccu/parsers/pccuScraper';
+import { refreshScheduledCourseReminders } from '../../notifications/services/courseReminderService';
+import { buildUpdatedAtText } from '../../../utils/updatedAt';
 
 const DEFAULT_URL = 'https://ecampus.pccu.edu.tw/eCampus/default.aspx';
 const INSIDE_URL = 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx';
@@ -87,6 +89,7 @@ const buildCourseWindow = (course: CourseData, now: Date) => {
 const getCourseSummaries = (courses: CourseData[], now: Date) => {
   let current: CourseSummary | null = null;
   let next: CourseSummary | null = null;
+  let previousToday: CourseSummary | null = null;
 
   courses.forEach((course) => {
     const window = buildCourseWindow(course, now);
@@ -99,6 +102,12 @@ const getCourseSummaries = (courses: CourseData[], now: Date) => {
       return;
     }
 
+    if (isSameDay(window.start, now) && window.end <= now) {
+      if (!previousToday || window.end.getTime() > previousToday.end.getTime()) {
+        previousToday = { course, start: window.start, end: window.end };
+      }
+    }
+
     if (window.start <= now) {
       window.start.setDate(window.start.getDate() + 7);
       window.end.setDate(window.end.getDate() + 7);
@@ -109,7 +118,7 @@ const getCourseSummaries = (courses: CourseData[], now: Date) => {
     }
   });
 
-  return { current, next };
+  return { current, next, previousToday };
 };
 
 const formatSummaryMeta = (summary: CourseSummary | null) => {
@@ -118,6 +127,11 @@ const formatSummaryMeta = (summary: CourseSummary | null) => {
   const location = summary.course.location || '地點未提供';
   return `${dayLabel} ${formatTime(summary.start.getHours(), summary.start.getMinutes())}-${formatTime(summary.end.getHours(), summary.end.getMinutes())} · ${location}`;
 };
+
+const isSameDay = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
 
 const formatPeriodLabel = (course: CourseData) =>
   course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 節` : `第 ${course.startPeriod}-${course.endPeriod} 節`;
@@ -158,15 +172,18 @@ export default function ScheduleScreen() {
     : 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36';
 
   const keepWebViewVisibleForDebug = __DEV__ && developerDebugEnabled;
-  const formattedUpdatedAt = lastUpdatedAt
-    ? `${String(new Date(lastUpdatedAt).getFullYear())}/${String(new Date(lastUpdatedAt).getMonth() + 1).padStart(2, '0')}/${String(new Date(lastUpdatedAt).getDate()).padStart(2, '0')} ${String(new Date(lastUpdatedAt).getHours()).padStart(2, '0')}:${String(new Date(lastUpdatedAt).getMinutes()).padStart(2, '0')}`
-    : '';
-  const updatedAtLineText = loading
-    ? '正在更新課表...'
-    : formattedUpdatedAt
-      ? `最後更新 ${formattedUpdatedAt}`
-      : '';
-  const { current: currentCourse, next: nextCourse } = useMemo(() => getCourseSummaries(courses, now), [courses, now]);
+  const updatedAtLineText = buildUpdatedAtText({
+    updatedAt: lastUpdatedAt,
+    isUpdating: loading,
+    updatingLabel: '正在更新課表...',
+    emptyLabel: '尚未同步課表',
+  });
+  const {
+    current: currentCourse,
+    next: nextCourse,
+    previousToday,
+  } = useMemo(() => getCourseSummaries(courses, now), [courses, now]);
+  const isBreakTime = !currentCourse && !!previousToday;
 
   useEffect(() => {
     coursesRef.current = courses;
@@ -202,6 +219,7 @@ export default function ScheduleScreen() {
     setCoursesState(normalizedCourses);
     setLastUpdatedAt(updatedAt);
     await saveCourses(normalizedCourses, false, updatedAt);
+    await refreshScheduledCourseReminders(normalizedCourses);
     return true;
   }, []);
 
@@ -602,46 +620,26 @@ export default function ScheduleScreen() {
       >
         {showWebView && !keepWebViewVisibleForDebug ? <View style={styles.hiddenWebView}>{renderSyncWebView()}</View> : null}
 
-        {keepWebViewVisibleForDebug ? (
-          <View style={[styles.debugControls, { backgroundColor: theme.card, borderColor: theme.border }]}> 
-            <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={2}>
-              URL: {debugUrl || DEFAULT_URL}
-            </Text>
-            <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={2}>
-              Event: {debugNote || '-'}
-            </Text>
-            {debugHtmlPreview ? (
-              <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={3}>
-                HTML: {debugHtmlPreview}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-
-        {showWebView && keepWebViewVisibleForDebug ? (
-          <View style={[styles.debugWebViewCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            {renderSyncWebView()}
-          </View>
-        ) : null}
-
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
           <View style={styles.heroHeader}>
             <AppSymbol name="clock.fill" size={28} tintColor={theme.primary} fallback={<Text>課表</Text>} />
-            <Text style={[styles.heroTitle, { color: theme.text }]}>課程摘要</Text>
+            <Text style={[styles.heroTitle, { color: theme.text }]}>課程</Text>
           </View>
 
           <View style={styles.summaryStack}>
-            <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
-              <View style={[styles.summaryPill, styles.summaryPillActive, { backgroundColor: theme.primary }]}>
-                <Text style={styles.summaryPillActiveText}>上課中</Text>
+            {!isBreakTime ? (
+              <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
+                <View style={[styles.summaryPill, styles.summaryPillActive, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.summaryPillActiveText}>上課中</Text>
+                </View>
+                <Text style={[styles.summaryCourse, { color: theme.text }]}> 
+                  {currentCourse ? currentCourse.course.name : '目前沒有上課中的課程'}
+                </Text>
+                <Text style={[styles.summaryMeta, { color: theme.textSub }]}> 
+                  {currentCourse ? formatSummaryMeta(currentCourse) : '現在沒有進行中的課程'}
+                </Text>
               </View>
-              <Text style={[styles.summaryCourse, { color: theme.text }]}> 
-                {currentCourse ? currentCourse.course.name : '目前沒有上課中的課程'}
-              </Text>
-              <Text style={[styles.summaryMeta, { color: theme.textSub }]}> 
-                {currentCourse ? formatSummaryMeta(currentCourse) : '現在沒有進行中的課程'}
-              </Text>
-            </View>
+            ) : null}
 
             <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
               <View style={[styles.summaryPill, styles.summaryPillUpcoming, { backgroundColor: 'rgba(10, 102, 255, 0.16)' }]}>
@@ -657,6 +655,29 @@ export default function ScheduleScreen() {
           </View>
 
         </View>
+
+        {keepWebViewVisibleForDebug ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 資訊</Text>
+            <Text style={[styles.debugText, { color: theme.textSub }]} numberOfLines={2}>
+              URL: {debugUrl || DEFAULT_URL}
+            </Text>
+            <Text style={[styles.debugText, { color: theme.textSub }]} numberOfLines={2}>
+              Event: {debugNote || '-'}
+            </Text>
+            {debugHtmlPreview ? (
+              <Text style={[styles.debugText, { color: theme.textSub }]} numberOfLines={4}>
+                HTML: {debugHtmlPreview}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {showWebView && keepWebViewVisibleForDebug ? (
+          <View style={[styles.debugWebViewCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            {renderSyncWebView()}
+          </View>
+        ) : null}
 
         {loading && courses.length === 0 ? (
           <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
@@ -681,9 +702,7 @@ export default function ScheduleScreen() {
 
         {[1, 2, 3, 4, 5, 6, 0].map((dayIndex) => renderSection(dayIndex, WEEKDAY_LABELS[dayIndex]))}
 
-        <Text style={[styles.updatedText, { color: theme.textSub }]}>
-          {updatedAtLineText || '尚未同步課表'}
-        </Text>
+        <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtLineText}</Text>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -698,8 +717,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 16 },
   hiddenWebView: { position: 'absolute', width: 1, height: 1, opacity: 0, left: -1000, top: -1000 },
   hiddenWebViewInner: { width: 1, height: 1 },
-  debugControls: { borderRadius: 20, borderWidth: 1, padding: 16, marginBottom: 16 },
-  debugMeta: { fontSize: 12, lineHeight: 18 },
+  debugText: { fontSize: 12, lineHeight: 18 },
   debugWebViewCard: { borderRadius: 24, borderWidth: 1, overflow: 'hidden', minHeight: 420, marginBottom: 16 },
   debugWebViewInner: { width: '100%', height: 420 },
   heroCard: {
