@@ -1,11 +1,16 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Animated, Platform, InteractionManager } from 'react-native';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+  RefreshControl,
+  InteractionManager,
+  ScrollView,
+} from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import MaskedView from '@react-native-masked-view/masked-view';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import DebugStamp from '../../../shared/components/DebugStamp';
@@ -19,12 +24,100 @@ import {
   buildServiceOpenScript,
   PCCUCredentials,
 } from '../../pccu/sync/pccuSyncScripts';
-import { CourseData, hasSuspiciousCourseNames, parseScheduleFromHtml, sanitizeCourseList } from '../../pccu/parsers/pccuScraper';
+import {
+  CourseData,
+  hasSuspiciousCourseNames,
+  parseScheduleFromHtml,
+  sanitizeCourseList,
+} from '../../pccu/parsers/pccuScraper';
 
 const DEFAULT_URL = 'https://ecampus.pccu.edu.tw/eCampus/default.aspx';
 const INSIDE_URL = 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx';
+const WEEKDAY_LABELS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = [
+  { start: [8, 10], end: [9, 0] },
+  { start: [9, 10], end: [10, 0] },
+  { start: [10, 10], end: [11, 0] },
+  { start: [11, 10], end: [12, 0] },
+  { start: [13, 10], end: [14, 0] },
+  { start: [14, 10], end: [15, 0] },
+  { start: [15, 10], end: [16, 0] },
+  { start: [16, 10], end: [17, 0] },
+  { start: [17, 10], end: [18, 0] },
+  { start: [18, 10], end: [19, 0] },
+  { start: [19, 10], end: [20, 0] },
+  { start: [20, 10], end: [21, 0] },
+  { start: [21, 10], end: [22, 0] },
+  { start: [22, 10], end: [23, 0] },
+];
 
 type Phase = 'idle' | 'load_ecampus' | 'logging_in' | 'open_schedule' | 'syncing' | 'done';
+
+type CourseSummary = {
+  course: CourseData;
+  start: Date;
+  end: Date;
+};
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+const formatTime = (hours: number, minutes: number) => `${pad2(hours)}:${pad2(minutes)}`;
+const toJsDay = (dayOfWeek: number) => ((dayOfWeek % 7) + 7) % 7;
+
+const buildCourseWindow = (course: CourseData, now: Date) => {
+  const slot = PERIOD_TIMES[course.startPeriod - 1];
+  const endSlot = PERIOD_TIMES[course.endPeriod - 1] || slot;
+  const day = toJsDay(course.dayOfWeek);
+
+  if (!slot || !endSlot || day < 0 || day > 6) return null;
+
+  const start = new Date(now);
+  start.setDate(now.getDate() + ((day - now.getDay() + 7) % 7));
+  start.setHours(slot.start[0], slot.start[1], 0, 0);
+
+  const end = new Date(now);
+  end.setDate(now.getDate() + ((day - now.getDay() + 7) % 7));
+  end.setHours(endSlot.end[0], endSlot.end[1], 0, 0);
+
+  return { start, end };
+};
+
+const getCourseSummaries = (courses: CourseData[], now: Date) => {
+  let current: CourseSummary | null = null;
+  let next: CourseSummary | null = null;
+
+  courses.forEach((course) => {
+    const window = buildCourseWindow(course, now);
+    if (!window) return;
+
+    if (window.start <= now && now < window.end) {
+      if (!current || window.end.getTime() < current.end.getTime()) {
+        current = { course, start: window.start, end: window.end };
+      }
+      return;
+    }
+
+    if (window.start <= now) {
+      window.start.setDate(window.start.getDate() + 7);
+      window.end.setDate(window.end.getDate() + 7);
+    }
+
+    if (!next || window.start.getTime() < next.start.getTime()) {
+      next = { course, start: window.start, end: window.end };
+    }
+  });
+
+  return { current, next };
+};
+
+const formatSummaryMeta = (summary: CourseSummary | null) => {
+  if (!summary) return '';
+  const dayLabel = WEEKDAY_LABELS[summary.start.getDay()] || '';
+  const location = summary.course.location || '地點未提供';
+  return `${dayLabel} ${formatTime(summary.start.getHours(), summary.start.getMinutes())}-${formatTime(summary.end.getHours(), summary.end.getMinutes())} · ${location}`;
+};
+
+const formatPeriodLabel = (course: CourseData) =>
+  course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 節` : `第 ${course.startPeriod}-${course.endPeriod} 節`;
 
 export default function ScheduleScreen() {
   const [loading, setLoading] = useState(false);
@@ -37,10 +130,10 @@ export default function ScheduleScreen() {
   const [debugUrl, setDebugUrl] = useState(DEFAULT_URL);
   const [debugNote, setDebugNote] = useState('');
   const [debugHtmlPreview, setDebugHtmlPreview] = useState('');
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const [now, setNow] = useState(new Date());
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const modalTopInset = Platform.OS === 'ios' ? 12 : Math.max(insets.top, 12);
-  const scrollY = useRef(new Animated.Value(0)).current;
+
   const webViewRef = useRef<WebView>(null);
   const phaseRef = useRef<Phase>('idle');
   const credRef = useRef<PCCUCredentials | null>(null);
@@ -55,57 +148,25 @@ export default function ScheduleScreen() {
     ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
     : 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36';
 
-  const withAlpha = (hex: string, alpha: number) => {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
-
-  const floatingHeaderHeight = insets.top + 140;
-  const headerReveal = scrollY.interpolate({
-    inputRange: [8, 48, 92],
-    outputRange: [0, 0.55, 1],
-    extrapolate: 'clamp',
-  });
-  const centerTitleOpacity = scrollY.interpolate({
-    inputRange: [45, 75, 95],
-    outputRange: [0, 0.8, 1],
-    extrapolate: 'clamp',
-  });
-  const centerTitleTranslateY = scrollY.interpolate({
-    inputRange: [45, 95],
-    outputRange: [10, 0],
-    extrapolate: 'clamp',
-  });
-  const pageTitleOpacity = scrollY.interpolate({
-    inputRange: [0, 15, 45],
-    outputRange: [1, 1, 0],
-    extrapolate: 'clamp',
-  });
-  const pageTitleTranslateY = scrollY.interpolate({
-    inputRange: [0, 78],
-    outputRange: [0, -10],
-    extrapolate: 'clamp',
-  });
   const keepWebViewVisibleForDebug = __DEV__ && developerDebugEnabled;
   const formattedUpdatedAt = lastUpdatedAt
     ? `${String(new Date(lastUpdatedAt).getFullYear())}/${String(new Date(lastUpdatedAt).getMonth() + 1).padStart(2, '0')}/${String(new Date(lastUpdatedAt).getDate()).padStart(2, '0')} ${String(new Date(lastUpdatedAt).getHours()).padStart(2, '0')}:${String(new Date(lastUpdatedAt).getMinutes()).padStart(2, '0')}`
     : '';
   const updatedAtLineText = loading
-    ? '正在更新...'
+    ? '正在更新課表...'
     : formattedUpdatedAt
       ? `最後更新 ${formattedUpdatedAt}`
       : '';
-
-  useEffect(() => {
-    console.log('[schedule-sync][build]', '20260320B');
-  }, []);
+  const { current: currentCourse, next: nextCourse } = useMemo(() => getCourseSummaries(courses, now), [courses, now]);
 
   useEffect(() => {
     coursesRef.current = courses;
   }, [courses]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const clearPendingTimeout = () => {
     if (timeoutRef.current) {
@@ -135,16 +196,14 @@ export default function ScheduleScreen() {
 
   const injectScheduleScript = useCallback((reason: string, rawUrl?: string, minIntervalMs = 1200) => {
     const key = normalizeScheduleUrl(rawUrl || lastHandledUrlRef.current || '');
-    const now = Date.now();
+    const nowAt = Date.now();
 
-    if (key && lastInjectKeyRef.current === key && now - lastInjectAtRef.current < minIntervalMs) {
-      console.log('[schedule-sync][skip-inject]', reason, key);
+    if (key && lastInjectKeyRef.current === key && nowAt - lastInjectAtRef.current < minIntervalMs) {
       return;
     }
 
     lastInjectKeyRef.current = key;
-    lastInjectAtRef.current = now;
-    console.log('[schedule-sync][inject]', reason, rawUrl || key);
+    lastInjectAtRef.current = nowAt;
     webViewRef.current?.injectJavaScript(buildAdaptiveSchedulePageScript());
   }, []);
 
@@ -157,6 +216,7 @@ export default function ScheduleScreen() {
     lastInjectKeyRef.current = '';
     lastInjectAtRef.current = 0;
     silentSyncRef.current = false;
+    setPullRefreshing(false);
     setShowWebView(keepWebViewVisibleForDebug);
     setLoading(false);
     setStatusText(finalMessage);
@@ -164,7 +224,7 @@ export default function ScheduleScreen() {
 
   const retrySync = useCallback((fallbackMessage: string) => {
     if (retryRef.current >= 2) {
-      finish(coursesRef.current.length > 0 ? `${fallbackMessage}，已保留舊課表` : fallbackMessage);
+      finish(coursesRef.current.length > 0 ? `${fallbackMessage}，已保留舊資料` : fallbackMessage);
       return;
     }
 
@@ -178,7 +238,7 @@ export default function ScheduleScreen() {
     injectScheduleScript('retry');
   }, [finish, injectScheduleScript]);
 
-  const startFetch = useCallback(async (options: { silent?: boolean } = {}) => {
+  const startFetch = useCallback(async (options: { silent?: boolean; manual?: boolean } = {}) => {
     if (phaseRef.current !== 'idle' && phaseRef.current !== 'done') {
       return;
     }
@@ -192,6 +252,7 @@ export default function ScheduleScreen() {
     }
 
     const silent = !!options.silent && coursesRef.current.length > 0;
+    const manual = !!options.manual;
     credRef.current = savedCredentials;
     retryRef.current = 0;
     lastHandledUrlRef.current = '';
@@ -203,12 +264,13 @@ export default function ScheduleScreen() {
     setDebugUrl(DEFAULT_URL);
     setDebugNote(silent ? 'background refresh' : 'start fetch');
     setDebugHtmlPreview('');
+    setPullRefreshing(manual);
     setLoading(true);
     setShowWebView(true);
     setStatusText(silent ? '背景更新課表中...' : '開始同步課表...');
     clearPendingTimeout();
     timeoutRef.current = setTimeout(() => {
-      finish(coursesRef.current.length > 0 ? '背景更新逾時，已保留既有課表' : '課表同步逾時');
+      finish(coursesRef.current.length > 0 ? '課表更新逾時，已保留舊資料' : '課表同步逾時');
     }, 90000);
   }, [finish]);
 
@@ -218,7 +280,6 @@ export default function ScheduleScreen() {
     const url = nav.url || '';
     setDebugUrl(url);
     setDebugNote(`nav ${phaseRef.current}`);
-    console.log('[schedule-sync][nav]', phaseRef.current, url);
 
     if (url.includes('inside.aspx')) {
       phaseRef.current = 'open_schedule';
@@ -240,6 +301,7 @@ export default function ScheduleScreen() {
       webViewRef.current?.injectJavaScript(buildLoginScript(credRef.current));
       return;
     }
+
     if (isScheduleQueryUrl(url)) {
       lastHandledUrlRef.current = url;
       phaseRef.current = 'syncing';
@@ -254,7 +316,6 @@ export default function ScheduleScreen() {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       setDebugNote(`${data.t}${data.m ? ` ${data.m}` : data.url ? ` ${data.url}` : ''}`);
-      console.log('[schedule-sync][message]', data.t, data.m || '', data.url || '');
 
       if (data.t === 'status') {
         setStatusText(data.m || '同步課表中...');
@@ -289,24 +350,19 @@ export default function ScheduleScreen() {
 
       if (data.t === 'courses') {
         const parsedFromCourses = sanitizeCourseList(Array.isArray(data.c) ? (data.c as CourseData[]) : []);
-        const parsedFromHtml =
-          typeof data.h === 'string' && data.h
-            ? sanitizeCourseList(parseScheduleFromHtml(data.h))
-            : [];
+        const parsedFromHtml = typeof data.h === 'string' && data.h
+          ? sanitizeCourseList(parseScheduleFromHtml(data.h))
+          : [];
         const parsed =
           parsedFromHtml.length > 0 &&
           (parsedFromHtml.length >= parsedFromCourses.length || hasSuspiciousCourseNames(parsedFromCourses))
             ? parsedFromHtml
             : parsedFromCourses;
 
-        if (parsed !== parsedFromCourses) {
-          console.log('[schedule-sync][courses-source]', 'html-fallback');
-        }
-
         if (await persistCourses(parsed)) {
           finish();
         } else {
-          retrySync(coursesRef.current.length > 0 ? '課表同步失敗，已保留舊資料' : '找不到課表資料');
+          retrySync(coursesRef.current.length > 0 ? '課表同步失敗' : '找不到課表資料');
         }
         return;
       }
@@ -320,22 +376,12 @@ export default function ScheduleScreen() {
           .replace(/\s+/g, ' ')
           .trim()
           .slice(0, 180);
-        console.log(
-          '[schedule-sync][html-meta]',
-          JSON.stringify({
-            len: rawHtml.length,
-            hasPubContent: /pubContent|pubTdItem_Period/i.test(rawHtml),
-            hasSearchButton: /(?:id|name|value)=["'][^"']*Search|查詢/u.test(rawHtml),
-            hasWeekday: /(?:星期|週)[日天一二三四五六]/u.test(rawHtml),
-            preview: htmlPreview,
-          })
-        );
         setDebugHtmlPreview(htmlPreview);
         const parsed = sanitizeCourseList(parseScheduleFromHtml(rawHtml));
         if (await persistCourses(parsed)) {
           finish();
         } else {
-          retrySync(coursesRef.current.length > 0 ? '課表同步失敗，已保留舊資料' : '找不到課表資料');
+          retrySync(coursesRef.current.length > 0 ? '課表同步失敗' : '找不到課表資料');
         }
         return;
       }
@@ -352,7 +398,7 @@ export default function ScheduleScreen() {
         if (phaseRef.current === 'syncing') retrySync(message);
         else finish(message);
       }
-    } catch (error) {
+    } catch {
       finish('課表同步失敗，解析訊息時發生錯誤');
     }
   }, [finish, persistCourses, retrySync]);
@@ -369,7 +415,7 @@ export default function ScheduleScreen() {
     if (cached.mock) {
       setCoursesState([]);
       setLastUpdatedAt(cached.updatedAt);
-      setStatusText('目前使用的是模擬課表資料');
+      setStatusText('目前只有示範資料，請重新同步課表');
       setLoading(false);
       return { hasCachedCourses: false };
     }
@@ -447,9 +493,8 @@ export default function ScheduleScreen() {
       onLoadEnd={(event) => {
         const currentUrl = event.nativeEvent.url || '';
         setDebugUrl(currentUrl);
-        console.log('[schedule-sync][loadend]', phaseRef.current);
         if (phaseRef.current === 'load_ecampus') {
-          setStatusText('載入登入頁面中...');
+          setStatusText('頁面已載入，準備登入中...');
           return;
         }
         if (phaseRef.current === 'syncing' && isScheduleQueryUrl(currentUrl)) {
@@ -463,123 +508,35 @@ export default function ScheduleScreen() {
     />
   );
 
-  return (
-    <>
-      <View style={{ flex: 1, backgroundColor: theme.bg }}>
-        {showWebView && !keepWebViewVisibleForDebug ? <View style={styles.hiddenWebView}>{renderSyncWebView()}</View> : null}
+  const renderSection = (dayIndex: number, title: string) => {
+    const coursesOfDay = courses
+      .filter((course) => toJsDay(course.dayOfWeek) === dayIndex)
+      .sort((a, b) => a.startPeriod - b.startPeriod);
 
-        <Animated.View
-          style={[
-            styles.floatingHeader,
-            {
-              height: floatingHeaderHeight,
-              opacity: headerReveal,
-            },
-          ]}
-          pointerEvents="none"
-        >
-          <MaskedView
-          style={StyleSheet.absoluteFill}
-          maskElement={
-            <LinearGradient
-              colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.4)', 'transparent']}
-              locations={[0, 0.3, 0.7, 1]}
-              style={StyleSheet.absoluteFill}
-            />
-          }
-        >
-          <BlurView
-            tint={theme.glassTint}
-            intensity={80}
-            style={StyleSheet.absoluteFill}
-          />
-          <LinearGradient
-            colors={[
-              withAlpha(theme.bg, 0.8),
-              withAlpha(theme.bg, 0.3),
-              'transparent',
-            ]}
-            style={StyleSheet.absoluteFill}
-          />
-        </MaskedView>
-          <Animated.Text
-            style={[
-              styles.floatingHeaderTitle,
-              {
-                color: theme.text,
-                top: modalTopInset + 4,
-                opacity: centerTitleOpacity,
-                transform: [{ translateY: centerTitleTranslateY }],
-              },
-            ]}
-          >
-            課表
-          </Animated.Text>
-        </Animated.View>
+    if (coursesOfDay.length === 0) return null;
 
-        <Animated.ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 18 }]}
-          contentInsetAdjustmentBehavior="never"
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
-          scrollEventThrottle={16}
-        >
-          <Animated.View
-            style={[
-              styles.pageTitleWrap,
-              {
-                opacity: pageTitleOpacity,
-                transform: [{ translateY: pageTitleTranslateY }],
-              },
-            ]}
-          >
-            <View style={styles.headerRow}>
-              <View>
-                <Text style={[styles.pageTitle, { color: theme.text }]}>課表</Text>
-              </View>
-            </View>
-          </Animated.View>
-
-          {keepWebViewVisibleForDebug ? (
-            <View style={[styles.debugControls, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={2}>
-                URL: {debugUrl || DEFAULT_URL}
-              </Text>
-              <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={2}>
-                Event: {debugNote || '-'}
-              </Text>
-              {debugHtmlPreview ? (
-                <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={3}>
-                  HTML: {debugHtmlPreview}
+    return (
+      <View style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]} key={dayIndex}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
+        {coursesOfDay.map((course, index) => (
+          <View style={styles.arrivalRow} key={`${course.name}-${course.startPeriod}-${index}`}>
+            <View style={styles.arrivalTextBlock}>
+              <View style={styles.courseTitleRow}>
+                <Text style={[styles.arrivalStop, { color: theme.text, marginBottom: 0 }]} numberOfLines={1}>
+                  {course.name}
                 </Text>
-              ) : null}
-            </View>
-          ) : null}
-
-          {showWebView && keepWebViewVisibleForDebug ? (
-            <View style={[styles.debugWebViewCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              {renderSyncWebView()}
-            </View>
-          ) : null}
-
-          {courses.length === 0 ? (
-            <View style={styles.empty}>
-              <AppSymbol name="clock.fill" size={60} tintColor={theme.textSub} />
-              <Text style={{ color: theme.textSub, marginTop: 16 }}>目前沒有課表資料</Text>
-            </View>
-          ) : (
-            courses.map((course, index) => (
-              <View key={`${course.name}-${course.dayOfWeek}-${course.startPeriod}-${index}`} style={[styles.card, { backgroundColor: theme.card }]}> 
                 <View
                   style={[
                     styles.badge,
                     {
                       backgroundColor: course.required ? 'rgba(255,59,48,0.1)' : 'rgba(52,199,89,0.1)',
+                      marginLeft: 8,
                     },
                   ]}
                 >
                   <Text
                     style={{
-                      fontSize: 12,
+                      fontSize: 10,
                       fontWeight: '800',
                       color: course.required ? theme.danger : theme.success,
                     }}
@@ -587,52 +544,202 @@ export default function ScheduleScreen() {
                     {course.required ? '必修' : '選修'}
                   </Text>
                 </View>
-                <Text style={[styles.name, { color: theme.text }]}>{course.name}</Text>
-                <Text style={[styles.info, { color: theme.textSub }]}>{course.periodRange}</Text>
-                <Text style={[styles.info, { color: theme.textSub, marginTop: 4 }]}> 
-                  {[course.location || '未知', course.teacher].filter(Boolean).join(' / ')}
-                </Text>
               </View>
-            ))
-          )}
-          {updatedAtLineText ? (
-            <Text style={[styles.updatedAtText, { color: theme.textSub }]}>{updatedAtLineText}</Text>
-          ) : null}
-          <View style={{ height: 100 }} />
-        </Animated.ScrollView>
+              <Text style={[styles.arrivalMeta, { color: theme.textSub }]} numberOfLines={1}>
+                {[course.location || '地點未提供', course.teacher].filter(Boolean).join(' / ')}
+              </Text>
+            </View>
+            <Text style={[styles.arrivalEta, { color: theme.primary }]}>{formatPeriodLabel(course)}</Text>
+          </View>
+        ))}
       </View>
-      {keepWebViewVisibleForDebug ? <DebugStamp label="DBG-SCHEDULE-20260320B" /> : null}
+    );
+  };
+
+  const handlePullRefresh = () => {
+    void startFetch({ manual: true, silent: false });
+  };
+
+  return (
+    <>
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.bg }]}
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={pullRefreshing}
+            onRefresh={handlePullRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        )}
+      >
+        {showWebView && !keepWebViewVisibleForDebug ? <View style={styles.hiddenWebView}>{renderSyncWebView()}</View> : null}
+
+        {keepWebViewVisibleForDebug ? (
+          <View style={[styles.debugControls, { backgroundColor: theme.card, borderColor: theme.border }]}> 
+            <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={2}>
+              URL: {debugUrl || DEFAULT_URL}
+            </Text>
+            <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={2}>
+              Event: {debugNote || '-'}
+            </Text>
+            {debugHtmlPreview ? (
+              <Text style={[styles.debugMeta, { color: theme.textSub }]} numberOfLines={3}>
+                HTML: {debugHtmlPreview}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {showWebView && keepWebViewVisibleForDebug ? (
+          <View style={[styles.debugWebViewCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            {renderSyncWebView()}
+          </View>
+        ) : null}
+
+        <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+          <View style={styles.heroHeader}>
+            <AppSymbol name="clock.fill" size={28} tintColor={theme.primary} fallback={<Text>課表</Text>} />
+            <Text style={[styles.heroTitle, { color: theme.text }]}>課程摘要</Text>
+          </View>
+
+          <View style={styles.summaryStack}>
+            <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
+              <Text style={[styles.summaryLabel, { color: theme.textSub }]}>上課中</Text>
+              <Text style={[styles.summaryCourse, { color: theme.text }]}> 
+                {currentCourse ? currentCourse.course.name : '目前沒有上課中的課程'}
+              </Text>
+              <Text style={[styles.summaryMeta, { color: theme.textSub }]}> 
+                {currentCourse ? formatSummaryMeta(currentCourse) : '現在沒有進行中的課程'}
+              </Text>
+            </View>
+
+            <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
+              <Text style={[styles.summaryLabel, { color: theme.textSub }]}>下節課</Text>
+              <Text style={[styles.summaryCourse, { color: theme.text }]}> 
+                {nextCourse ? nextCourse.course.name : '目前沒有下一節課'}
+              </Text>
+              <Text style={[styles.summaryMeta, { color: theme.textSub }]}> 
+                {nextCourse ? formatSummaryMeta(nextCourse) : '目前沒有可顯示的後續課程'}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtLineText || '尚未同步課表'}</Text>
+        </View>
+
+        {loading && courses.length === 0 ? (
+          <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+            <ActivityIndicator size="small" color={theme.primary} />
+            <Text style={[styles.statusText, { color: theme.textSub, marginTop: 10 }]}>{statusText || '正在讀取課表資料...'}</Text>
+          </View>
+        ) : null}
+
+        {!loading && statusText && (statusText.includes('失敗') || statusText.includes('請先登入')) ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>同步狀態</Text>
+            <Text style={[styles.noticeText, { color: theme.textSub }]}>{statusText}</Text>
+          </View>
+        ) : null}
+
+        {courses.length === 0 && !loading && !statusText && phaseRef.current === 'idle' ? (
+          <View style={styles.emptyState}>
+            <AppSymbol name="clock.fill" size={60} tintColor={theme.textSub} fallback={<Text>課表</Text>} />
+            <Text style={[styles.emptyText, { color: theme.textSub }]}>目前沒有課表資料</Text>
+          </View>
+        ) : null}
+
+        {[1, 2, 3, 4, 5, 6, 0].map((dayIndex) => renderSection(dayIndex, WEEKDAY_LABELS[dayIndex]))}
+
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+
+      {keepWebViewVisibleForDebug ? <DebugStamp label="DBG-SCHEDULE-CLEAN" /> : null}
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingHorizontal: 20 },
-  floatingHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 },
-  floatingHeaderTitle: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
+  container: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 16 },
   hiddenWebView: { position: 'absolute', width: 1, height: 1, opacity: 0, left: -1000, top: -1000 },
   hiddenWebViewInner: { width: 1, height: 1 },
   debugControls: { borderRadius: 20, borderWidth: 1, padding: 16, marginBottom: 16 },
   debugMeta: { fontSize: 12, lineHeight: 18 },
   debugWebViewCard: { borderRadius: 24, borderWidth: 1, overflow: 'hidden', minHeight: 420, marginBottom: 16 },
   debugWebViewInner: { width: '100%', height: 420 },
-  pageTitleWrap: { marginBottom: 18 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  pageTitle: { fontSize: 32, fontWeight: '800' },
-  pageSubtitle: { fontSize: 13, marginTop: 4 },
-  empty: { alignItems: 'center', marginTop: 100 },
-  card: { borderRadius: 24, padding: 24, marginBottom: 16, elevation: 3 },
-  badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 12 },
-  name: { fontSize: 20, fontWeight: '800', marginBottom: 12 },
-  info: { fontSize: 14, fontWeight: '600' },
-  updatedAtText: { fontSize: 13, textAlign: 'center', marginTop: 12 },
+  heroCard: {
+    borderRadius: 28,
+    padding: 22,
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  heroHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  heroTitle: { fontSize: 22, fontWeight: '700', marginLeft: 8 },
+  summaryStack: { gap: 10 },
+  summaryItem: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summaryLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  summaryCourse: { fontSize: 16, fontWeight: '700', lineHeight: 22 },
+  summaryMeta: { fontSize: 13, lineHeight: 18, marginTop: 4 },
+  updatedText: { marginTop: 14, fontSize: 13 },
+  statusCard: {
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 16,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  statusText: { fontSize: 14 },
+  noticeCard: {
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  noticeTitle: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
+  noticeText: { fontSize: 14, lineHeight: 21 },
+  sectionCard: {
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 14 },
+  arrivalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  arrivalTextBlock: { flex: 1, marginRight: 12 },
+  courseTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  arrivalStop: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  arrivalMeta: { fontSize: 13 },
+  arrivalEta: { fontSize: 18, fontWeight: '700' },
+  badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  emptyState: { alignItems: 'center', marginTop: 40, marginBottom: 40 },
+  emptyText: { marginTop: 16, fontSize: 14 },
+  bottomSpacer: { height: 80 },
 });
-

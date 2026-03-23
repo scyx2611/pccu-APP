@@ -14,6 +14,8 @@ export default function HomeLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: '首頁' }} />
+      <Stack.Screen name="schedule" options={{ title: '完整課表' }} />
+      <Stack.Screen name="grade" options={{ title: '歷年成績' }} />
       <Stack.Screen name="traffic" options={{ title: '交通動態' }} />
     </Stack>
   );

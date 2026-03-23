@@ -37,25 +37,17 @@ function RootLayoutNav() {
         <Stack.Screen
           name="schedule"
           options={{
-            presentation: Platform.OS === 'ios' ? 'formSheet' : 'modal',
-            headerShown: Platform.OS === 'ios',
-            headerTransparent: true,
-            headerShadowVisible: false,
-            headerBackVisible: false,
-            title: '',
-            unstable_headerRightItems: iosCloseHeaderItem,
+            presentation: 'card',
+            headerShown: false,
+            contentStyle: { backgroundColor: theme.bg },
           }}
         />
         <Stack.Screen
           name="grade"
           options={{
-            presentation: Platform.OS === 'ios' ? 'formSheet' : 'modal',
-            headerShown: Platform.OS === 'ios',
-            headerTransparent: true,
-            headerShadowVisible: false,
-            headerBackVisible: false,
-            title: '',
-            unstable_headerRightItems: iosCloseHeaderItem,
+            presentation: 'card',
+            headerShown: false,
+            contentStyle: { backgroundColor: theme.bg },
           }}
         />
         <Stack.Screen

@@ -257,11 +257,11 @@ export default function HomeScreen() {
   };
 
   const openSchedule = () => {
-    router.push('/schedule');
+    router.push('/(tabs)/home/schedule');
   };
 
   const openGrades = () => {
-    router.push('/grade');
+    router.push('/(tabs)/home/grade');
   };
 
   const trafficPressStyle: any = {
