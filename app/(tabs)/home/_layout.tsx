@@ -14,6 +14,7 @@ export default function HomeLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: '首頁' }} />
+      <Stack.Screen name="traffic" options={{ title: '交通動態' }} />
     </Stack>
   );
 }

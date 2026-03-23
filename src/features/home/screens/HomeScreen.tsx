@@ -11,6 +11,13 @@ import { CourseData } from '../../pccu/parsers/pccuScraper';
 import { getCourses } from '../../schedule/storage/scheduleStorage';
 import ScheduleSyncAgent from '../../schedule/components/ScheduleSyncAgent';
 import GradeSyncAgent from '../../grade/components/GradeSyncAgent';
+import TrafficSyncAgent from '../../traffic/components/TrafficSyncAgent';
+import { useTrafficData } from '../../traffic/hooks/useTrafficData';
+import {
+  TrafficStopArrival,
+  formatTrafficUpdatedAt,
+  pickBestTrafficArrival,
+} from '../../traffic/types';
 import { SemesterGrade } from '../../../services/scraper';
 import { getGrades } from '../../../services/GradeStore';
 
@@ -51,6 +58,11 @@ const startOfDay = (date: Date) => {
   const value = new Date(date);
   value.setHours(0, 0, 0, 0);
   return value;
+};
+
+const formatTrafficSummaryLine = (prefix: string, arrival: TrafficStopArrival | null) => {
+  if (!arrival) return `${prefix} 暫無資料`;
+  return `${prefix} ${arrival.stopName} ${arrival.etaText}`;
 };
 
 const findNextClass = (courses: CourseData[], now: Date): NextClassInfo | null => {
@@ -101,6 +113,7 @@ const findNextClass = (courses: CourseData[], now: Date): NextClassInfo | null =
 export default function HomeScreen() {
   const { theme } = useTheme();
   const isFocused = useIsFocused();
+  const traffic = useTrafficData({ active: isFocused });
   const [courses, setCourses] = useState<CourseData[]>([]);
   const [scheduleLoading, setScheduleLoading] = useState(true);
   const [grades, setGrades] = useState<SemesterGrade[]>([]);
@@ -111,6 +124,7 @@ export default function HomeScreen() {
   const [scheduleSyncReloadKey, setScheduleSyncReloadKey] = useState(0);
   const [gradeSyncReloadKey, setGradeSyncReloadKey] = useState(0);
   const [backgroundSyncStage, setBackgroundSyncStage] = useState<'idle' | 'schedule' | 'grade' | 'done'>('idle');
+  const trafficPressAnim = useRef(new Animated.Value(0)).current;
   const pressAnim = useRef(new Animated.Value(0)).current;
   const gradePressAnim = useRef(new Animated.Value(0)).current;
 
@@ -229,12 +243,29 @@ export default function HomeScreen() {
     };
   }, [latestGrade]);
 
+  const downhillSummary = useMemo(
+    () => pickBestTrafficArrival(traffic.snapshot?.downhill || []),
+    [traffic.snapshot]
+  );
+  const uphillSummary = useMemo(
+    () => pickBestTrafficArrival(traffic.snapshot?.uphill || []),
+    [traffic.snapshot]
+  );
+
+  const openTraffic = () => {
+    router.push('/(tabs)/home/traffic');
+  };
+
   const openSchedule = () => {
     router.push('/schedule');
   };
 
   const openGrades = () => {
     router.push('/grade');
+  };
+
+  const trafficPressStyle: any = {
+    transform: [{ scale: trafficPressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) }],
   };
 
   const pressStyle: any = {
@@ -252,6 +283,9 @@ export default function HomeScreen() {
   const weatherText = weather?.temp !== undefined
     ? `台北約 ${weather.temp}°C，出門前記得留意天氣變化。`
     : '今天也一起把校園資訊整理好。';
+  const trafficFooterText = traffic.snapshot
+    ? `${traffic.error ? '較早資料' : '更新'} ${formatTrafficUpdatedAt(traffic.snapshot.updatedAt)}`
+    : '紅 5 即時資訊';
 
   return (
     <ScrollView
@@ -270,6 +304,11 @@ export default function HomeScreen() {
         reloadKey={gradeSyncReloadKey}
         onComplete={handleGradeSyncComplete}
       />
+      <TrafficSyncAgent
+        enabled={traffic.sync.enabled}
+        reloadKey={traffic.sync.reloadKey}
+        onComplete={traffic.sync.onComplete}
+      />
       <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
         <View style={styles.cardHeader}>
           <AppSymbol name={greetingIcon} size={28} tintColor={greetingColor} fallback={<Text>Hi</Text>} />
@@ -279,11 +318,36 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.gridContainer}>
-        <View style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+        <AnimatedPressable
+          onPress={openTraffic}
+          onPressIn={() => Animated.spring(trafficPressAnim, { toValue: 1, useNativeDriver: true }).start()}
+          onPressOut={() => Animated.spring(trafficPressAnim, { toValue: 0, useNativeDriver: true }).start()}
+          style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }, trafficPressStyle]}
+        >
           <AppSymbol name="bus.fill" size={32} tintColor={theme.warning} style={styles.gridIcon} fallback={<Text>Bus</Text>} />
-          <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>交通</Text>
-          <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>紅 5 / 校車資訊</Text>
-        </View>
+          <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>交通動態</Text>
+          {traffic.loading && !traffic.snapshot ? (
+            <View style={styles.gridLoadingRow}>
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.gridMeta, { color: theme.textSub, marginLeft: 6 }]}>載入紅 5 中...</Text>
+            </View>
+          ) : traffic.snapshot ? (
+            <>
+              <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>
+                {formatTrafficSummaryLine('下山', downhillSummary)}
+              </Text>
+              <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>
+                {formatTrafficSummaryLine('上山', uphillSummary)}
+              </Text>
+              <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>{trafficFooterText}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>暫時讀不到紅 5</Text>
+              <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>點開查看官方頁面與詳情</Text>
+            </>
+          )}
+        </AnimatedPressable>
 
         <View style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <AppSymbol name="books.vertical.fill" size={32} tintColor={theme.purple} style={styles.gridIcon} fallback={<Text>Book</Text>} />
