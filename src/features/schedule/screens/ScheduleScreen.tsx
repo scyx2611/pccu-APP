@@ -4,11 +4,14 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  Animated,
   AppState,
+  LayoutAnimation,
   Platform,
   RefreshControl,
   InteractionManager,
   ScrollView,
+  UIManager,
 } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
@@ -63,6 +66,13 @@ type CourseSummary = {
   start: Date;
   end: Date;
 };
+
+type ScheduleScreenProps = {
+  animationTestTick?: number;
+  manualRefreshTick?: number;
+};
+
+type RefreshSource = 'auto' | 'pull' | 'menu';
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
 const formatTime = (hours: number, minutes: number) => `${pad2(hours)}:${pad2(minutes)}`;
@@ -142,7 +152,7 @@ const formatCourseStartTime = (course: CourseData) => {
   return formatTime(slot.start[0], slot.start[1]);
 };
 
-export default function ScheduleScreen() {
+export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTick = 0 }: ScheduleScreenProps) {
   const [loading, setLoading] = useState(false);
   const [courses, setCoursesState] = useState<CourseData[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
@@ -154,6 +164,7 @@ export default function ScheduleScreen() {
   const [debugNote, setDebugNote] = useState('');
   const [debugHtmlPreview, setDebugHtmlPreview] = useState('');
   const [pullRefreshing, setPullRefreshing] = useState(false);
+  const [menuRefreshing, setMenuRefreshing] = useState(false);
   const [now, setNow] = useState(new Date());
   const { theme } = useTheme();
 
@@ -167,30 +178,79 @@ export default function ScheduleScreen() {
   const silentSyncRef = useRef(false);
   const lastInjectKeyRef = useRef('');
   const lastInjectAtRef = useRef(0);
+  const summaryPulseAnim = useRef(new Animated.Value(1)).current;
+  const animationTestMountedRef = useRef(false);
+  const manualRefreshMountedRef = useRef(false);
   const userAgent = Platform.OS === 'ios'
     ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
     : 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36';
 
   const keepWebViewVisibleForDebug = __DEV__ && developerDebugEnabled;
+  const animateSummaryTransition = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: 260,
+      create: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+      },
+      delete: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+    });
+  }, []);
   const updatedAtLineText = buildUpdatedAtText({
     updatedAt: lastUpdatedAt,
-    isUpdating: pullRefreshing,
+    isUpdating: pullRefreshing || menuRefreshing,
     updatingLabel: '正在更新課表...',
     emptyLabel: '尚未同步課表',
   });
   const {
     current: currentCourse,
     next: nextCourse,
-    previousToday,
   } = useMemo(() => getCourseSummaries(courses, now), [courses, now]);
-  const isBreakTime = !currentCourse && !!previousToday;
+  const hasCurrentCourse = !!currentCourse;
+
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!animationTestMountedRef.current) {
+      animationTestMountedRef.current = true;
+      return;
+    }
+
+    summaryPulseAnim.setValue(0.96);
+    Animated.sequence([
+      Animated.timing(summaryPulseAnim, {
+        toValue: 1.03,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      Animated.spring(summaryPulseAnim, {
+        toValue: 1,
+        friction: 7,
+        tension: 80,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [animationTestTick, summaryPulseAnim]);
 
   useEffect(() => {
     coursesRef.current = courses;
   }, [courses]);
 
   useEffect(() => {
-    const refreshNow = () => setNow(new Date());
+    const refreshNow = () => {
+      animateSummaryTransition();
+      setNow(new Date());
+    };
     const timer = setInterval(refreshNow, 15 * 1000);
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
@@ -216,12 +276,13 @@ export default function ScheduleScreen() {
     if (normalizedCourses.length === 0) return false;
 
     const updatedAt = Date.now();
+    animateSummaryTransition();
     setCoursesState(normalizedCourses);
     setLastUpdatedAt(updatedAt);
     await saveCourses(normalizedCourses, false, updatedAt);
     await refreshScheduledCourseReminders(normalizedCourses);
     return true;
-  }, []);
+  }, [animateSummaryTransition]);
 
   const normalizeScheduleUrl = (url: string) =>
     (url || '')
@@ -254,6 +315,7 @@ export default function ScheduleScreen() {
     lastInjectAtRef.current = 0;
     silentSyncRef.current = false;
     setPullRefreshing(false);
+    setMenuRefreshing(false);
     setShowWebView(keepWebViewVisibleForDebug);
     setLoading(false);
     setStatusText(finalMessage);
@@ -275,8 +337,18 @@ export default function ScheduleScreen() {
     injectScheduleScript('retry');
   }, [finish, injectScheduleScript]);
 
-  const startFetch = useCallback(async (options: { silent?: boolean; manual?: boolean } = {}) => {
+  const startFetch = useCallback(async (options: { silent?: boolean; manual?: boolean; source?: RefreshSource } = {}) => {
+    const source = options.source || (options.manual ? 'pull' : 'auto');
+
     if (phaseRef.current !== 'idle' && phaseRef.current !== 'done') {
+      if (source === 'pull') {
+        setPullRefreshing(true);
+        setStatusText('正在更新課表...');
+      }
+      if (source === 'menu') {
+        setMenuRefreshing(true);
+        setStatusText('正在更新課表...');
+      }
       return;
     }
 
@@ -284,12 +356,13 @@ export default function ScheduleScreen() {
 
     if (!savedCredentials) {
       setLoading(false);
+      setPullRefreshing(false);
+      setMenuRefreshing(false);
       setStatusText('請先登入後再同步課表');
       return;
     }
 
     const silent = !!options.silent && coursesRef.current.length > 0;
-    const manual = !!options.manual;
     credRef.current = savedCredentials;
     retryRef.current = 0;
     lastHandledUrlRef.current = '';
@@ -301,7 +374,10 @@ export default function ScheduleScreen() {
     setDebugUrl(DEFAULT_URL);
     setDebugNote(silent ? 'background refresh' : 'start fetch');
     setDebugHtmlPreview('');
-    setPullRefreshing(manual);
+    setPullRefreshing(source === 'pull');
+    if (source === 'menu') {
+      setMenuRefreshing(true);
+    }
     setLoading(true);
     setShowWebView(true);
     setStatusText(silent ? '背景更新課表中...' : '開始同步課表...');
@@ -310,6 +386,15 @@ export default function ScheduleScreen() {
       finish(coursesRef.current.length > 0 ? '課表更新逾時，已保留舊資料' : '課表同步逾時');
     }, 90000);
   }, [finish]);
+
+  useEffect(() => {
+    if (!manualRefreshMountedRef.current) {
+      manualRefreshMountedRef.current = true;
+      return;
+    }
+
+    void startFetch({ silent: false, source: 'menu' });
+  }, [manualRefreshTick, startFetch]);
 
   const handleNavChange = useCallback((nav: WebViewNavigation) => {
     if (nav.loading) return;
@@ -599,7 +684,7 @@ export default function ScheduleScreen() {
   };
 
   const handlePullRefresh = () => {
-    void startFetch({ manual: true, silent: false });
+    void startFetch({ manual: true, silent: false, source: 'pull' });
   };
 
   return (
@@ -626,8 +711,19 @@ export default function ScheduleScreen() {
             <Text style={[styles.heroTitle, { color: theme.text }]}>課程</Text>
           </View>
 
-          <View style={styles.summaryStack}>
-            {!isBreakTime ? (
+          <Animated.View
+            style={[
+              styles.summaryStack,
+              {
+                transform: [{ scale: summaryPulseAnim }],
+                opacity: summaryPulseAnim.interpolate({
+                  inputRange: [0.96, 1, 1.03],
+                  outputRange: [0.82, 1, 1],
+                }),
+              },
+            ]}
+          >
+            {hasCurrentCourse ? (
               <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
                 <View style={[styles.summaryPill, styles.summaryPillActive, { backgroundColor: theme.primary }]}>
                   <Text style={styles.summaryPillActiveText}>上課中</Text>
@@ -642,8 +738,23 @@ export default function ScheduleScreen() {
             ) : null}
 
             <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
-              <View style={[styles.summaryPill, styles.summaryPillUpcoming, { backgroundColor: 'rgba(10, 102, 255, 0.16)' }]}>
-                <Text style={[styles.summaryPillUpcomingText, { color: theme.primary }]}>下節課</Text>
+              <View
+                style={[
+                  styles.summaryPill,
+                  hasCurrentCourse
+                    ? [styles.summaryPillUpcoming, { backgroundColor: 'rgba(10, 102, 255, 0.16)' }]
+                    : [styles.summaryPillActive, { backgroundColor: theme.primary }],
+                ]}
+              >
+                <Text
+                  style={
+                    hasCurrentCourse
+                      ? [styles.summaryPillUpcomingText, { color: theme.primary }]
+                      : styles.summaryPillActiveText
+                  }
+                >
+                  下節課
+                </Text>
               </View>
               <Text style={[styles.summaryCourse, { color: theme.text }]}> 
                 {nextCourse ? nextCourse.course.name : '目前沒有下一節課'}
@@ -652,7 +763,7 @@ export default function ScheduleScreen() {
                 {nextCourse ? formatSummaryMeta(nextCourse) : '目前沒有可顯示的後續課程'}
               </Text>
             </View>
-          </View>
+          </Animated.View>
 
         </View>
 

@@ -209,8 +209,12 @@ export default function LoginScreen() {
                 placeholderTextColor={theme.textSub}
                 value={account}
                 onChangeText={setAccount}
-                autoCapitalize="none"
-                keyboardType="number-pad"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="username"
+                textContentType="username"
+                keyboardType={Platform.OS === 'ios' ? 'ascii-capable' : 'default'}
                 editable={!busy}
               />
             </View>
@@ -225,6 +229,10 @@ export default function LoginScreen() {
                 onChangeText={setPassword}
                 secureTextEntry
                 autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="password"
+                textContentType="password"
                 onSubmitEditing={handleLogin}
                 editable={!busy}
               />

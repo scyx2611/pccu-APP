@@ -50,6 +50,22 @@ const shouldUseFailColor = (semesterTitle: string, score: string) => {
   return isFailScore(score);
 };
 
+const isPassedScore = (semesterTitle: string, score: string) => {
+  const normalizedScore = score.trim().toUpperCase();
+
+  if (semesterTitle.includes('入學前抵免') && score.trim() === '2') {
+    return true;
+  }
+
+  if (normalizedScore === 'P') return true;
+  if (normalizedScore === 'F') return false;
+
+  const num = Number(score);
+  if (Number.isFinite(num)) return num >= 60;
+
+  return score.trim().length > 0 && !isFailScore(score);
+};
+
 const formatCourseScore = (semesterTitle: string, score: string) => {
   const normalizedScore = score.trim().toUpperCase();
 
@@ -89,6 +105,20 @@ const getCumulativeCredits = (semesters: SemesterGrade[]) => {
 
   if (!total) return '';
   return Number.isInteger(total) ? String(total) : total.toFixed(1);
+};
+
+const getPassSummary = (semesters: SemesterGrade[]) => {
+  const courses = semesters.flatMap((semester) =>
+    semester.courses.map((course) => ({
+      semesterTitle: semester.title,
+      score: course.score || '',
+    }))
+  );
+
+  if (!courses.length) return '--';
+
+  const passedCount = courses.filter((course) => isPassedScore(course.semesterTitle, course.score)).length;
+  return `${passedCount}/${courses.length}`;
 };
 
 export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
@@ -142,7 +172,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     return [
       { label: '平均', value: latestSemester.stats.average || '--' },
       { label: '班排', value: normalizeRank(latestSemester.stats.classRank) || '--' },
-      { label: '系排', value: normalizeRank(latestSemester.stats.deptRank) || '--' },
+      { label: '累計通過', value: getPassSummary(grades) },
       { label: '累計學分', value: getCumulativeCredits(grades) || '--' },
     ];
   }, [grades, latestSemester]);

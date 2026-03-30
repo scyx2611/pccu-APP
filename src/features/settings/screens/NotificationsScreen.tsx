@@ -1,5 +1,6 @@
-﻿import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+﻿import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
 import {
   getCourseReminderPresentationMode,
@@ -14,8 +15,10 @@ import {
 
 export default function NotificationsScreen() {
   const { theme } = useTheme();
+  const params = useLocalSearchParams<{ highlight?: string; flash?: string }>();
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
   const [courseRemindersEnabled, setCourseRemindersEnabledState] = useState(false);
+  const courseReminderFlashAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let active = true;
@@ -38,7 +41,41 @@ export default function NotificationsScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    if (params.highlight !== 'course-reminders' || !params.flash) return;
+
+    courseReminderFlashAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(courseReminderFlashAnim, {
+        toValue: 1,
+        duration: 360,
+        useNativeDriver: false,
+      }),
+      Animated.timing(courseReminderFlashAnim, {
+        toValue: 0,
+        duration: 520,
+        useNativeDriver: false,
+      }),
+      Animated.timing(courseReminderFlashAnim, {
+        toValue: 1,
+        duration: 360,
+        useNativeDriver: false,
+      }),
+      Animated.timing(courseReminderFlashAnim, {
+        toValue: 0,
+        duration: 560,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [courseReminderFlashAnim, params.flash, params.highlight]);
+
   const presentationMode = getCourseReminderPresentationMode();
+  const courseReminderHighlightStyle = {
+    backgroundColor: courseReminderFlashAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [theme.card, 'rgba(128, 128, 128, 0.18)'],
+    }),
+  };
 
   const handleNotificationsToggle = async (value: boolean) => {
     setNotificationsEnabledState(value);
@@ -88,7 +125,7 @@ export default function NotificationsScreen() {
 
         <View style={[styles.separator, { backgroundColor: theme.border }]} />
 
-        <View style={styles.switchRow}>
+        <Animated.View style={[styles.switchRow, courseReminderHighlightStyle]}>
           <View style={styles.textWrap}>
             <Text style={[styles.cellTitle, { color: theme.text }]}>課程即時通知</Text>
             <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>上課前 10 分鐘提醒下節課資訊。</Text>
@@ -100,7 +137,7 @@ export default function NotificationsScreen() {
             trackColor={{ false: theme.border, true: '#34C759' }}
             thumbColor="#FFFFFF"
           />
-        </View>
+        </Animated.View>
       </View>
 
       <View style={styles.bottomSpacer} />

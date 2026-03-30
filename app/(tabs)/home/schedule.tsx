@@ -1,12 +1,14 @@
 ﻿import React, { useRef } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, StyleSheet, Text } from 'react-native';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import type { NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useTheme } from '../../../src/providers/theme/ThemeProvider';
 import ScheduleScreen from '../../../src/features/schedule/screens/ScheduleScreen';
 
 export default function HomeScheduleScreen() {
+  const [animationTestTick, setAnimationTestTick] = React.useState(0);
+  const [manualRefreshTick, setManualRefreshTick] = React.useState(0);
   const isIOS = Platform.OS === 'ios';
   const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
   const skipNextPressRef = useRef(false);
@@ -19,10 +21,20 @@ export default function HomeScheduleScreen() {
     });
   };
 
+  const openCourseReminderSetting = () => {
+    router.push({
+      pathname: '/(tabs)/settings/notifications',
+      params: {
+        highlight: 'course-reminders',
+        flash: String(Date.now()),
+      },
+    });
+  };
+
   const menuActions = [
-    { label: '功能 1', onPress: () => runTestAction('功能 1') },
-    { label: '功能 2', onPress: () => runTestAction('功能 2') },
-    { label: '功能 3', onPress: () => runTestAction('功能 3') },
+    { label: '功能 1', onPress: () => setManualRefreshTick((value) => value + 1) },
+    { label: '功能 2', onPress: openCourseReminderSetting },
+    { label: '功能 3', onPress: () => setAnimationTestTick((value) => value + 1) },
   ] as const;
 
   const showFallbackMenu = () => {
@@ -123,7 +135,7 @@ export default function HomeScheduleScreen() {
             : undefined,
         }}
       />
-      <ScheduleScreen />
+      <ScheduleScreen animationTestTick={animationTestTick} manualRefreshTick={manualRefreshTick} />
     </>
   );
 }
