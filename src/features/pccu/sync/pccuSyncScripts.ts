@@ -121,6 +121,96 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
           }
         }
 
+        function detectAuthenticatedState() {
+          try {
+            if (isInsidePage()) {
+              return { authenticated: true, signal: 'inside_page' };
+            }
+
+            var allDocs = docs();
+            for (var d = 0; d < allDocs.length; d += 1) {
+              var doc = allDocs[d];
+              var href = '';
+              var text = '';
+              try {
+                href = doc.location ? String(doc.location.href || '') : '';
+              } catch (error) {}
+              try {
+                text = (doc.body && (doc.body.innerText || doc.body.textContent) || '');
+              } catch (error) {}
+
+              var hasPortalShell = /inside\\.aspx|myccu|portal|service/i.test(href);
+              var hasGreeting = /同學|您好|welcome|登出|logout/i.test(text);
+              var hasPortalFunctions =
+                typeof gfOpenLink === 'function' ||
+                (typeof window !== 'undefined' && typeof window.gfOpenLink === 'function') ||
+                typeof lfOpenLink === 'function' ||
+                (typeof window !== 'undefined' && typeof window.lfOpenLink === 'function');
+              var loginInputsStillVisible = !!firstElement([
+                'input[type="password"]',
+                'input[type="text"][name*="Account"]',
+                'input[type="text"][id*="Account"]',
+                'input[type="text"][name*="User"]',
+                'input[type="text"][id*="User"]'
+              ]);
+
+              if ((hasPortalShell || hasGreeting || hasPortalFunctions) && !loginInputsStillVisible) {
+                return {
+                  authenticated: true,
+                  signal: hasPortalShell ? 'portal_shell' : (hasPortalFunctions ? 'portal_function' : 'portal_greeting')
+                };
+              }
+            }
+          } catch (error) {}
+
+          return { authenticated: false, signal: 'none' };
+        }
+
+        function tryAuthenticatedFallbackNavigation() {
+          try {
+            var insideUrl = 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx';
+
+            if (typeof gfOpenLink === 'function' || (typeof window !== 'undefined' && typeof window.gfOpenLink === 'function')) {
+              post({ t: 'status', m: '\u5075\u6e2c\u5230\u5df2\u767b\u5165\u74b0\u5883\uff0c\u5617\u8a66\u5c0e\u5411 inside.aspx...' });
+              window.location.href = insideUrl;
+              return true;
+            }
+
+            var insideLink = firstElement([
+              'a[href*="inside.aspx"]',
+              'frame[src*="inside.aspx"]',
+              'iframe[src*="inside.aspx"]'
+            ]);
+
+            if (insideLink) {
+              post({ t: 'status', m: '\u627e\u5230 inside.aspx \u5165\u53e3\uff0c\u5617\u8a66\u5c0e\u822a...' });
+              if (insideLink.href) {
+                window.location.href = insideLink.href;
+              } else if (insideLink.src) {
+                window.location.href = insideLink.src;
+              } else {
+                click(insideLink);
+              }
+              return true;
+            }
+
+            if (/default\.aspx/i.test(window.location.href || '')) {
+              var bodyText = '';
+              try {
+                bodyText = (document.body && (document.body.innerText || document.body.textContent) || '');
+              } catch (error) {}
+
+              if (/同學|您好|welcome|登出|logout/i.test(bodyText)) {
+                post({ t: 'status', m: '\u767b\u5165\u5f8c\u4ecd\u505c\u5728 default.aspx\uff0c\u5f37\u5236\u9032\u5165 inside.aspx...' });
+                window.location.href = insideUrl;
+                return true;
+              }
+            }
+          } catch (error) {}
+
+          return false;
+        }
+
         function setValue(input, value) {
           if (!input) return;
 
@@ -177,8 +267,11 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
             ]);
 
             if (!accountInput || !passwordInput) {
+              post({ t: 'status', m: '\u627e\u4e0d\u5230\u767b\u5165\u8868\u55ae...' });
               return false;
             }
+
+            post({ t: 'status', m: '\u5df2\u627e\u5230\u767b\u5165\u8868\u55ae' });
 
             setValue(accountInput, ${JSON.stringify(credentials.account)});
             setValue(passwordInput, ${JSON.stringify(credentials.password)});
@@ -205,7 +298,7 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
 
             if (loginFn) {
               waitingLoginHandler = false;
-              post({ t: 'status', m: '\\u767b\\u5165\\u4e2d...' });
+              post({ t: 'status', m: '\\u5df2\\u627e\\u5230\\u767b\\u5165\\u8655\\u7406\\u5668\\uff0c\\u767b\\u5165\\u4e2d...' });
               submitted = true;
               loginFn('student', 'zh-TW', false);
               return true;
@@ -227,6 +320,10 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
               'input[id*="SignIn"]'
             ]) || firstByText(['\\u767b\\u5165', 'Login', 'Sign in']);
 
+            if (submit) {
+              post({ t: 'status', m: '\\u627e\\u5230\\u767b\\u5165\\u6309\\u9215\\uff0c\\u7b49\\u5f85\\u767b\\u5165\\u8655\\u7406\\u5668...' });
+            }
+
             return !!submit;
           } catch (error) {
             finish({ t: 'err', m: (error && error.message) || 'Form login failed' });
@@ -237,8 +334,12 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
         function loginLoop(attempt) {
           if (completed) return;
 
-          if (isInsidePage()) {
-            finish({ t: 'login_ok' });
+          var authState = detectAuthenticatedState();
+          if (authState.authenticated) {
+            if (authState.signal !== 'inside_page') {
+              post({ t: 'status', m: '\u5075\u6e2c\u5230\u5df2\u767b\u5165\uff0c\u4f46\u9801\u9762\u672a\u8f49\u81f3 inside.aspx\uff0c\u7e7c\u7e8c\u9032\u5165\u6821\u52d9\u7cfb\u7d71...' });
+            }
+            finish({ t: 'login_ok', signal: authState.signal });
             return;
           }
 
@@ -270,8 +371,15 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
             return;
           }
 
+          if (attempt >= 8 && tryAuthenticatedFallbackNavigation()) {
+            setTimeout(function() {
+              loginLoop(attempt + 1);
+            }, 800);
+            return;
+          }
+
           if (attempt >= 40) {
-            finish({ t: 'err', m: 'Login redirect timed out' });
+            finish({ t: 'err', m: 'Login redirect timed out (no authenticated shell detected)' });
             return;
           }
 
@@ -580,6 +688,17 @@ export function buildServiceOpenScript(code: '1208' | '1220'): string {
 
         function openLoop() {
           attempts += 1;
+
+           var currentUrl = '';
+           try {
+             currentUrl = String(window.location.href || '');
+           } catch (error) {}
+
+           if (/TransUrl\.aspx\?PrjNo=${JSON.stringify('1208')}|queryByStudent|ap1\.pccu|ap2\.pccu/i.test(currentUrl)) {
+             post({ t: 'status', m: '\u5075\u6e2c\u5230\u5df2\u9032\u5165\u8ab2\u8868\u529f\u80fd\u9801\uff0c\u7e7c\u7e8c\u8f09\u5165...' });
+             post({ t: 'popup', url: currentUrl });
+             return;
+           }
 
           if (typeof gfOpenLink === 'function') {
             gfOpenLink(${JSON.stringify(code)}, 'service', '0', '00', '', '');
@@ -1015,6 +1134,73 @@ export function buildRobustSchedulePageScript(): string {
           return document.documentElement ? document.documentElement.outerHTML : '';
         }
 
+        function pageText(doc) {
+          try {
+            return normalizeText((doc.body && (doc.body.innerText || doc.body.textContent)) || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function getDocUrl(doc) {
+          try {
+            return String((doc && doc.location && doc.location.href) || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function resolveUrl(baseUrl, maybeRelative) {
+          if (!maybeRelative) return '';
+          try {
+            return new URL(maybeRelative, baseUrl || window.location.href).toString();
+          } catch (error) {
+            return maybeRelative;
+          }
+        }
+
+        function hasReloginMarker(text) {
+          return /\u903e\u6642\u904e\u671f|\u8acb\u91cd\u65b0\u767b\u5165|\u8acb\u5148\u767b\u5165|relogin|login/i.test(text || '');
+        }
+
+        function hasNoDataMarker(text) {
+          return /\u67e5\u7121\u8cc7\u6599|\u7121\u8ab2\u8868\u8cc7\u6599|\u76ee\u524d\u7121\u8cc7\u6599|\u67e5\u8a62\u689d\u4ef6\u4e0d\u53ef\u7a7a\u767d/i.test(text || '');
+        }
+
+        function hasQueryByStudentMarker(html, href) {
+          return /queryByStudent/i.test(href || '') || /name=["']queryByStudent["']|queryByStudent\.asp/i.test(html || '');
+        }
+
+        function classifyScheduleState(doc, html) {
+          var href = getDocUrl(doc);
+          var text = pageText(doc);
+          var markup = String(html || '');
+
+          if (hasReloginMarker(text) || hasReloginMarker(markup)) {
+            return 'relogin';
+          }
+
+          if (/pubTdItem_Period|pubContent/.test(markup)) {
+            return 'ready';
+          }
+
+          if (hasNoDataMarker(text) || hasNoDataMarker(markup)) {
+            return 'no_data';
+          }
+
+          if (hasQueryByStudentMarker(markup, href)) {
+            return 'query_page';
+          }
+
+          return 'unknown';
+        }
+
+        function findScheduleWorkDoc() {
+          return findDoc(function(doc, html) {
+            return classifyScheduleState(doc, html) !== 'unknown';
+          });
+        }
+
         function findExactTextNode(labels, selector) {
           var normalized = {};
           for (var i = 0; i < labels.length; i += 1) {
@@ -1046,6 +1232,62 @@ export function buildRobustSchedulePageScript(): string {
           ]) || findExactTextNode(['\\u5b78\\u751f\\u8ab2\\u8868\\u67e5\\u8a62', '\\u5b78\\u751f\\u8ab2\\u8868'], 'a, button, td, th, span, div, label');
         }
 
+        function resolveNavTarget(doc, node) {
+          if (!doc || !node) return '';
+
+          try {
+            var href = node.getAttribute('href') || '';
+            if (href && !/^javascript:/i.test(href)) {
+              return resolveUrl(getDocUrl(doc), href);
+            }
+          } catch (error) {}
+
+          try {
+            var src = node.getAttribute('src') || '';
+            if (src) {
+              return resolveUrl(getDocUrl(doc), src);
+            }
+          } catch (error) {}
+
+          try {
+            var onclick = node.getAttribute('onclick') || '';
+            var match =
+              onclick.match(/window\.location\.href\s*=\s*['"]([^'"]+)['"]/i) ||
+              onclick.match(/location\.href\s*=\s*['"]([^'"]+)['"]/i) ||
+              onclick.match(/window\.open\(\s*['"]([^'"]+)['"]/i);
+            if (match && match[1]) {
+              return resolveUrl(getDocUrl(doc), match[1]);
+            }
+          } catch (error) {}
+
+          return '';
+        }
+
+        function navigateDoc(doc, targetUrl) {
+          if (!targetUrl) return false;
+
+          try {
+            if (doc && doc.defaultView && doc.defaultView.location) {
+              doc.defaultView.location.href = targetUrl;
+              return true;
+            }
+          } catch (error) {}
+
+          try {
+            if (doc && doc.location) {
+              doc.location.href = targetUrl;
+              return true;
+            }
+          } catch (error) {}
+
+          try {
+            window.location.href = targetUrl;
+            return true;
+          } catch (error) {}
+
+          return false;
+        }
+
         function findScheduleSearchControl() {
           return firstElement([
             '#Search',
@@ -1065,16 +1307,49 @@ export function buildRobustSchedulePageScript(): string {
           ]) || findExactTextNode(['\\u67e5\\u8a62', 'Search'], 'input[type="submit"], input[type="button"], button, a');
         }
 
-        function submitScheduleForm() {
-          var form = firstElement([
-            'form[name*="query"]',
-            'form[id*="query"]',
-            'form[name*="form1"]',
-            'form[id*="form1"]',
-            'form'
-          ]);
+        function findQueryForm(doc) {
+          if (!doc) return null;
 
-          if (!form || typeof form.submit !== 'function') return false;
+          try {
+            return doc.querySelector('form[name="queryByStudent"], form[id="queryByStudent"], form[action*="queryByStudent"], form[name*="queryByStudent"], form[id*="queryByStudent"], form');
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function resolveFormAction(doc, form) {
+          if (!form) {
+            return resolveUrl(getDocUrl(doc), 'queryByStudent.asp?QuerySource=queryCourse');
+          }
+
+          var action = '';
+          try {
+            action = form.getAttribute('action') || '';
+          } catch (error) {}
+
+          if (!action) {
+            action = 'queryByStudent.asp?QuerySource=queryCourse';
+          }
+
+          return resolveUrl(getDocUrl(doc), action);
+        }
+
+        function submitQueryForm(doc, form) {
+          if (!doc || !form) return false;
+
+          try {
+            var actionUrl = resolveFormAction(doc, form);
+            if (actionUrl) {
+              form.setAttribute('action', actionUrl);
+            }
+          } catch (error) {}
+
+          try {
+            var method = (form.getAttribute('method') || 'post').toLowerCase();
+            if (!method) {
+              form.setAttribute('method', 'post');
+            }
+          } catch (error) {}
 
           try {
             form.submit();
@@ -1134,7 +1409,7 @@ export function buildRobustSchedulePageScript(): string {
             'iframe[src*="queryByStudent.asp"]',
             'frame[src*="queryByStudent.asp"]'
           ]);
-          if (frameLink && frameLink.src && !/queryByStudent/i.test(window.location.href)) {
+          if (frameLink && frameLink.src && !/queryByStudent/i.test(currentUrl)) {
             post({ t: 'status', m: '\\u8f09\\u5165\\u8ab2\\u8868\\u9801\\u9762\\u4e2d...' });
             window.location.href = frameLink.src;
             return;
@@ -1723,16 +1998,105 @@ export function buildAdaptiveSchedulePageScript(): string {
           ]) || findExactTextNode(['\\u67e5\\u8a62', 'Search'], 'input[type="submit"], input[type="button"], button, a');
         }
 
-        function submitScheduleForm() {
-          var form = firstElement([
-            'form[name*="query"]',
-            'form[id*="query"]',
-            'form[name*="form1"]',
-            'form[id*="form1"]',
-            'form'
-          ]);
+        function resolveNavTarget(doc, node) {
+          if (!doc || !node) return '';
 
-          if (!form || typeof form.submit !== 'function') return false;
+          try {
+            var href = node.getAttribute('href') || '';
+            if (href && !/^javascript:/i.test(href)) {
+              return resolveUrl(getDocUrl(doc), href);
+            }
+          } catch (error) {}
+
+          try {
+            var src = node.getAttribute('src') || '';
+            if (src) {
+              return resolveUrl(getDocUrl(doc), src);
+            }
+          } catch (error) {}
+
+          try {
+            var onclick = node.getAttribute('onclick') || '';
+            var match =
+              onclick.match(/window\.location\.href\s*=\s*['"]([^'"]+)['"]/i) ||
+              onclick.match(/location\.href\s*=\s*['"]([^'"]+)['"]/i) ||
+              onclick.match(/window\.open\(\s*['"]([^'"]+)['"]/i);
+            if (match && match[1]) {
+              return resolveUrl(getDocUrl(doc), match[1]);
+            }
+          } catch (error) {}
+
+          return '';
+        }
+
+        function navigateDoc(doc, targetUrl) {
+          if (!targetUrl) return false;
+
+          try {
+            if (doc && doc.defaultView && doc.defaultView.location) {
+              doc.defaultView.location.href = targetUrl;
+              return true;
+            }
+          } catch (error) {}
+
+          try {
+            if (doc && doc.location) {
+              doc.location.href = targetUrl;
+              return true;
+            }
+          } catch (error) {}
+
+          try {
+            window.location.href = targetUrl;
+            return true;
+          } catch (error) {}
+
+          return false;
+        }
+
+        function findQueryForm(doc) {
+          if (!doc) return null;
+
+          try {
+            return doc.querySelector('form[name="queryByStudent"], form[id="queryByStudent"], form[action*="queryByStudent"], form[name*="queryByStudent"], form[id*="queryByStudent"], form');
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function resolveFormAction(doc, form) {
+          if (!form) {
+            return resolveUrl(getDocUrl(doc), 'queryByStudent.asp?QuerySource=queryCourse');
+          }
+
+          var action = '';
+          try {
+            action = form.getAttribute('action') || '';
+          } catch (error) {}
+
+          if (!action) {
+            action = 'queryByStudent.asp?QuerySource=queryCourse';
+          }
+
+          return resolveUrl(getDocUrl(doc), action);
+        }
+
+        function submitQueryForm(doc, form) {
+          if (!doc || !form) return false;
+
+          try {
+            var actionUrl = resolveFormAction(doc, form);
+            if (actionUrl) {
+              form.setAttribute('action', actionUrl);
+            }
+          } catch (error) {}
+
+          try {
+            var method = (form.getAttribute('method') || 'post').toLowerCase();
+            if (!method) {
+              form.setAttribute('method', 'post');
+            }
+          } catch (error) {}
 
           try {
             form.submit();
@@ -1779,8 +2143,12 @@ export function buildAdaptiveSchedulePageScript(): string {
 
         function extractLoop() {
           attempts += 1;
-          var currentUrl = window.location.href || '';
-          var onQueryPage = /queryByStudent/i.test(currentUrl);
+          var workDocMatch = findScheduleWorkDoc();
+          var workDoc = workDocMatch ? workDocMatch.doc : document;
+          var workHtml = workDocMatch && workDocMatch.html ? workDocMatch.html : currentHtml();
+          var scheduleState = classifyScheduleState(workDoc, workHtml);
+          var currentUrl = getDocUrl(workDoc) || window.location.href || '';
+          var onQueryPage = scheduleState === 'query_page' || scheduleState === 'ready';
           var searchSubmittedAt = readSearchSubmittedAt();
           var recentlySubmittedSearch = !!searchSubmittedAt && (Date.now() - searchSubmittedAt < 4000);
 
@@ -1789,9 +2157,18 @@ export function buildAdaptiveSchedulePageScript(): string {
             recentlySubmittedSearch = false;
           }
 
-          var bestPayload = bestSchedulePayload();
-          if (bestPayload.courses.length > 0) {
-            postResult({ t: 'courses', c: bestPayload.courses, h: bestPayload.html || '' });
+          if (scheduleState === 'ready' || /pubTdItem_Period|pubContent/.test(workHtml)) {
+            postResult({ t: 'html', h: workHtml });
+            return;
+          }
+
+          if (scheduleState === 'no_data') {
+            postResult({ t: 'html', h: workHtml });
+            return;
+          }
+
+          if (scheduleState === 'relogin') {
+            postResult({ t: 'err', m: 'Schedule query requires relogin' });
             return;
           }
 
@@ -1808,11 +2185,13 @@ export function buildAdaptiveSchedulePageScript(): string {
             return;
           }
 
-          if (!clickedEntry && !/queryByStudent/i.test(window.location.href)) {
+          if (!clickedEntry && !/queryByStudent/i.test(currentUrl)) {
             var entry = findStudentScheduleEntry();
 
             if (entry) {
-              clickedEntry = click(entry);
+              var entryDoc = entry.ownerDocument || document;
+              var entryTarget = resolveNavTarget(entryDoc, entry);
+              clickedEntry = entryTarget ? navigateDoc(entryDoc, entryTarget) : click(entry);
               syncState.clickedEntry = clickedEntry;
               if (clickedEntry) {
                 post({ t: 'status', m: '\\u958b\\u555f\\u8ab2\\u8868\\u67e5\\u8a62...' });
@@ -1824,6 +2203,7 @@ export function buildAdaptiveSchedulePageScript(): string {
 
           if (onQueryPage && !clickedSearch && !recentlySubmittedSearch) {
             var search = findScheduleSearchControl();
+            var queryForm = findQueryForm(workDoc);
 
             if (search) {
               clickedSearch = click(search);
@@ -1836,7 +2216,7 @@ export function buildAdaptiveSchedulePageScript(): string {
               }
             }
 
-            if (onQueryPage && submitScheduleForm()) {
+            if (submitQueryForm(workDoc, queryForm)) {
               clickedSearch = true;
               syncState.clickedSearch = true;
               markSearchSubmitted();
@@ -1852,7 +2232,7 @@ export function buildAdaptiveSchedulePageScript(): string {
           }
 
           if (attempts >= 12) {
-            postResult({ t: 'html', h: currentHtml() });
+            postResult({ t: 'err', m: 'Schedule query timed out' });
             return;
           }
 
