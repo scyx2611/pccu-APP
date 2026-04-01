@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,7 +7,8 @@ import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { getSavedPCCUCredentials } from '../services/authService';
 import { markPostLoginSyncHandled } from '../services/postLoginSyncState';
 import ScheduleSyncAgent from '../../schedule/components/ScheduleSyncAgent';
-import GradeSyncAgent from '../../grade/components/GradeSyncAgent';
+import { useGradeStore } from '../../grade/store/useGradeStore';
+import { useGradeSync } from '../../grade/hooks/useGradeSync';
 
 type SyncState = 'pending' | 'active' | 'done' | 'failed';
 
@@ -24,12 +25,14 @@ export default function LoadingScreen() {
   const [headline, setHeadline] = useState('正在同步資訊');
   const [subline, setSubline] = useState('首次使用需要一點時間，完成後會自動進入首頁。');
   const [scheduleReloadKey, setScheduleReloadKey] = useState(0);
-  const [gradeReloadKey, setGradeReloadKey] = useState(0);
   const completionRef = useRef<SyncCompletionRef>({
     scheduleDone: false,
     gradeDone: false,
     navigated: false,
   });
+  const { sync } = useGradeSync();
+  const hydrate = useGradeStore((state) => state.hydrate);
+  const resetSync = useGradeStore((state) => state.resetSync);
 
   const finishIfReady = useCallback(() => {
     const completion = completionRef.current;
@@ -62,7 +65,21 @@ export default function LoadingScreen() {
       setScheduleState('active');
       setGradeState('active');
       setScheduleReloadKey((value) => value + 1);
-      setGradeReloadKey((value) => value + 1);
+
+      // Grade sync via PccuSyncEngine
+      await hydrate();
+      resetSync();
+      try {
+        await sync({ priority: 1 });
+        if (active) setGradeState('done');
+      } catch {
+        if (active) setGradeState('failed');
+      } finally {
+        if (active) {
+          completionRef.current.gradeDone = true;
+          finishIfReady();
+        }
+      }
     };
 
     void bootstrap();
@@ -70,17 +87,11 @@ export default function LoadingScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [hydrate, resetSync, sync, finishIfReady]);
 
   const handleScheduleComplete = useCallback((result: { success: boolean }) => {
     completionRef.current.scheduleDone = true;
     setScheduleState(result.success ? 'done' : 'failed');
-    finishIfReady();
-  }, [finishIfReady]);
-
-  const handleGradeComplete = useCallback((result: { success: boolean }) => {
-    completionRef.current.gradeDone = true;
-    setGradeState(result.success ? 'done' : 'failed');
     finishIfReady();
   }, [finishIfReady]);
 
@@ -92,11 +103,6 @@ export default function LoadingScreen() {
         enabled={scheduleState === 'active'}
         reloadKey={scheduleReloadKey}
         onComplete={handleScheduleComplete}
-      />
-      <GradeSyncAgent
-        enabled={gradeState === 'active'}
-        reloadKey={gradeReloadKey}
-        onComplete={handleGradeComplete}
       />
 
       <LinearGradient
