@@ -5,13 +5,9 @@ import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import AppSymbol from '../../../components/AppSymbol';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { ensurePCCUSession, getSavedPCCUCredentials } from '../../auth/services/authService';
-import { consumeShouldSkipHomeSync } from '../../auth/services/postLoginSyncState';
 import { CourseData } from '../../pccu/parsers/pccuScraper';
 import { getCourses } from '../../schedule/storage/scheduleStorage';
-import ScheduleSyncAgent from '../../schedule/components/ScheduleSyncAgent';
-import GradeSyncAgent from '../../grade/components/GradeSyncAgent';
-import TrafficSyncAgent from '../../traffic/components/TrafficSyncAgent';
+import GlobalScraperWebView from '../../pccu/engine/GlobalScraperWebView';
 import { useTrafficData } from '../../traffic/hooks/useTrafficData';
 import {
   TrafficStopArrival,
@@ -132,9 +128,6 @@ export default function HomeScreen() {
   const [weather, setWeather] = useState<{ temp?: number; code?: number } | null>(null);
   const [userName, setUserName] = useState('');
   const [now, setNow] = useState(new Date());
-  const [scheduleSyncReloadKey, setScheduleSyncReloadKey] = useState(0);
-  const [gradeSyncReloadKey, setGradeSyncReloadKey] = useState(0);
-  const [backgroundSyncStage, setBackgroundSyncStage] = useState<'idle' | 'schedule' | 'grade' | 'done'>('idle');
   const trafficPressAnim = useRef(new Animated.Value(0)).current;
   const pressAnim = useRef(new Animated.Value(0)).current;
   const gradePressAnim = useRef(new Animated.Value(0)).current;
@@ -167,48 +160,12 @@ export default function HomeScreen() {
     setHideHomeGradeDetails(hide);
   }, []);
 
-  const handleScheduleSyncComplete = useCallback(() => {
-    void refreshCourses();
-    setBackgroundSyncStage('grade');
-    setGradeSyncReloadKey((value) => value + 1);
-  }, [refreshCourses]);
-
-  const handleGradeSyncComplete = useCallback(() => {
-    void refreshGrades();
-    setBackgroundSyncStage('done');
-  }, [refreshGrades]);
-
   useEffect(() => {
     void refreshCourses();
     void refreshGrades();
     void refreshUser();
     void refreshPrivacy();
   }, [refreshCourses, refreshGrades, refreshPrivacy, refreshUser]);
-
-  useEffect(() => {
-    let active = true;
-
-    const kickBackgroundSync = async () => {
-      if (consumeShouldSkipHomeSync()) {
-        return;
-      }
-
-      const savedCredentials = await getSavedPCCUCredentials();
-      if (!active || !savedCredentials) return;
-
-      const sessionResult = await ensurePCCUSession(savedCredentials);
-      if (!active || !sessionResult.success) return;
-
-      setBackgroundSyncStage('schedule');
-      setScheduleSyncReloadKey((value) => value + 1);
-    };
-
-    void kickBackgroundSync();
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -317,21 +274,7 @@ export default function HomeScreen() {
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
     >
-      <ScheduleSyncAgent
-        enabled={isFocused && backgroundSyncStage === 'schedule' && scheduleSyncReloadKey > 0}
-        reloadKey={scheduleSyncReloadKey}
-        onComplete={handleScheduleSyncComplete}
-      />
-      <GradeSyncAgent
-        enabled={isFocused && backgroundSyncStage === 'grade' && gradeSyncReloadKey > 0}
-        reloadKey={gradeSyncReloadKey}
-        onComplete={handleGradeSyncComplete}
-      />
-      <TrafficSyncAgent
-        enabled={traffic.sync.enabled}
-        reloadKey={traffic.sync.reloadKey}
-        onComplete={traffic.sync.onComplete}
-      />
+      <GlobalScraperWebView />
       <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
         <View style={styles.cardHeader}>
           <AppSymbol name={greetingIcon} size={28} tintColor={greetingColor} fallback={<Text>Hi</Text>} />
