@@ -195,4 +195,5 @@ describe('GlobalScraperWebView PCCU session gate', () => {
       'Sync executor became unavailable. Shared scraper was unmounted.'
     );
   });
+
 });

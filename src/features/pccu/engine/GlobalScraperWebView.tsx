@@ -113,6 +113,11 @@ const isGradeQueryUrl = (url: string) =>
 const isScheduleQueryUrl = (url: string) =>
   /\/queryCourse\/(?:index|queryByCourse|queryByStudent)\.asp/i.test(url || '');
 
+const isTransUrlForType = (url: string, type: SyncType) => {
+  const code = type === 'schedule' ? '1208' : '1220';
+  return new RegExp(`TransUrl\\.aspx\\?PrjNo=${code}`, 'i').test(url || '');
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -433,6 +438,19 @@ export default function GlobalScraperWebView() {
           return;
         }
 
+        if (pccuPhaseRef.current === 'open_target' && isTransUrlForType(url, type)) {
+          pending.lastHandledUrl = url;
+          if (type === 'schedule') {
+            pccuPhaseRef.current = 'syncing';
+            setTimeout(() => injectPccuScript('schedule', 'transurl', url, 0), 400);
+          } else {
+            setTimeout(() => {
+              webViewRef.current?.injectJavaScript(buildServiceOpenScript('1220'));
+            }, 400);
+          }
+          return;
+        }
+
         if (pccuPhaseRef.current === 'load_ecampus' && url.includes('default.aspx')) {
           runLogin();
           return;
@@ -617,6 +635,20 @@ export default function GlobalScraperWebView() {
         if (isTarget) {
           setTimeout(() => {
             injectPccuScript(type, 'loadend', currentUrl, 1600);
+          }, 400);
+        }
+        return;
+      }
+
+      if (pccuPhaseRef.current === 'open_target' && isTransUrlForType(currentUrl, type)) {
+        if (type === 'schedule') {
+          pccuPhaseRef.current = 'syncing';
+          setTimeout(() => {
+            injectPccuScript('schedule', 'loadend-transurl', currentUrl, 0);
+          }, 400);
+        } else {
+          setTimeout(() => {
+            webViewRef.current?.injectJavaScript(buildServiceOpenScript('1220'));
           }, 400);
         }
       }
