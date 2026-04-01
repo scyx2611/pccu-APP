@@ -13,6 +13,7 @@ import {
   buildTutoringOverviewScript,
   buildTutoringAllAssignmentsScript,
   buildTutoringPendingAssignmentsScript,
+  buildTutoringSingleCourseScript,
   buildWaitForCourseFpScript,
 } from '../sync/tutoringScripts';
 import {
@@ -44,7 +45,7 @@ interface UseTutoringSyncReturn {
   /** Current human-readable status message. */
   statusText: string;
   /** Initiate a sync session. */
-  startSync: (options?: { silent?: boolean; manual?: boolean }) => Promise<void>;
+  startSync: (options?: { silent?: boolean; manual?: boolean; courseCode?: string }) => Promise<void>;
   /** WebView onMessage handler. */
   handleMessage: (event: { nativeEvent: { data: string } }) => Promise<void>;
   /** WebView onNavigationStateChange handler. */
@@ -81,6 +82,7 @@ export function useTutoringSync({
   const retryRef = useRef(0);
   const silentSyncRef = useRef(false);
   const lastSyncRef = useRef<number>(0);
+  const courseCodeRef = useRef<string | null>(null);
 
   // Zustand store selectors
   const courses = useTutoringStore((s) => s.courses);
@@ -89,6 +91,10 @@ export function useTutoringSync({
   const setError = useTutoringStore((s) => s.setError);
   const resetSync = useTutoringStore((s) => s.resetSync);
   const storeSetCourses = useTutoringStore((s) => s.setCourses);
+  const storeSetPendingAssignments = useTutoringStore((s) => s.setPendingAssignments);
+  const storeSetSemester = useTutoringStore((s) => s.setSemester);
+  const storeSetWelcomeText = useTutoringStore((s) => s.setWelcomeText);
+  const storeSetLastSyncedAt = useTutoringStore((s) => s.setLastSyncedAt);
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -135,7 +141,7 @@ export function useTutoringSync({
   // ─── startSync ───────────────────────────────────────────────────────────
 
   const startSync = useCallback(
-    async (options: { silent?: boolean; manual?: boolean } = {}) => {
+    async (options: { silent?: boolean; manual?: boolean; courseCode?: string } = {}) => {
       // Debounce: prevent duplicate syncs within DEBOUNCE_MS
       const now = Date.now();
       if (now - lastSyncRef.current < DEBOUNCE_MS) {
@@ -166,6 +172,7 @@ export function useTutoringSync({
       retryRef.current = 0;
       silentSyncRef.current = silent;
       lastSyncRef.current = now;
+      courseCodeRef.current = options.courseCode || null;
 
       setPhase('logging_in');
       setSyncStatus('syncing');
@@ -228,13 +235,26 @@ export function useTutoringSync({
 
       // icas.pccu.edu.tw loaded → tutoring system ready, start data fetch
       if (url.includes('icas.pccu.edu.tw')) {
-        setPhase('fetching_courses');
-        setStatusText('課輔頁面已載入，等待系統初始化...');
-        setTimeout(() => {
-          webViewRef.current?.injectJavaScript(
-            buildWaitForCourseFpScript(buildTutoringOverviewScript()),
-          );
-        }, 3000);
+        const singleCourseCode = courseCodeRef.current;
+        if (singleCourseCode) {
+          // Single-course mode: skip overview, fetch detail directly
+          setPhase('fetching_details');
+          setStatusText('課輔頁面已載入，等待系統初始化...');
+          setTimeout(() => {
+            webViewRef.current?.injectJavaScript(
+              buildWaitForCourseFpScript(buildTutoringSingleCourseScript(singleCourseCode)),
+            );
+          }, 3000);
+        } else {
+          // Full sync mode
+          setPhase('fetching_courses');
+          setStatusText('課輔頁面已載入，等待系統初始化...');
+          setTimeout(() => {
+            webViewRef.current?.injectJavaScript(
+              buildWaitForCourseFpScript(buildTutoringOverviewScript()),
+            );
+          }, 3000);
+        }
       }
     },
     [finish, setPhase, webViewRef],
@@ -318,10 +338,10 @@ export function useTutoringSync({
           await storageSetCourses(parsedCourses);
           storeSetCourses(parsedCourses);
           if (data.semester) {
-            // Could store semester in store if needed
+            storeSetSemester(data.semester);
           }
           if (data.welcome) {
-            // Could store welcome in store if needed
+            storeSetWelcomeText(data.welcome);
           }
 
           setPhase('fetching_details');
@@ -342,9 +362,25 @@ export function useTutoringSync({
         if (data.t === 'pending') {
           const pendingItems = Array.isArray(data.items) ? data.items : [];
           await setPendingAssignments(pendingItems);
+          storeSetPendingAssignments(pendingItems);
 
-          // Sync complete
+          // Sync complete — update timestamp
+          storeSetLastSyncedAt(Date.now());
           finish();
+          return;
+        }
+
+        // ── Single-course detail sync ──
+
+        if (data.t === 'single_course') {
+          const courseCode = data.courseCode as string;
+          const detail = {
+            announcements: Array.isArray(data.announcements) ? data.announcements : [],
+            materials: Array.isArray(data.materials) ? data.materials : [],
+            assignments: Array.isArray(data.assignments) ? data.assignments : [],
+          };
+          useTutoringStore.getState().updateCourseDetail(courseCode, detail);
+          finish('課程資料已更新');
           return;
         }
 
@@ -370,7 +406,7 @@ export function useTutoringSync({
         finish('同步失敗，解析訊息時發生錯誤');
       }
     },
-    [finish, retrySync, setPhase, storeSetCourses, webViewRef],
+    [finish, retrySync, setPhase, storeSetCourses, storeSetPendingAssignments, storeSetSemester, storeSetWelcomeText, storeSetLastSyncedAt, webViewRef],
   );
 
   // ─── Return ──────────────────────────────────────────────────────────────

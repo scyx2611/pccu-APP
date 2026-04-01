@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   type TutoringStoreState,
   type TutoringCourse,
+  type TutoringAssignment,
   type CourseDetail,
   type SyncPhase,
   type SyncStatus,
@@ -10,11 +11,15 @@ import * as tutoringStorage from '../storage/tutoringStorage';
 
 interface TutoringStoreActions {
   setCourses: (courses: TutoringCourse[]) => void;
+  setPendingAssignments: (assignments: TutoringAssignment[]) => void;
   updateCourseDetail: (courseCode: string, detail: CourseDetail) => void;
   setSyncPhase: (phase: SyncPhase) => void;
   setSyncStatus: (status: SyncStatus) => void;
   resetSync: () => void;
   setError: (error: string | null) => void;
+  setSemester: (semester: string) => void;
+  setWelcomeText: (text: string) => void;
+  setLastSyncedAt: (timestamp: number | null) => void;
   hydrate: () => Promise<void>;
 }
 
@@ -27,11 +32,17 @@ export const useTutoringStore = create<UseTutoringStore>()((set) => ({
   syncStatus: 'idle',
   syncPhase: 'idle',
   pendingAssignmentsCount: 0,
+  pendingAssignments: [],
   lastSyncedAt: null,
   error: null,
+  semester: '',
+  welcomeText: '',
 
   // Actions
   setCourses: (courses) => set({ courses }),
+
+  setPendingAssignments: (pendingAssignments) =>
+    set({ pendingAssignments, pendingAssignmentsCount: pendingAssignments.length }),
 
   updateCourseDetail: (courseCode, detail) =>
     set((state) => {
@@ -48,6 +59,13 @@ export const useTutoringStore = create<UseTutoringStore>()((set) => ({
 
   setError: (error) => set({ error, syncStatus: 'error', syncPhase: 'error' }),
 
+  setSemester: (semester) => set({ semester }),
+
+  setWelcomeText: (welcomeText) => set({ welcomeText }),
+
+  setLastSyncedAt: (timestamp) =>
+    set({ lastSyncedAt: timestamp ? new Date(timestamp) : null }),
+
   hydrate: async () => {
     try {
       const [courses, pendingAssignments] = await Promise.all([
@@ -57,6 +75,7 @@ export const useTutoringStore = create<UseTutoringStore>()((set) => ({
 
       set({
         courses: courses ?? [],
+        pendingAssignments: pendingAssignments ?? [],
         pendingAssignmentsCount: pendingAssignments?.length ?? 0,
       });
     } catch (error) {
