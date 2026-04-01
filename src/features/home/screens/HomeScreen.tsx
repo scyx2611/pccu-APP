@@ -21,6 +21,8 @@ import {
 import { SemesterGrade } from '../../../services/scraper';
 import { getGrades } from '../../../services/GradeStore';
 import { getHideHomeGradeDetails } from '../../settings/storage/privacySettings';
+import { usePendingCount } from '../../tutoring/hooks/useTutoringData';
+import TutoringPendingBadge from '../../tutoring/components/TutoringPendingBadge';
 
 type NextClassInfo = {
   course: CourseData;
@@ -280,6 +282,10 @@ export default function HomeScreen() {
     router.push('/(tabs)/home/grade');
   };
 
+  const openTutoring = () => {
+    router.push('/(tabs)/tutoring');
+  };
+
   const trafficPressStyle: any = {
     transform: [{ scale: trafficPressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) }],
   };
@@ -291,6 +297,7 @@ export default function HomeScreen() {
   const gradePressStyle: any = {
     transform: [{ scale: gradePressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) }],
   };
+  const { count: pendingTutoringCount } = usePendingCount();
 
   const currentHour = now.getHours();
   const greeting = currentHour >= 18 || currentHour < 5 ? '晚上好' : currentHour >= 12 ? '下午好' : '早安';
@@ -418,6 +425,19 @@ export default function HomeScreen() {
             <Text style={[styles.gridSub, { color: theme.textSub }]}>尚未同步成績</Text>
           )}
         </AnimatedPressable>
+
+        <AnimatedPressable
+          onPress={openTutoring}
+          style={[styles.gridCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+        >
+          <View style={styles.gridIconRow}>
+            <AppSymbol name="book.fill" size={32} tintColor={theme.success} style={styles.gridIcon} fallback={<Text>課輔</Text>} />
+            <TutoringPendingBadge count={pendingTutoringCount} size="small" />
+          </View>
+          <Text style={[styles.gridTitle, { color: theme.text }]} numberOfLines={1}>課業輔導</Text>
+          <Text style={[styles.gridSub, { color: theme.textSub }]} numberOfLines={1}>公告 / 教材 / 作業</Text>
+          <Text style={[styles.gridMeta, { color: theme.textSub }]} numberOfLines={1}>點此查看課程詳情</Text>
+        </AnimatedPressable>
       </View>
 
       <View style={styles.bottomSpacer} />
@@ -455,6 +475,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   gridIcon: { marginBottom: 16 },
+  gridIconRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   gridTitle: { fontSize: 18, fontWeight: '700', marginBottom: 6 },
   gridSub: { fontSize: 14, fontWeight: '500' },
   gridMeta: { fontSize: 13, marginTop: 4 },

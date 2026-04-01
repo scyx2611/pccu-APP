@@ -324,12 +324,53 @@ export function buildOpenLinkScript(code: string): string {
           post({ t: 'user_name', n: nameText });
         }
 
-        if (typeof gfOpenLink !== 'function') {
-          post({ t: 'err', m: 'gfOpenLink not found' });
+        // 嘗試 gfOpenLink
+        if (typeof gfOpenLink === 'function') {
+          post({ t: 'status', m: '使用 gfOpenLink 開啟課輔...' });
+          gfOpenLink(${JSON.stringify(code)}, 'service', '0', '00', '', '');
           return;
         }
 
-        gfOpenLink(${JSON.stringify(code)}, 'service', '0', '00', '', '');
+        // 如果 gfOpenLink 不可用，等待並重試
+        var attempts = 0;
+        var maxAttempts = 20;
+        
+        function tryOpen() {
+          attempts++;
+          
+          if (typeof gfOpenLink === 'function') {
+            post({ t: 'status', m: 'gfOpenLink 已就緒，開啟課輔...' });
+            gfOpenLink(${JSON.stringify(code)}, 'service', '0', '00', '', '');
+            return;
+          }
+
+          // 嘗試直接找連結
+          var link = firstElement([
+            '[onclick*="gfOpenLink"]',
+            '[onclick*="${code}"]',
+            'a[href*="${code}"]',
+            'a[data-code="${code}"]'
+          ]);
+
+          if (link) {
+            post({ t: 'status', m: '找到課輔連結，開啟中...' });
+            click(link);
+            return;
+          }
+
+          if (attempts >= maxAttempts) {
+            post({ t: 'err', m: 'gfOpenLink not found and no link found for code ${code} after ' + attempts + ' attempts' });
+            return;
+          }
+
+          if (attempts % 5 === 0) {
+            post({ t: 'status', m: '等待 gfOpenLink 載入... (' + attempts + '/' + maxAttempts + ')' });
+          }
+
+          setTimeout(tryOpen, 500);
+        }
+
+        tryOpen();
       } catch (error) {
         post({ t: 'err', m: (error && error.message) || 'Open link failed' });
       }

@@ -10,6 +10,10 @@ export default function TabLayout() {
         <Label>首頁</Label>
         <Icon sf="house.fill" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="tutoring">
+        <Label>課輔</Label>
+        <Icon sf="book.fill" />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <Label>設定</Label>
         <Icon sf="gear" />

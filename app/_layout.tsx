@@ -88,6 +88,14 @@ function RootLayoutNav() {
             name="modal"
             options={{ presentation: Platform.OS === 'ios' ? 'formSheet' : 'modal' }}
           />
+          <Stack.Screen
+            name="tutoring/[courseCode]"
+            options={{
+              presentation: 'card',
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.bg },
+            }}
+          />
         </Stack>
       </>
     </NavigationThemeProvider>

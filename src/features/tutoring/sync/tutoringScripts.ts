@@ -335,3 +335,69 @@ export function buildTutoringPendingAssignmentsScript(): string {
       }
   `);
 }
+
+/**
+ * Build a script that fetches announcements, materials, and assignments for a SINGLE course.
+ * Posts a `single_course` message with the combined detail payload.
+ */
+export function buildTutoringSingleCourseScript(courseCode: string): string {
+  const courseCodeParam = JSON.stringify(String(courseCode || ''));
+
+  return createTutoringScript(`
+      try {
+        if (typeof window.CourseFP === 'undefined' || !window.CourseFP.AjaxMethods) {
+          post({ t: 'err', m: 'CourseFP not ready' });
+          return;
+        }
+
+        var courseCode = ${courseCodeParam};
+        if (!courseCode) {
+          post({ t: 'err', m: 'Missing courseCode for single-course sync' });
+          return;
+        }
+
+        CourseFP.AjaxMethods.setCC(courseCode).value;
+
+        // Fetch announcements
+        var teacherMap = typeof teacherName === 'object' && teacherName ? teacherName : {};
+        var annoData = CourseFP.AjaxMethods.GetAnnoData(courseCode, 1, 50).value;
+        var annoRows = Array.isArray(annoData && annoData.Rows) ? annoData.Rows : [];
+        var announcements = annoRows.map(function(row) {
+          var detail = CourseFP.AjaxMethods.GetAnnoDetail(courseCode, row.SN).value || {};
+          detail.teacherName = teacherMap[detail.ID] || '';
+          detail.createdAt = row.CDate;
+          return normalizeAnnouncementRow(Object.assign({}, row, detail));
+        });
+
+        // Fetch materials
+        var materialTable = CourseFP.AjaxMethods.GetMaterialData(courseCode).value;
+        var materials = normalizeRows(materialTable).map(function(row) { return normalizeMaterialRow(row); });
+
+        // Fetch assignments
+        var strings = CourseFP.AjaxMethods.GetHomeworkString().value || {};
+        var homeworkTable = CourseFP.AjaxMethods.GetHomeworkList().value;
+        var homeworkRows = Array.isArray(homeworkTable && homeworkTable.Rows) ? homeworkTable.Rows : [];
+        var assignments = homeworkRows.map(function(row) {
+          var homeSn = row.HomeSN != null ? parseInt(row.HomeSN, 10) : null;
+          var attachments = [];
+          if (homeSn !== null && !isNaN(homeSn)) {
+            try {
+              var workTable = CourseFP.AjaxMethods.GetWorkAttList(homeSn).value;
+              attachments = Array.isArray(workTable && workTable.Rows) ? workTable.Rows : [];
+            } catch (e) {}
+          }
+          return normalizeHomeworkRow(Object.assign({}, row, { attachments: attachments }), strings);
+        });
+
+        post({
+          t: 'single_course',
+          courseCode: courseCode,
+          announcements: announcements,
+          materials: materials,
+          assignments: assignments
+        });
+      } catch (error) {
+        post({ t: 'err', m: (error && error.message) || 'Tutoring single-course script failed' });
+      }
+  `);
+}
