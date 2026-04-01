@@ -7,8 +7,8 @@ async function analyzeTable() {
   const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
   const page = await context.newPage();
 
-  const studentId = 'B4218448';
-  const password = 'Tsai261001';
+  const studentId = process.env.PCCU_ID || '[REDACTED_ID]';
+  const password = process.env.PCCU_PASSWORD || '[REDACTED_PASSWORD]';
 
   try {
     console.log('[1] 登入');
