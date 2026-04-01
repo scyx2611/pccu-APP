@@ -166,7 +166,14 @@ export default function GlobalScraperWebView() {
   );
 
   useEffect(() => {
-    PccuSyncEngine.getInstance().setExecutor(executeRequest);
+    const engine = PccuSyncEngine.getInstance();
+    const executorId = engine.setExecutor(executeRequest);
+
+    return () => {
+      if (executorId !== null) {
+        engine.clearExecutor(executorId);
+      }
+    };
   }, [executeRequest]);
 
   // -----------------------------------------------------------------------

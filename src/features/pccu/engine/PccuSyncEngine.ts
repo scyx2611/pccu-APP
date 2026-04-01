@@ -20,6 +20,11 @@ export type SyncExecutor = (
 
 export type EngineState = 'idle' | 'paused' | 'processing';
 
+type ExecutorRecord = {
+  id: number;
+  execute: SyncExecutor;
+};
+
 // ---------------------------------------------------------------------------
 // Priority Queue (min-heap by priority; lower number = higher priority)
 // ---------------------------------------------------------------------------
@@ -103,11 +108,14 @@ let instance: PccuSyncEngine | null = null;
 export class PccuSyncEngine {
   private queue = new PriorityQueue();
   private state: EngineState = 'idle';
-  private executor: SyncExecutor | null = null;
+  private executorRecord: ExecutorRecord | null = null;
   private appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
   private activeTimeout: ReturnType<typeof setTimeout> | null = null;
   private processingTimer: ReturnType<typeof setTimeout> | null = null;
   private _pausedReason: string | null = null;
+  private executorSequence = 0;
+  private activeRequest: SyncRequest | null = null;
+  private activeExecutorId: number | null = null;
 
   // -----------------------------------------------------------------------
   // Singleton
@@ -138,8 +146,38 @@ export class PccuSyncEngine {
    * (e.g. launching a hidden WebView, injecting scripts, parsing HTML).
    * The engine only manages the queue — the executor does the real work.
    */
-  setExecutor(executor: SyncExecutor): void {
-    this.executor = executor;
+  setExecutor(executor: SyncExecutor | null): number | null {
+    if (!executor) {
+      this.clearExecutor();
+      return null;
+    }
+
+    const id = ++this.executorSequence;
+    this.executorRecord = { id, execute: executor };
+    return id;
+  }
+
+  clearExecutor(executorId?: number): void {
+    if (!this.executorRecord) return;
+    if (executorId !== undefined && this.executorRecord.id !== executorId) return;
+
+    const activeWasOwnedByExecutor =
+      this.activeRequest !== null && this.activeExecutorId === this.executorRecord.id;
+
+    this.executorRecord = null;
+
+    if (activeWasOwnedByExecutor && this.activeRequest) {
+      const request = this.activeRequest;
+      this.activeRequest = null;
+      this.activeExecutorId = null;
+      this.clearActiveTimeout();
+      request.reject(new Error('Sync executor became unavailable. Shared scraper was unmounted.'));
+      this.scheduleNext();
+    }
+  }
+
+  isExecutorReady(): boolean {
+    return this.executorRecord !== null;
   }
 
   /**
@@ -219,7 +257,9 @@ export class PccuSyncEngine {
     this.appStateSubscription = null;
     this.queue.clear();
     this.state = 'idle';
-    this.executor = null;
+      this.executorRecord = null;
+      this.activeRequest = null;
+      this.activeExecutorId = null;
   }
 
   // -----------------------------------------------------------------------
@@ -242,15 +282,21 @@ export class PccuSyncEngine {
   }
 
   private executeWithTimeout(request: SyncRequest): void {
-    if (!this.executor) {
-      request.reject(new Error('No sync executor registered. Call setExecutor() first.'));
+    if (!this.executorRecord) {
+      request.reject(new Error('Sync executor not ready. Shared scraper is not mounted yet.'));
       this.scheduleNext();
       return;
     }
 
+    const executorRecord = this.executorRecord;
+    this.activeRequest = request;
+    this.activeExecutorId = executorRecord.id;
+
     // Task-level timeout
     this.activeTimeout = setTimeout(() => {
       this.activeTimeout = null;
+      this.activeRequest = null;
+      this.activeExecutorId = null;
       const error = new Error(`Sync task ${request.id} (${request.type}) timed out after ${TASK_TIMEOUT_MS / 1000}s`);
       request.reject(error);
       console.warn(`[PccuSyncEngine] Timeout — ${request.id}`);
@@ -258,23 +304,35 @@ export class PccuSyncEngine {
     }, TASK_TIMEOUT_MS);
 
     try {
-      const result = this.executor(request);
+      const result = executorRecord.execute(request);
 
       Promise.resolve(result)
         .then((data) => {
           this.clearActiveTimeout();
+          if (this.activeRequest?.id === request.id) {
+            this.activeRequest = null;
+            this.activeExecutorId = null;
+          }
           request.resolve(data);
           console.log(`[PccuSyncEngine] Completed ${request.id}`);
           this.scheduleNext();
         })
         .catch((error) => {
           this.clearActiveTimeout();
+          if (this.activeRequest?.id === request.id) {
+            this.activeRequest = null;
+            this.activeExecutorId = null;
+          }
           request.reject(error instanceof Error ? error : new Error(String(error)));
           console.error(`[PccuSyncEngine] Error — ${request.id}:`, error);
           this.scheduleNext();
         });
     } catch (error) {
       this.clearActiveTimeout();
+      if (this.activeRequest?.id === request.id) {
+        this.activeRequest = null;
+        this.activeExecutorId = null;
+      }
       request.reject(error instanceof Error ? error : new Error(String(error)));
       this.scheduleNext();
     }
