@@ -210,8 +210,8 @@ export default function TutoringScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
-  hiddenWebView: { position: 'absolute', width: 1, height: 1, opacity: 0, left: -1000, top: -1000 },
-  hiddenWebViewInner: { width: 1, height: 1 },
+  hiddenWebView: { position: 'absolute', width: 375, height: 667, opacity: 0, left: -1000, top: -1000 },
+  hiddenWebViewInner: { width: 375, height: 667 },
   heroCard: {
     borderRadius: 28,
     padding: 22,
