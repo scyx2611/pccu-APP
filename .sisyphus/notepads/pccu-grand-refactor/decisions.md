@@ -22,3 +22,9 @@
 - **Jest stack pinned for Expo SDK 54**: Use `jest@29.7.0` + `jest-expo@~54.0.0` + `@types/jest@29.5.14` to avoid runtime incompatibility from Jest 30 / jest-expo 55.
 - **Fixture strategy**: Keep parser fixtures under `__fixtures__/html/` and store only sanitized/minimal HTML (no student id/name/department fields).
 - **Parser-first test scope**: Focus tests on `parseScheduleFromHtml` and `parseGradesFromHtml` pure parsing behavior; avoid coupling to WebView/UI flows.
+
+## Schedule queryByStudent Pivot (2026-04-01)
+
+- **Schedule-only engine hook**: `GlobalScraperWebView` now treats schedule `TransUrl 1208` as the handoff into schedule sync injection, while grade keeps the original service-open flow.
+- **CLI-aligned acquisition**: `buildAdaptiveSchedulePageScript()` now resolves the `queryByStudent` entry/form/action and submits the form directly, then returns HTML for the existing parser/storage contract.
+- **Failure states preserved at script level**: The schedule script now explicitly distinguishes relogin, no-data, and timeout outcomes instead of waiting on `gfOpenLink` readiness.
