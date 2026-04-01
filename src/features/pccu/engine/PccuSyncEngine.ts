@@ -12,7 +12,12 @@ export interface SyncRequest {
   priority: number;
   resolve: (data: any) => void;
   reject: (error: Error) => void;
+  setAbortHandler?: (handler: SyncAbortHandler | null) => void;
 }
+
+export type SyncAbortReason = 'timeout' | 'executor_unavailable' | 'engine_destroyed';
+
+export type SyncAbortHandler = (reason: SyncAbortReason, error: Error) => void;
 
 export type SyncExecutor = (
   request: SyncRequest
@@ -25,12 +30,16 @@ type ExecutorRecord = {
   execute: SyncExecutor;
 };
 
+type InternalSyncRequest = SyncRequest & {
+  abortHandler: SyncAbortHandler | null;
+};
+
 // ---------------------------------------------------------------------------
 // Priority Queue (min-heap by priority; lower number = higher priority)
 // ---------------------------------------------------------------------------
 
 class PriorityQueue {
-  private heap: SyncRequest[] = [];
+  private heap: InternalSyncRequest[] = [];
 
   get size(): number {
     return this.heap.length;
@@ -40,12 +49,12 @@ class PriorityQueue {
     return this.heap.length === 0;
   }
 
-  enqueue(request: SyncRequest): void {
+  enqueue(request: InternalSyncRequest): void {
     this.heap.push(request);
     this.bubbleUp(this.heap.length - 1);
   }
 
-  dequeue(): SyncRequest | undefined {
+  dequeue(): InternalSyncRequest | undefined {
     if (this.heap.length === 0) return undefined;
     if (this.heap.length === 1) return this.heap.pop();
 
@@ -58,7 +67,7 @@ class PriorityQueue {
     return top;
   }
 
-  peek(): SyncRequest | undefined {
+  peek(): InternalSyncRequest | undefined {
     return this.heap[0];
   }
 
@@ -116,7 +125,7 @@ export class PccuSyncEngine {
   private processingTimer: ReturnType<typeof setTimeout> | null = null;
   private _pausedReason: string | null = null;
   private executorSequence = 0;
-  private activeRequest: SyncRequest | null = null;
+  private activeRequest: InternalSyncRequest | null = null;
   private activeExecutorId: number | null = null;
 
   // -----------------------------------------------------------------------
@@ -173,7 +182,10 @@ export class PccuSyncEngine {
       this.activeRequest = null;
       this.activeExecutorId = null;
       this.clearActiveTimeout();
-      request.reject(new Error('Sync executor became unavailable. Shared scraper was unmounted.'));
+      const error = new Error('Sync executor became unavailable. Shared scraper was unmounted.');
+      request.abortHandler?.('executor_unavailable', error);
+      request.abortHandler = null;
+      request.reject(error);
       this.scheduleNext();
     }
   }
@@ -214,12 +226,16 @@ export class PccuSyncEngine {
    */
   requestSync(type: SyncType, priority: number = 5): Promise<any> {
     return new Promise((resolve, reject) => {
-      const request: SyncRequest = {
+      const request: InternalSyncRequest = {
         id: this.generateId(type),
         type,
         priority,
         resolve,
         reject,
+        abortHandler: null,
+        setAbortHandler: (handler) => {
+          request.abortHandler = handler;
+        },
       };
 
       this.queue.enqueue(request);
@@ -279,6 +295,12 @@ export class PccuSyncEngine {
    * Tear down the engine (remove listeners, clear timers).
    */
   destroy(): void {
+    if (this.activeRequest) {
+      const error = new Error('Sync executor became unavailable. Shared scraper was unmounted.');
+      this.activeRequest.abortHandler?.('engine_destroyed', error);
+      this.activeRequest.abortHandler = null;
+      this.activeRequest.reject(error);
+    }
     this.clearActiveTimeout();
     this.clearProcessingTimer();
     this.appStateSubscription?.remove();
@@ -309,7 +331,7 @@ export class PccuSyncEngine {
     this.executeWithTimeout(request);
   }
 
-  private executeWithTimeout(request: SyncRequest): void {
+  private executeWithTimeout(request: InternalSyncRequest): void {
     if (!this.executorRecord) {
       request.reject(new Error('Sync executor not ready. Shared scraper is not mounted yet.'));
       this.scheduleNext();
@@ -326,6 +348,7 @@ export class PccuSyncEngine {
       this.activeRequest = null;
       this.activeExecutorId = null;
       const error = new Error(`Sync task ${request.id} (${request.type}) timed out after ${TASK_TIMEOUT_MS / 1000}s`);
+      request.abortHandler?.('timeout', error);
       request.reject(error);
       console.warn(`[PccuSyncEngine] Timeout — ${request.id}`);
       this.scheduleNext();
@@ -341,6 +364,7 @@ export class PccuSyncEngine {
             this.activeRequest = null;
             this.activeExecutorId = null;
           }
+          request.abortHandler = null;
           request.resolve(data);
           console.log(`[PccuSyncEngine] Completed ${request.id}`);
           this.scheduleNext();
@@ -351,6 +375,7 @@ export class PccuSyncEngine {
             this.activeRequest = null;
             this.activeExecutorId = null;
           }
+          request.abortHandler = null;
           request.reject(error instanceof Error ? error : new Error(String(error)));
           console.error(`[PccuSyncEngine] Error — ${request.id}:`, error);
           this.scheduleNext();
@@ -361,6 +386,7 @@ export class PccuSyncEngine {
         this.activeRequest = null;
         this.activeExecutorId = null;
       }
+      request.abortHandler = null;
       request.reject(error instanceof Error ? error : new Error(String(error)));
       this.scheduleNext();
     }

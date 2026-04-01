@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { type WebViewNavigation } from 'react-native-webview';
 import type WebView from 'react-native-webview';
@@ -9,6 +9,10 @@ import {
   buildOpenLinkScript,
   type PCCUCredentials,
 } from '../../pccu/sync/pccuSyncScripts';
+import {
+  pccuBrowserSessionGate,
+  type PccuBrowserSessionLease,
+} from '../../pccu/engine/pccuBrowserSessionGate';
 import {
   buildTutoringOverviewScript,
   buildTutoringAllAssignmentsScript,
@@ -83,11 +87,15 @@ export function useTutoringSync({
   const silentSyncRef = useRef(false);
   const lastSyncRef = useRef<number>(0);
   const courseCodeRef = useRef<string | null>(null);
+  const sessionLeaseRef = useRef<PccuBrowserSessionLease | null>(null);
+  const unmountedRef = useRef(false);
+  const syncRunRef = useRef(0);
 
   // Zustand store selectors
   const courses = useTutoringStore((s) => s.courses);
   const setSyncPhase = useTutoringStore((s) => s.setSyncPhase);
   const setSyncStatus = useTutoringStore((s) => s.setSyncStatus);
+  const syncStatus = useTutoringStore((s) => s.syncStatus);
   const setError = useTutoringStore((s) => s.setError);
   const resetSync = useTutoringStore((s) => s.resetSync);
   const storeSetCourses = useTutoringStore((s) => s.setCourses);
@@ -105,6 +113,11 @@ export function useTutoringSync({
     }
   }, []);
 
+  const releaseSessionLease = useCallback(() => {
+    sessionLeaseRef.current?.release();
+    sessionLeaseRef.current = null;
+  }, []);
+
   /** Transition to a new phase and update the store. */
   const setPhase = useCallback((phase: SyncPhase) => {
     phaseRef.current = phase;
@@ -117,13 +130,14 @@ export function useTutoringSync({
       const finalMessage =
         message || (silentSyncRef.current ? '課業資料已更新' : '課業資料同步完成');
       clearPendingTimeout();
+      releaseSessionLease();
       setPhase('complete');
       retryRef.current = 0;
       silentSyncRef.current = false;
       setSyncStatus('idle');
       setStatusText(finalMessage);
     },
-    [clearPendingTimeout, setPhase, setSyncStatus],
+    [clearPendingTimeout, releaseSessionLease, setPhase, setSyncStatus],
   );
 
   /** Retry the sync from the overview script. */
@@ -153,7 +167,10 @@ export function useTutoringSync({
 
       // Block if already in a non-terminal phase
       const currentPhase = phaseRef.current;
-      if (currentPhase !== 'idle' && currentPhase !== 'complete' && currentPhase !== 'error') {
+      if (
+        syncStatus === 'syncing' ||
+        (currentPhase !== 'idle' && currentPhase !== 'complete' && currentPhase !== 'error')
+      ) {
         if (options.manual) {
           setStatusText('正在更新課業資料...');
         }
@@ -173,9 +190,26 @@ export function useTutoringSync({
       silentSyncRef.current = silent;
       lastSyncRef.current = now;
       courseCodeRef.current = options.courseCode || null;
-
-      setPhase('logging_in');
+      const syncRunId = ++syncRunRef.current;
       setSyncStatus('syncing');
+
+      if (pccuBrowserSessionGate.isLocked()) {
+        setStatusText('等待其他 PCCU 同步完成...');
+      } else {
+        setStatusText(silent ? '背景更新課業資料中...' : '開始同步課業資料...');
+      }
+
+      const lease = await pccuBrowserSessionGate.acquire(
+        `tutoring:${options.courseCode || 'all'}:${syncRunId}`
+      );
+
+      if (unmountedRef.current || syncRunRef.current !== syncRunId) {
+        lease.release();
+        return;
+      }
+
+      sessionLeaseRef.current = lease;
+      setPhase('logging_in');
       setStatusText(silent ? '背景更新課業資料中...' : '開始同步課業資料...');
 
       clearPendingTimeout();
@@ -196,9 +230,20 @@ export function useTutoringSync({
       finish,
       setError,
       setPhase,
+      syncStatus,
       setSyncStatus,
     ],
   );
+
+  useEffect(() => {
+    unmountedRef.current = false;
+
+    return () => {
+      unmountedRef.current = true;
+      clearPendingTimeout();
+      releaseSessionLease();
+    };
+  }, [clearPendingTimeout, releaseSessionLease]);
 
   // ─── handleNavChange ─────────────────────────────────────────────────────
 

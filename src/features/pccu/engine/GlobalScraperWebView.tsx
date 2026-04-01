@@ -7,6 +7,10 @@ import {
   type SyncRequest,
   type SyncType,
 } from '../../pccu/engine/PccuSyncEngine';
+import {
+  pccuBrowserSessionGate,
+  type PccuBrowserSessionLease,
+} from './pccuBrowserSessionGate';
 import { getSavedPCCUCredentials } from '../../auth/services/authService';
 import {
   buildLoginScript,
@@ -121,48 +125,113 @@ export default function GlobalScraperWebView() {
   const activeModeRef = useRef<ActiveMode>('none');
   const pccuPhaseRef = useRef<PccuPhase>('idle');
   const trafficPhaseRef = useRef<TrafficPhase>('idle');
+  const pccuSessionLeaseRef = useRef<PccuBrowserSessionLease | null>(null);
+  const unmountedRef = useRef(false);
   const [trafficUrl, setTrafficUrl] = useState(withTimestamp(TRAFFIC_DOWNHILL_URL));
   const [sourceUri, setSourceUri] = useState(PCCU_DEFAULT_URL);
+
+  const releasePccuSessionLease = useCallback(() => {
+    pccuSessionLeaseRef.current?.release();
+    pccuSessionLeaseRef.current = null;
+  }, []);
 
   // -----------------------------------------------------------------------
   // Executor registration
   // -----------------------------------------------------------------------
 
   const executeRequest = useCallback(
-    (request: SyncRequest): Promise<any> => {
-      return new Promise((resolve, reject) => {
+    async (request: SyncRequest): Promise<any> => {
+      return new Promise(async (resolve, reject) => {
         const type = request.type;
+
+        let settled = false;
+
+        const resolveOnce = (data: any) => {
+          if (settled) return;
+          settled = true;
+          request.setAbortHandler?.(null);
+          resolve(data);
+        };
+
+        const rejectOnce = (error: Error) => {
+          if (settled) return;
+          settled = true;
+          request.setAbortHandler?.(null);
+          reject(error);
+        };
 
         if (type === 'traffic') {
           activeModeRef.current = 'traffic';
           trafficPhaseRef.current = 'load_downhill';
           trafficPartialRef.current = { downhill: [], uphill: [] };
           setTrafficUrl(withTimestamp(TRAFFIC_DOWNHILL_URL));
-        } else {
-          activeModeRef.current = 'pccu';
-          pccuPhaseRef.current = 'idle';
+          pendingRef.current = {
+            request: { ...request, resolve: resolveOnce, reject: rejectOnce },
+            retries: 0,
+            phase: 'load_downhill',
+            lastHandledUrl: '',
+            lastInjectKey: '',
+            lastInjectAt: 0,
+            completed: false,
+          };
+
+          // Traffic uses its own URL — sourceUri stays PCCU, we navigate via trafficUrl
+          return;
         }
 
+        let abortError: Error | null = null;
+        request.setAbortHandler?.((_, error) => {
+          abortError = error;
+          const activePending = pendingRef.current;
+
+          if (activePending?.request.id === request.id && !activePending.completed) {
+            activePending.completed = true;
+            releasePccuSessionLease();
+            activePending.request.reject(error);
+            pendingRef.current = null;
+            activeModeRef.current = 'none';
+            pccuPhaseRef.current = 'done';
+            return;
+          }
+
+          releasePccuSessionLease();
+          rejectOnce(error);
+        });
+
+        try {
+          const lease = await pccuBrowserSessionGate.acquire(`shared-scraper:${type}:${request.id}`);
+
+          if (abortError || unmountedRef.current) {
+            lease.release();
+            rejectOnce(
+              abortError ?? new Error('Sync executor became unavailable. Shared scraper was unmounted.')
+            );
+            return;
+          }
+
+          pccuSessionLeaseRef.current = lease;
+        } catch (error) {
+          rejectOnce(error instanceof Error ? error : new Error(String(error)));
+          return;
+        }
+
+        activeModeRef.current = 'pccu';
+        pccuPhaseRef.current = 'idle';
         pendingRef.current = {
-          request: { ...request, resolve, reject },
+          request: { ...request, resolve: resolveOnce, reject: rejectOnce },
           retries: 0,
-          phase: type === 'traffic' ? 'load_downhill' : 'idle',
+          phase: 'idle',
           lastHandledUrl: '',
           lastInjectKey: '',
           lastInjectAt: 0,
           completed: false,
         };
 
-        if (type === 'traffic') {
-          // Traffic uses its own URL — sourceUri stays PCCU, we navigate via trafficUrl
-          return;
-        }
-
         // For PCCU types, load the default page then start the flow
         setSourceUri(`${PCCU_DEFAULT_URL}?ts=${Date.now()}`);
       });
     },
-    []
+    [releasePccuSessionLease]
   );
 
   useEffect(() => {
@@ -191,12 +260,22 @@ export default function GlobalScraperWebView() {
       } else {
         pending.request.reject(new Error(result.message || 'Sync failed'));
       }
+      releasePccuSessionLease();
       pendingRef.current = null;
       activeModeRef.current = 'none';
       pccuPhaseRef.current = 'done';
     },
-    []
+    [releasePccuSessionLease]
   );
+
+  useEffect(() => {
+    unmountedRef.current = false;
+
+    return () => {
+      unmountedRef.current = true;
+      releasePccuSessionLease();
+    };
+  }, [releasePccuSessionLease]);
 
   const runLogin = useCallback(() => {
     const pending = pendingRef.current;
