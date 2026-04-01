@@ -9,6 +9,7 @@ import {
   DefaultTheme as NavigationDefaultTheme,
   ThemeProvider as NavigationThemeProvider,
 } from '@react-navigation/native';
+import GlobalScraperWebView from '../src/features/pccu/engine/GlobalScraperWebView';
 import { ThemeProvider, useTheme } from '../src/providers/theme/ThemeProvider';
 
 Notifications.setNotificationHandler({
@@ -57,6 +58,7 @@ function RootLayoutNav() {
     <NavigationThemeProvider value={navigationTheme}>
       <>
         <StatusBar style={isDark ? 'light' : 'dark'} />
+        <GlobalScraperWebView />
         <Stack
           screenOptions={{
             headerShown: false,

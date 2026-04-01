@@ -7,7 +7,6 @@ import AppSymbol from '../../../components/AppSymbol';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { CourseData } from '../../pccu/parsers/pccuScraper';
 import { getCourses } from '../../schedule/storage/scheduleStorage';
-import GlobalScraperWebView from '../../pccu/engine/GlobalScraperWebView';
 import { useTrafficData } from '../../traffic/hooks/useTrafficData';
 import {
   TrafficStopArrival,
@@ -274,7 +273,6 @@ export default function HomeScreen() {
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
     >
-      <GlobalScraperWebView />
       <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
         <View style={styles.cardHeader}>
           <AppSymbol name={greetingIcon} size={28} tintColor={greetingColor} fallback={<Text>Hi</Text>} />
