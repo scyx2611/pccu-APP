@@ -64,4 +64,26 @@ describe('PccuSyncEngine executor lifecycle', () => {
 
     await expect(engine.requestSync('grade')).resolves.toEqual({ success: true, updatedAt: 123 });
   });
+
+  it('refreshes the active timeout when the executor reports progress', async () => {
+    const engine = PccuSyncEngine.getInstance();
+
+    engine.setExecutor(
+      (request) =>
+        new Promise((resolve) => {
+          setTimeout(() => request.refreshTimeout?.(), 25_000);
+          setTimeout(() => resolve({ success: true }), 45_000);
+        })
+    );
+
+    const requestPromise = engine.requestSync('schedule');
+
+    jest.advanceTimersByTime(25_000);
+    await Promise.resolve();
+
+    jest.advanceTimersByTime(20_000);
+    await Promise.resolve();
+
+    await expect(requestPromise).resolves.toEqual({ success: true });
+  });
 });

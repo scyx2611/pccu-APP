@@ -13,6 +13,7 @@ export interface SyncRequest {
   resolve: (data: any) => void;
   reject: (error: Error) => void;
   setAbortHandler?: (handler: SyncAbortHandler | null) => void;
+  refreshTimeout?: () => void;
 }
 
 export type SyncAbortReason = 'timeout' | 'executor_unavailable' | 'engine_destroyed';
@@ -236,6 +237,9 @@ export class PccuSyncEngine {
         setAbortHandler: (handler) => {
           request.abortHandler = handler;
         },
+        refreshTimeout: () => {
+          this.refreshActiveTimeout(request.id);
+        },
       };
 
       this.queue.enqueue(request);
@@ -342,17 +346,7 @@ export class PccuSyncEngine {
     this.activeRequest = request;
     this.activeExecutorId = executorRecord.id;
 
-    // Task-level timeout
-    this.activeTimeout = setTimeout(() => {
-      this.activeTimeout = null;
-      this.activeRequest = null;
-      this.activeExecutorId = null;
-      const error = new Error(`Sync task ${request.id} (${request.type}) timed out after ${TASK_TIMEOUT_MS / 1000}s`);
-      request.abortHandler?.('timeout', error);
-      request.reject(error);
-      console.warn(`[PccuSyncEngine] Timeout — ${request.id}`);
-      this.scheduleNext();
-    }, TASK_TIMEOUT_MS);
+    this.startOrRefreshTimeout(request);
 
     try {
       const result = executorRecord.execute(request);
@@ -390,6 +384,28 @@ export class PccuSyncEngine {
       request.reject(error instanceof Error ? error : new Error(String(error)));
       this.scheduleNext();
     }
+  }
+
+  private startOrRefreshTimeout(request: InternalSyncRequest): void {
+    this.clearActiveTimeout();
+    this.activeTimeout = setTimeout(() => {
+      this.activeTimeout = null;
+      this.activeRequest = null;
+      this.activeExecutorId = null;
+      const error = new Error(`Sync task ${request.id} (${request.type}) timed out after ${TASK_TIMEOUT_MS / 1000}s`);
+      request.abortHandler?.('timeout', error);
+      request.reject(error);
+      console.warn(`[PccuSyncEngine] Timeout — ${request.id}`);
+      this.scheduleNext();
+    }, TASK_TIMEOUT_MS);
+  }
+
+  private refreshActiveTimeout(requestId: string): void {
+    if (!this.activeRequest || this.activeRequest.id !== requestId) {
+      return;
+    }
+
+    this.startOrRefreshTimeout(this.activeRequest);
   }
 
   private scheduleNext(): void {

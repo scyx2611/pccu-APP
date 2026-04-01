@@ -210,6 +210,7 @@ export default function GlobalScraperWebView() {
           }
 
           pccuSessionLeaseRef.current = lease;
+          request.refreshTimeout?.();
         } catch (error) {
           rejectOnce(error instanceof Error ? error : new Error(String(error)));
           return;
@@ -420,6 +421,7 @@ export default function GlobalScraperWebView() {
 
       if (mode === 'pccu') {
         const type = pending.request.type as SyncType;
+        pending.request.refreshTimeout?.();
         console.log('[global-scraper][nav][pccu]', pccuPhaseRef.current, url);
 
         if (url.includes('inside.aspx')) {
@@ -475,6 +477,7 @@ export default function GlobalScraperWebView() {
 
         if (mode === 'pccu') {
           const type = pending.request.type as SyncType;
+          pending.request.refreshTimeout?.();
           console.log('[global-scraper][msg][pccu]', data.t, data.m || '');
 
           if (data.t === 'user_name' && data.n) {

@@ -4,12 +4,14 @@ const mockGetSavedPCCUCredentials = jest.fn(async () => ({
 }));
 
 const mockInjectJavaScript = jest.fn();
+const webViewPropsRef: { current: any | null } = { current: null };
 
 jest.mock('react-native-webview', () => {
   const React = require('react');
 
   return {
-    WebView: React.forwardRef((_props: any, ref: any) => {
+    WebView: React.forwardRef((props: any, ref: any) => {
+      webViewPropsRef.current = props;
       React.useImperativeHandle(ref, () => ({
         injectJavaScript: mockInjectJavaScript,
       }));
@@ -75,6 +77,7 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     pccuBrowserSessionGate.resetForTests();
     mockGetSavedPCCUCredentials.mockClear();
     mockInjectJavaScript.mockClear();
+    webViewPropsRef.current = null;
   });
 
   afterEach(() => {
@@ -140,5 +143,56 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     const nextLease = await pccuBrowserSessionGate.acquire('tutoring');
     expect(nextLease.owner).toBe('tutoring');
     nextLease.release();
+  });
+
+  it('refreshes timeout after gate wait so PCCU work still has usable budget', async () => {
+    const existingLease = await pccuBrowserSessionGate.acquire('tutoring');
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('schedule');
+    const handledRequestPromise = requestPromise.catch((error) => error);
+
+    await act(async () => {
+      jest.advanceTimersByTime(25_000);
+      await Promise.resolve();
+    });
+
+    existingLease.release();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockGetSavedPCCUCredentials).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(10_000);
+      await Promise.resolve();
+    });
+
+    let settled = false;
+    const trackedPromise = requestPromise
+      .catch((error) => error)
+      .finally(() => {
+        settled = true;
+      });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    rendered.unmount();
+    const error = await trackedPromise;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      'Sync executor became unavailable. Shared scraper was unmounted.'
+    );
   });
 });
