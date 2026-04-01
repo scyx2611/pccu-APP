@@ -6,7 +6,8 @@ import AppSymbol from '../../../shared/components/AppSymbol';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { getSavedPCCUCredentials } from '../services/authService';
 import { markPostLoginSyncHandled } from '../services/postLoginSyncState';
-import ScheduleSyncAgent from '../../schedule/components/ScheduleSyncAgent';
+import { useScheduleStore } from '../../schedule/store/useScheduleStore';
+import { useScheduleSync } from '../../schedule/hooks/useScheduleSync';
 import { useGradeStore } from '../../grade/store/useGradeStore';
 import { useGradeSync } from '../../grade/hooks/useGradeSync';
 
@@ -24,15 +25,17 @@ export default function LoadingScreen() {
   const [gradeState, setGradeState] = useState<SyncState>('pending');
   const [headline, setHeadline] = useState('正在同步資訊');
   const [subline, setSubline] = useState('首次使用需要一點時間，完成後會自動進入首頁。');
-  const [scheduleReloadKey, setScheduleReloadKey] = useState(0);
   const completionRef = useRef<SyncCompletionRef>({
     scheduleDone: false,
     gradeDone: false,
     navigated: false,
   });
-  const { sync } = useGradeSync();
-  const hydrate = useGradeStore((state) => state.hydrate);
-  const resetSync = useGradeStore((state) => state.resetSync);
+  const { sync: syncSchedule } = useScheduleSync();
+  const scheduleHydrate = useScheduleStore((state) => state.hydrate);
+  const scheduleResetSync = useScheduleStore((state) => state.resetSync);
+  const { sync: syncGrade } = useGradeSync();
+  const gradeHydrate = useGradeStore((state) => state.hydrate);
+  const gradeResetSync = useGradeStore((state) => state.resetSync);
 
   const finishIfReady = useCallback(() => {
     const completion = completionRef.current;
@@ -64,13 +67,27 @@ export default function LoadingScreen() {
 
       setScheduleState('active');
       setGradeState('active');
-      setScheduleReloadKey((value) => value + 1);
+
+      // Schedule sync via PccuSyncEngine
+      scheduleHydrate();
+      scheduleResetSync();
+      try {
+        await syncSchedule({ priority: 1 });
+        if (active) setScheduleState('done');
+      } catch {
+        if (active) setScheduleState('failed');
+      } finally {
+        if (active) {
+          completionRef.current.scheduleDone = true;
+          finishIfReady();
+        }
+      }
 
       // Grade sync via PccuSyncEngine
-      await hydrate();
-      resetSync();
+      gradeHydrate();
+      gradeResetSync();
       try {
-        await sync({ priority: 1 });
+        await syncGrade({ priority: 1 });
         if (active) setGradeState('done');
       } catch {
         if (active) setGradeState('failed');
@@ -87,30 +104,18 @@ export default function LoadingScreen() {
     return () => {
       active = false;
     };
-  }, [hydrate, resetSync, sync, finishIfReady]);
-
-  const handleScheduleComplete = useCallback((result: { success: boolean }) => {
-    completionRef.current.scheduleDone = true;
-    setScheduleState(result.success ? 'done' : 'failed');
-    finishIfReady();
-  }, [finishIfReady]);
+  }, [scheduleHydrate, scheduleResetSync, syncSchedule, gradeHydrate, gradeResetSync, syncGrade, finishIfReady]);
 
   const isSyncing = scheduleState === 'active' || gradeState === 'active';
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.bg }]}> 
-      <ScheduleSyncAgent
-        enabled={scheduleState === 'active'}
-        reloadKey={scheduleReloadKey}
-        onComplete={handleScheduleComplete}
-      />
-
+    <View style={[styles.screen, { backgroundColor: theme.bg }]}>
       <LinearGradient
         colors={[theme.ambient1 || theme.bg, theme.ambient2 || theme.bg, theme.bg]}
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}> 
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <View style={[styles.heroMark, { backgroundColor: 'rgba(0, 122, 255, 0.12)' }]}>
           <AppSymbol name="sparkles" size={24} tintColor={theme.primary} fallback="+" />
         </View>

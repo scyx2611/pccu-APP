@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,36 +9,19 @@ import {
   LayoutAnimation,
   Platform,
   RefreshControl,
-  InteractionManager,
   ScrollView,
   UIManager,
 } from 'react-native';
-import { WebView, WebViewNavigation } from 'react-native-webview';
-import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from '@react-navigation/native';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import DebugStamp from '../../../shared/components/DebugStamp';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
-import { getSavedPCCUCredentials } from '../../auth/services/authService';
-import { getCourses, setCourses as saveCourses } from '../storage/scheduleStorage';
 import { getDeveloperDebugEnabled } from '../../settings/storage/developerSettings';
-import {
-  buildLoginScript,
-  buildAdaptiveSchedulePageScript,
-  buildServiceOpenScript,
-  PCCUCredentials,
-} from '../../pccu/sync/pccuSyncScripts';
-import {
-  CourseData,
-  hasSuspiciousCourseNames,
-  parseScheduleFromHtml,
-  sanitizeCourseList,
-} from '../../pccu/parsers/pccuScraper';
-import { refreshScheduledCourseReminders } from '../../notifications/services/courseReminderService';
+import { CourseData } from '../../pccu/parsers/pccuScraper';
 import { buildUpdatedAtText } from '../../../utils/updatedAt';
+import { useScheduleStore } from '../store/useScheduleStore';
+import { useScheduleSync } from '../hooks/useScheduleSync';
 
-const DEFAULT_URL = 'https://ecampus.pccu.edu.tw/eCampus/default.aspx';
-const INSIDE_URL = 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx';
 const WEEKDAY_LABELS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = [
   { start: [8, 10], end: [9, 0] },
@@ -58,8 +41,6 @@ const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = 
   { start: [22, 10], end: [23, 0] },
   { start: [23, 10], end: [23, 59] },
 ];
-
-type Phase = 'idle' | 'load_ecampus' | 'logging_in' | 'open_schedule' | 'syncing' | 'done';
 
 type CourseSummary = {
   course: CourseData;
@@ -99,7 +80,6 @@ const buildCourseWindow = (course: CourseData, now: Date) => {
 const getCourseSummaries = (courses: CourseData[], now: Date) => {
   let current: CourseSummary | null = null;
   let next: CourseSummary | null = null;
-  let previousToday: CourseSummary | null = null;
 
   courses.forEach((course) => {
     const window = buildCourseWindow(course, now);
@@ -112,12 +92,6 @@ const getCourseSummaries = (courses: CourseData[], now: Date) => {
       return;
     }
 
-    if (isSameDay(window.start, now) && window.end <= now) {
-      if (!previousToday || window.end.getTime() > previousToday.end.getTime()) {
-        previousToday = { course, start: window.start, end: window.end };
-      }
-    }
-
     if (window.start <= now) {
       window.start.setDate(window.start.getDate() + 7);
       window.end.setDate(window.end.getDate() + 7);
@@ -128,7 +102,7 @@ const getCourseSummaries = (courses: CourseData[], now: Date) => {
     }
   });
 
-  return { current, next, previousToday };
+  return { current, next };
 };
 
 const formatSummaryMeta = (summary: CourseSummary | null) => {
@@ -137,11 +111,6 @@ const formatSummaryMeta = (summary: CourseSummary | null) => {
   const location = summary.course.location || '地點未提供';
   return `${dayLabel} ${formatTime(summary.start.getHours(), summary.start.getMinutes())}-${formatTime(summary.end.getHours(), summary.end.getMinutes())} · ${location}`;
 };
-
-const isSameDay = (left: Date, right: Date) =>
-  left.getFullYear() === right.getFullYear() &&
-  left.getMonth() === right.getMonth() &&
-  left.getDate() === right.getDate();
 
 const formatPeriodLabel = (course: CourseData) =>
   course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 節` : `第 ${course.startPeriod}-${course.endPeriod} 節`;
@@ -153,39 +122,26 @@ const formatCourseStartTime = (course: CourseData) => {
 };
 
 export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTick = 0 }: ScheduleScreenProps) {
-  const [loading, setLoading] = useState(false);
-  const [courses, setCoursesState] = useState<CourseData[]>([]);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-  const [statusText, setStatusText] = useState('');
-  const [showWebView, setShowWebView] = useState(false);
-  const [webViewKey, setWebViewKey] = useState(0);
+  const { theme } = useTheme();
+  const courses = useScheduleStore((state) => state.courses);
+  const lastSyncedAt = useScheduleStore((state) => state.lastSyncedAt);
+  const syncStatus = useScheduleStore((state) => state.syncStatus);
+  const error = useScheduleStore((state) => state.error);
+  const hydrate = useScheduleStore((state) => state.hydrate);
+  const resetSync = useScheduleStore((state) => state.resetSync);
+  const { sync } = useScheduleSync();
+
   const [developerDebugEnabled, setDeveloperDebugEnabled] = useState(false);
-  const [debugUrl, setDebugUrl] = useState(DEFAULT_URL);
-  const [debugNote, setDebugNote] = useState('');
-  const [debugHtmlPreview, setDebugHtmlPreview] = useState('');
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [menuRefreshing, setMenuRefreshing] = useState(false);
   const [now, setNow] = useState(new Date());
-  const { theme } = useTheme();
-
-  const webViewRef = useRef<WebView>(null);
-  const phaseRef = useRef<Phase>('idle');
-  const credRef = useRef<PCCUCredentials | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryRef = useRef(0);
-  const lastHandledUrlRef = useRef('');
-  const coursesRef = useRef<CourseData[]>([]);
-  const silentSyncRef = useRef(false);
-  const lastInjectKeyRef = useRef('');
-  const lastInjectAtRef = useRef(0);
   const summaryPulseAnim = useRef(new Animated.Value(1)).current;
   const animationTestMountedRef = useRef(false);
   const manualRefreshMountedRef = useRef(false);
-  const userAgent = Platform.OS === 'ios'
-    ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-    : 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36';
 
-  const keepWebViewVisibleForDebug = __DEV__ && developerDebugEnabled;
+  const isSyncing = syncStatus === 'syncing';
+  const isLoading = courses.length === 0 && (syncStatus === 'syncing' || syncStatus === 'idle');
+
   const animateSummaryTransition = useCallback(() => {
     LayoutAnimation.configureNext({
       duration: 260,
@@ -202,16 +158,18 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
       },
     });
   }, []);
+
   const updatedAtLineText = buildUpdatedAtText({
-    updatedAt: lastUpdatedAt,
+    updatedAt: lastSyncedAt,
     isUpdating: pullRefreshing || menuRefreshing,
     updatingLabel: '正在更新課表...',
     emptyLabel: '尚未同步課表',
   });
-  const {
-    current: currentCourse,
-    next: nextCourse,
-  } = useMemo(() => getCourseSummaries(courses, now), [courses, now]);
+
+  const { current: currentCourse, next: nextCourse } = useMemo(
+    () => getCourseSummaries(courses, now),
+    [courses, now]
+  );
   const hasCurrentCourse = !!currentCourse;
 
   useEffect(() => {
@@ -243,10 +201,6 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
   }, [animationTestTick, summaryPulseAnim]);
 
   useEffect(() => {
-    coursesRef.current = courses;
-  }, [courses]);
-
-  useEffect(() => {
     const refreshNow = () => {
       animateSummaryTransition();
       setNow(new Date());
@@ -262,372 +216,54 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
       clearInterval(timer);
       subscription.remove();
     };
-  }, []);
-
-  const clearPendingTimeout = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  };
-
-  const persistCourses = useCallback(async (nextCourses: CourseData[]) => {
-    const normalizedCourses = sanitizeCourseList(nextCourses);
-    if (normalizedCourses.length === 0) return false;
-
-    const updatedAt = Date.now();
-    animateSummaryTransition();
-    setCoursesState(normalizedCourses);
-    setLastUpdatedAt(updatedAt);
-    await saveCourses(normalizedCourses, false, updatedAt);
-    await refreshScheduledCourseReminders(normalizedCourses);
-    return true;
   }, [animateSummaryTransition]);
 
-  const normalizeScheduleUrl = (url: string) =>
-    (url || '')
-      .replace(/([?&])NoCache=[^&]+/gi, '$1')
-      .replace(/([?&])lvMainMenuIndex=[^&]+/gi, '$1')
-      .replace(/[?&]$/, '');
-
-  const isScheduleQueryUrl = (url: string) => /\/queryCourse\/(?:index|queryByCourse|queryByStudent)\.asp/i.test(url || '');
-
-  const injectScheduleScript = useCallback((reason: string, rawUrl?: string, minIntervalMs = 1200) => {
-    const key = normalizeScheduleUrl(rawUrl || lastHandledUrlRef.current || '');
-    const nowAt = Date.now();
-
-    if (key && lastInjectKeyRef.current === key && nowAt - lastInjectAtRef.current < minIntervalMs) {
-      return;
-    }
-
-    lastInjectKeyRef.current = key;
-    lastInjectAtRef.current = nowAt;
-    webViewRef.current?.injectJavaScript(buildAdaptiveSchedulePageScript());
-  }, []);
-
-  const finish = useCallback((message?: string) => {
-    const finalMessage = message || (silentSyncRef.current ? '課表已更新' : '課表同步完成');
-    clearPendingTimeout();
-    phaseRef.current = 'done';
-    retryRef.current = 0;
-    lastHandledUrlRef.current = '';
-    lastInjectKeyRef.current = '';
-    lastInjectAtRef.current = 0;
-    silentSyncRef.current = false;
-    setPullRefreshing(false);
-    setMenuRefreshing(false);
-    setShowWebView(keepWebViewVisibleForDebug);
-    setLoading(false);
-    setStatusText(finalMessage);
-  }, [keepWebViewVisibleForDebug]);
-
-  const retrySync = useCallback((fallbackMessage: string) => {
-    if (retryRef.current >= 2) {
-      finish(coursesRef.current.length > 0 ? `${fallbackMessage}，已保留舊資料` : fallbackMessage);
-      return;
-    }
-
-    retryRef.current += 1;
-    lastHandledUrlRef.current = '';
-    lastInjectKeyRef.current = '';
-    lastInjectAtRef.current = 0;
-    phaseRef.current = 'syncing';
-    setStatusText(`重新嘗試同步課表 (${retryRef.current}/2)...`);
-    setDebugNote(`retry ${retryRef.current}`);
-    injectScheduleScript('retry');
-  }, [finish, injectScheduleScript]);
-
-  const startFetch = useCallback(async (options: { silent?: boolean; manual?: boolean; source?: RefreshSource } = {}) => {
-    const source = options.source || (options.manual ? 'pull' : 'auto');
-
-    if (phaseRef.current !== 'idle' && phaseRef.current !== 'done') {
-      if (source === 'pull') {
-        setPullRefreshing(true);
-        setStatusText('正在更新課表...');
-      }
-      if (source === 'menu') {
-        setMenuRefreshing(true);
-        setStatusText('正在更新課表...');
-      }
-      return;
-    }
-
-    const savedCredentials = await getSavedPCCUCredentials();
-
-    if (!savedCredentials) {
-      setLoading(false);
+  const handlePullRefresh = useCallback(() => {
+    setPullRefreshing(true);
+    void sync({ silent: false, priority: 5 }).finally(() => {
       setPullRefreshing(false);
-      setMenuRefreshing(false);
-      setStatusText('請先登入後再同步課表');
-      return;
-    }
+    });
+  }, [sync]);
 
-    const silent = !!options.silent && coursesRef.current.length > 0;
-    credRef.current = savedCredentials;
-    retryRef.current = 0;
-    lastHandledUrlRef.current = '';
-    lastInjectKeyRef.current = '';
-    lastInjectAtRef.current = 0;
-    silentSyncRef.current = silent;
-    phaseRef.current = 'load_ecampus';
-    setWebViewKey((value) => value + 1);
-    setDebugUrl(DEFAULT_URL);
-    setDebugNote(silent ? 'background refresh' : 'start fetch');
-    setDebugHtmlPreview('');
-    setPullRefreshing(source === 'pull');
-    if (source === 'menu') {
-      setMenuRefreshing(true);
-    }
-    setLoading(true);
-    setShowWebView(true);
-    setStatusText(silent ? '背景更新課表中...' : '開始同步課表...');
-    clearPendingTimeout();
-    timeoutRef.current = setTimeout(() => {
-      finish(coursesRef.current.length > 0 ? '課表更新逾時，已保留舊資料' : '課表同步逾時');
-    }, 90000);
-  }, [finish]);
+  const triggerMenuRefresh = useCallback(() => {
+    setMenuRefreshing(true);
+    void sync({ silent: false, priority: 5 }).finally(() => {
+      setMenuRefreshing(false);
+    });
+  }, [sync]);
 
   useEffect(() => {
     if (!manualRefreshMountedRef.current) {
       manualRefreshMountedRef.current = true;
       return;
     }
-
-    void startFetch({ silent: false, source: 'menu' });
-  }, [manualRefreshTick, startFetch]);
-
-  const handleNavChange = useCallback((nav: WebViewNavigation) => {
-    if (nav.loading) return;
-
-    const url = nav.url || '';
-    setDebugUrl(url);
-    setDebugNote(`nav ${phaseRef.current}`);
-
-    if (url.includes('inside.aspx')) {
-      phaseRef.current = 'open_schedule';
-      setStatusText('開啟課表查詢...');
-      setTimeout(() => {
-        webViewRef.current?.injectJavaScript(buildServiceOpenScript('1208'));
-      }, 1200);
-      return;
-    }
-
-    if (phaseRef.current === 'load_ecampus' && url.includes('default.aspx')) {
-      if (!credRef.current) {
-        finish('找不到登入憑證');
-        return;
-      }
-
-      phaseRef.current = 'logging_in';
-      setStatusText('登入中...');
-      webViewRef.current?.injectJavaScript(buildLoginScript(credRef.current));
-      return;
-    }
-
-    if (isScheduleQueryUrl(url)) {
-      lastHandledUrlRef.current = url;
-      phaseRef.current = 'syncing';
-      setStatusText('查詢課表中...');
-      setTimeout(() => {
-        injectScheduleScript('nav', url);
-      }, 1200);
-    }
-  }, [finish, injectScheduleScript]);
-
-  const handleMessage = useCallback(async (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      setDebugNote(`${data.t}${data.m ? ` ${data.m}` : data.url ? ` ${data.url}` : ''}`);
-
-      if (data.t === 'status') {
-        setStatusText(data.m || '同步課表中...');
-        return;
-      }
-
-      if (data.t === 'user_name' && data.n) {
-        await SecureStore.setItemAsync('user_name', data.n);
-        return;
-      }
-
-      if (data.t === 'login_ok') {
-        phaseRef.current = 'open_schedule';
-        lastHandledUrlRef.current = '';
-        setStatusText('登入成功，準備開啟課表...');
-        webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(INSIDE_URL)};true;`);
-        return;
-      }
-
-      if (data.t === 'popup') {
-        lastHandledUrlRef.current = '';
-        if (data.url) setDebugUrl(data.url);
-        setStatusText('開啟課表頁面中...');
-        webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(data.url)};true;`);
-        return;
-      }
-
-      if (data.t === 'login_fail') {
-        finish(data.m ? `登入失敗：${data.m}` : '登入失敗');
-        return;
-      }
-
-      if (data.t === 'courses') {
-        const parsedFromCourses = sanitizeCourseList(Array.isArray(data.c) ? (data.c as CourseData[]) : []);
-        const parsedFromHtml = typeof data.h === 'string' && data.h
-          ? sanitizeCourseList(parseScheduleFromHtml(data.h))
-          : [];
-        const parsed =
-          parsedFromHtml.length > 0 &&
-          (parsedFromHtml.length >= parsedFromCourses.length || hasSuspiciousCourseNames(parsedFromCourses))
-            ? parsedFromHtml
-            : parsedFromCourses;
-
-        if (await persistCourses(parsed)) {
-          finish();
-        } else {
-          retrySync(coursesRef.current.length > 0 ? '課表同步失敗' : '找不到課表資料');
-        }
-        return;
-      }
-
-      if (data.t === 'html') {
-        const rawHtml = typeof data.h === 'string' ? data.h : '';
-        const htmlPreview = rawHtml
-          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 180);
-        setDebugHtmlPreview(htmlPreview);
-        const parsed = sanitizeCourseList(parseScheduleFromHtml(rawHtml));
-        if (await persistCourses(parsed)) {
-          finish();
-        } else {
-          retrySync(coursesRef.current.length > 0 ? '課表同步失敗' : '找不到課表資料');
-        }
-        return;
-      }
-
-      if (data.t === 'err') {
-        if (
-          (phaseRef.current === 'open_schedule' || phaseRef.current === 'syncing') &&
-          typeof data.m === 'string' &&
-          /Network request failed|Login request timed out|Login request aborted/i.test(data.m)
-        ) {
-          return;
-        }
-        const message = data.m ? `課表同步失敗：${data.m}` : '課表同步失敗';
-        if (phaseRef.current === 'syncing') retrySync(message);
-        else finish(message);
-      }
-    } catch {
-      finish('課表同步失敗，解析訊息時發生錯誤');
-    }
-  }, [finish, persistCourses, retrySync]);
-
-  const loadCachedCourses = useCallback(async () => {
-    const cached = await getCourses();
-
-    if (cached.courses && !cached.mock) {
-      setCoursesState(cached.courses);
-      setLastUpdatedAt(cached.updatedAt);
-      return { hasCachedCourses: cached.courses.length > 0 };
-    }
-
-    if (cached.mock) {
-      setCoursesState([]);
-      setLastUpdatedAt(cached.updatedAt);
-      setStatusText('目前只有示範資料，請重新同步課表');
-      setLoading(false);
-      return { hasCachedCourses: false };
-    }
-
-    setCoursesState([]);
-    setLastUpdatedAt(null);
-    return { hasCachedCourses: false };
-  }, []);
+    triggerMenuRefresh();
+  }, [manualRefreshTick, triggerMenuRefresh]);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      let interactionTask: { cancel?: () => void } | null = null;
 
-      const syncOnFocus = async () => {
+      const init = async () => {
         const debugEnabled = await getDeveloperDebugEnabled();
         if (!active) return;
-
-        const { hasCachedCourses } = await loadCachedCourses();
-        if (!active) return;
-
         setDeveloperDebugEnabled(debugEnabled);
 
-        const launchSync = () => {
-          if (!active) return;
-          void startFetch({ silent: hasCachedCourses });
-        };
+        await hydrate();
+        if (!active) return;
 
-        if (hasCachedCourses) {
-          interactionTask = InteractionManager.runAfterInteractions(launchSync);
-          return;
+        // Auto-sync if no courses cached
+        if (courses.length === 0) {
+          void sync({ silent: true, priority: 5 });
         }
-
-        launchSync();
       };
 
-      void syncOnFocus();
+      void init();
 
       return () => {
         active = false;
-        if (interactionTask?.cancel) {
-          interactionTask.cancel();
-          interactionTask = null;
-        }
-        clearPendingTimeout();
       };
-    }, [loadCachedCourses, startFetch])
-  );
-
-  useEffect(() => {
-    if (!__DEV__) return;
-    if (developerDebugEnabled) {
-      setShowWebView(true);
-      return;
-    }
-    if (!loading && phaseRef.current === 'done') {
-      setShowWebView(false);
-    }
-  }, [developerDebugEnabled, loading]);
-
-  const renderSyncWebView = () => (
-    <WebView
-      key={webViewKey}
-      ref={webViewRef}
-      style={keepWebViewVisibleForDebug ? styles.debugWebViewInner : styles.hiddenWebViewInner}
-      source={{ uri: DEFAULT_URL }}
-      originWhitelist={['*']}
-      sharedCookiesEnabled
-      thirdPartyCookiesEnabled
-      domStorageEnabled
-      cacheEnabled={false}
-      userAgent={userAgent}
-      onNavigationStateChange={handleNavChange}
-      onMessage={handleMessage}
-      onLoadEnd={(event) => {
-        const currentUrl = event.nativeEvent.url || '';
-        setDebugUrl(currentUrl);
-        if (phaseRef.current === 'load_ecampus') {
-          setStatusText('頁面已載入，準備登入中...');
-          return;
-        }
-        if (phaseRef.current === 'syncing' && isScheduleQueryUrl(currentUrl)) {
-          setTimeout(() => {
-            injectScheduleScript('loadend', currentUrl, 1600);
-          }, 400);
-        }
-      }}
-      onError={() => finish(coursesRef.current.length > 0 ? '課表頁面載入失敗，已保留舊資料' : '課表頁面載入失敗')}
-      javaScriptEnabled
-    />
+    }, [hydrate, sync, courses.length])
   );
 
   const renderSection = (dayIndex: number, title: string) => {
@@ -683,10 +319,6 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
     );
   };
 
-  const handlePullRefresh = () => {
-    void startFetch({ manual: true, silent: false, source: 'pull' });
-  };
-
   return (
     <>
       <ScrollView
@@ -703,9 +335,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
           />
         )}
       >
-        {showWebView && !keepWebViewVisibleForDebug ? <View style={styles.hiddenWebView}>{renderSyncWebView()}</View> : null}
-
-        <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+        <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <View style={styles.heroHeader}>
             <AppSymbol name="clock.fill" size={28} tintColor={theme.primary} fallback={<Text>課表</Text>} />
             <Text style={[styles.heroTitle, { color: theme.text }]}>課程</Text>
@@ -724,20 +354,20 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
             ]}
           >
             {hasCurrentCourse ? (
-              <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
+              <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}>
                 <View style={[styles.summaryPill, styles.summaryPillActive, { backgroundColor: theme.primary }]}>
                   <Text style={styles.summaryPillActiveText}>上課中</Text>
                 </View>
-                <Text style={[styles.summaryCourse, { color: theme.text }]}> 
-                  {currentCourse ? currentCourse.course.name : '目前沒有上課中的課程'}
+                <Text style={[styles.summaryCourse, { color: theme.text }]}>
+                  {currentCourse.course.name}
                 </Text>
-                <Text style={[styles.summaryMeta, { color: theme.textSub }]}> 
-                  {currentCourse ? formatSummaryMeta(currentCourse) : '現在沒有進行中的課程'}
+                <Text style={[styles.summaryMeta, { color: theme.textSub }]}>
+                  {formatSummaryMeta(currentCourse)}
                 </Text>
               </View>
             ) : null}
 
-            <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}> 
+            <View style={[styles.summaryItem, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}>
               <View
                 style={[
                   styles.summaryPill,
@@ -756,55 +386,40 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                   下節課
                 </Text>
               </View>
-              <Text style={[styles.summaryCourse, { color: theme.text }]}> 
+              <Text style={[styles.summaryCourse, { color: theme.text }]}>
                 {nextCourse ? nextCourse.course.name : '目前沒有下一節課'}
               </Text>
-              <Text style={[styles.summaryMeta, { color: theme.textSub }]}> 
+              <Text style={[styles.summaryMeta, { color: theme.textSub }]}>
                 {nextCourse ? formatSummaryMeta(nextCourse) : '目前沒有可顯示的後續課程'}
               </Text>
             </View>
           </Animated.View>
-
         </View>
 
-        {keepWebViewVisibleForDebug ? (
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+        {developerDebugEnabled ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
             <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 資訊</Text>
-            <Text style={[styles.debugText, { color: theme.textSub }]} numberOfLines={2}>
-              URL: {debugUrl || DEFAULT_URL}
+            <Text style={[styles.debugText, { color: theme.textSub }]}>
+              Status: {syncStatus} | Error: {error ?? '-'}
             </Text>
-            <Text style={[styles.debugText, { color: theme.textSub }]} numberOfLines={2}>
-              Event: {debugNote || '-'}
-            </Text>
-            {debugHtmlPreview ? (
-              <Text style={[styles.debugText, { color: theme.textSub }]} numberOfLines={4}>
-                HTML: {debugHtmlPreview}
-              </Text>
-            ) : null}
           </View>
         ) : null}
 
-        {showWebView && keepWebViewVisibleForDebug ? (
-          <View style={[styles.debugWebViewCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            {renderSyncWebView()}
-          </View>
-        ) : null}
-
-        {loading && courses.length === 0 ? (
-          <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+        {isLoading ? (
+          <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
             <ActivityIndicator size="small" color={theme.primary} />
-            <Text style={[styles.statusText, { color: theme.textSub, marginTop: 10 }]}>{statusText || '正在讀取課表資料...'}</Text>
+            <Text style={[styles.statusText, { color: theme.textSub, marginTop: 10 }]}>正在讀取課表資料...</Text>
           </View>
         ) : null}
 
-        {!loading && statusText && (statusText.includes('失敗') || statusText.includes('請先登入')) ? (
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+        {!isLoading && error ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
             <Text style={[styles.noticeTitle, { color: theme.text }]}>同步狀態</Text>
-            <Text style={[styles.noticeText, { color: theme.textSub }]}>{statusText}</Text>
+            <Text style={[styles.noticeText, { color: theme.textSub }]}>{error}</Text>
           </View>
         ) : null}
 
-        {courses.length === 0 && !loading && !statusText && phaseRef.current === 'idle' ? (
+        {courses.length === 0 && !isLoading && !error ? (
           <View style={styles.emptyState}>
             <AppSymbol name="clock.fill" size={60} tintColor={theme.textSub} fallback={<Text>課表</Text>} />
             <Text style={[styles.emptyText, { color: theme.textSub }]}>目前沒有課表資料</Text>
@@ -818,7 +433,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {keepWebViewVisibleForDebug ? <DebugStamp label="DBG-SCHEDULE-CLEAN" /> : null}
+      {developerDebugEnabled ? <DebugStamp label="DBG-SCHEDULE-CLEAN" /> : null}
     </>
   );
 }
@@ -826,11 +441,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
-  hiddenWebView: { position: 'absolute', width: 1, height: 1, opacity: 0, left: -1000, top: -1000 },
-  hiddenWebViewInner: { width: 1, height: 1 },
   debugText: { fontSize: 12, lineHeight: 18 },
-  debugWebViewCard: { borderRadius: 24, borderWidth: 1, overflow: 'hidden', minHeight: 420, marginBottom: 16 },
-  debugWebViewInner: { width: '100%', height: 420 },
   heroCard: {
     borderRadius: 28,
     padding: 22,
