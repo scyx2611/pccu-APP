@@ -35,7 +35,7 @@ const INSIDE_URL = 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx';
 const TUTORING_DIRECT_URL = 'https://icas.pccu.edu.tw/cfp/';
 
 const DEBOUNCE_MS = 2000;
-const LOGIN_TIMEOUT_MS = 30_000;
+const SESSION_ACTIVITY_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 2;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ export function useTutoringSync({
 
   // Stable refs for sync session state
   const credRef = useRef<PCCUCredentials | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryRef = useRef(0);
   const silentSyncRef = useRef(false);
   const lastSyncRef = useRef<number>(0);
@@ -106,10 +106,10 @@ export function useTutoringSync({
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  const clearPendingTimeout = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+  const clearSessionWatchdog = useCallback(() => {
+    if (sessionWatchdogRef.current) {
+      clearTimeout(sessionWatchdogRef.current);
+      sessionWatchdogRef.current = null;
     }
   }, []);
 
@@ -129,7 +129,7 @@ export function useTutoringSync({
     (message?: string) => {
       const finalMessage =
         message || (silentSyncRef.current ? '課業資料已更新' : '課業資料同步完成');
-      clearPendingTimeout();
+      clearSessionWatchdog();
       releaseSessionLease();
       setPhase('complete');
       retryRef.current = 0;
@@ -137,7 +137,34 @@ export function useTutoringSync({
       setSyncStatus('idle');
       setStatusText(finalMessage);
     },
-    [clearPendingTimeout, releaseSessionLease, setPhase, setSyncStatus],
+    [clearSessionWatchdog, releaseSessionLease, setPhase, setSyncStatus],
+  );
+
+  const armSessionWatchdog = useCallback(
+    (syncRunId: number) => {
+      if (!sessionLeaseRef.current || unmountedRef.current || syncRunRef.current !== syncRunId) {
+        return;
+      }
+
+      clearSessionWatchdog();
+      sessionWatchdogRef.current = setTimeout(() => {
+        if (!sessionLeaseRef.current || unmountedRef.current || syncRunRef.current !== syncRunId) {
+          return;
+        }
+
+        const timedOutDuringLogin = phaseRef.current === 'logging_in';
+        finish(
+          courses.length > 0
+            ? timedOutDuringLogin
+              ? '登入逾時，已保留舊資料'
+              : '同步逾時，已保留舊資料'
+            : timedOutDuringLogin
+              ? '登入逾時'
+              : '同步逾時'
+        );
+      }, SESSION_ACTIVITY_TIMEOUT_MS);
+    },
+    [clearSessionWatchdog, courses.length, finish]
   );
 
   /** Retry the sync from the overview script. */
@@ -212,13 +239,7 @@ export function useTutoringSync({
       setPhase('logging_in');
       setStatusText(silent ? '背景更新課業資料中...' : '開始同步課業資料...');
 
-      clearPendingTimeout();
-      // 30-second timeout specifically for the logging_in phase
-      timeoutRef.current = setTimeout(() => {
-        if (phaseRef.current === 'logging_in') {
-          finish(courses.length > 0 ? '登入逾時，已保留舊資料' : '登入逾時');
-        }
-      }, LOGIN_TIMEOUT_MS);
+      armSessionWatchdog(syncRunId);
 
       // Signal the WebView to reload (the screen manages the WebView key/lifecycle)
       // The hook does NOT directly manipulate WebView visibility — that stays in the screen.
@@ -226,7 +247,7 @@ export function useTutoringSync({
     },
     [
       courses.length,
-      clearPendingTimeout,
+      armSessionWatchdog,
       finish,
       setError,
       setPhase,
@@ -240,16 +261,20 @@ export function useTutoringSync({
 
     return () => {
       unmountedRef.current = true;
-      clearPendingTimeout();
+      clearSessionWatchdog();
       releaseSessionLease();
     };
-  }, [clearPendingTimeout, releaseSessionLease]);
+  }, [clearSessionWatchdog, releaseSessionLease]);
 
   // ─── handleNavChange ─────────────────────────────────────────────────────
 
   const handleNavChange = useCallback(
     (nav: WebViewNavigation) => {
       if (nav.loading) return;
+
+      if (sessionLeaseRef.current) {
+        armSessionWatchdog(syncRunRef.current);
+      }
 
       const url = nav.url || '';
       const title = nav.title || '';
@@ -302,7 +327,7 @@ export function useTutoringSync({
         }
       }
     },
-    [finish, setPhase, webViewRef],
+    [armSessionWatchdog, finish, setPhase, webViewRef],
   );
 
   // ─── handleMessage ───────────────────────────────────────────────────────
@@ -311,6 +336,10 @@ export function useTutoringSync({
     async (event: { nativeEvent: { data: string } }) => {
       try {
         const data = JSON.parse(event.nativeEvent.data);
+
+        if (sessionLeaseRef.current) {
+          armSessionWatchdog(syncRunRef.current);
+        }
 
         // ── Diagnostic / status messages (no phase change) ──
 
@@ -451,7 +480,7 @@ export function useTutoringSync({
         finish('同步失敗，解析訊息時發生錯誤');
       }
     },
-    [finish, retrySync, setPhase, storeSetCourses, storeSetPendingAssignments, storeSetSemester, storeSetWelcomeText, storeSetLastSyncedAt, webViewRef],
+    [armSessionWatchdog, finish, retrySync, setPhase, storeSetCourses, storeSetPendingAssignments, storeSetSemester, storeSetWelcomeText, storeSetLastSyncedAt, webViewRef],
   );
 
   // ─── Return ──────────────────────────────────────────────────────────────

@@ -31,6 +31,10 @@ import { pccuBrowserSessionGate } from '../../../pccu/engine/pccuBrowserSessionG
 import { useTutoringSync } from '../useTutoringSync';
 import { useTutoringStore } from '../../store/useTutoringStore';
 
+const flushMicrotasks = async () => {
+  await Promise.resolve();
+};
+
 describe('useTutoringSync PCCU session gate', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -107,6 +111,105 @@ describe('useTutoringSync PCCU session gate', () => {
     const nextLease = await nextLeasePromise;
     expect(nextAcquired).toBe(true);
     expect(result.current.phaseRef.current).toBe('complete');
+    nextLease.release();
+  });
+
+  it('releases the PCCU gate after a successful tutoring completion', async () => {
+    const webViewRef = { current: { injectJavaScript: jest.fn() } } as any;
+    const { result } = renderHook(() => useTutoringSync({ webViewRef }));
+
+    await act(async () => {
+      await result.current.startSync();
+    });
+
+    await act(async () => {
+      await result.current.handleMessage({
+        nativeEvent: { data: JSON.stringify({ t: 'pending', items: [] }) },
+      });
+    });
+
+    expect(result.current.phaseRef.current).toBe('complete');
+    expect(pccuBrowserSessionGate.isLocked()).toBe(false);
+
+    const nextLease = await pccuBrowserSessionGate.acquire('schedule');
+    expect(nextLease.owner).toBe('schedule');
+    nextLease.release();
+  });
+
+  it('releases the PCCU gate when tutoring times out after gate acquisition', async () => {
+    const webViewRef = { current: { injectJavaScript: jest.fn() } } as any;
+    const { result } = renderHook(() => useTutoringSync({ webViewRef }));
+
+    await act(async () => {
+      await result.current.startSync();
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+      await flushMicrotasks();
+    });
+
+    expect(result.current.phaseRef.current).toBe('complete');
+    expect(result.current.statusText).toBe('登入逾時');
+    expect(pccuBrowserSessionGate.isLocked()).toBe(false);
+
+    const nextLease = await pccuBrowserSessionGate.acquire('schedule');
+    expect(nextLease.owner).toBe('schedule');
+    nextLease.release();
+  });
+
+  it('releases the PCCU gate when the tutoring hook unmounts mid-sync', async () => {
+    const webViewRef = { current: { injectJavaScript: jest.fn() } } as any;
+    const { result, unmount } = renderHook(() => useTutoringSync({ webViewRef }));
+
+    await act(async () => {
+      await result.current.startSync();
+    });
+
+    unmount();
+
+    expect(pccuBrowserSessionGate.isLocked()).toBe(false);
+
+    const nextLease = await pccuBrowserSessionGate.acquire('schedule');
+    expect(nextLease.owner).toBe('schedule');
+    nextLease.release();
+  });
+
+  it('releases the PCCU gate if tutoring stalls after login so the next caller is not blocked forever', async () => {
+    const webViewRef = { current: { injectJavaScript: jest.fn() } } as any;
+    const { result } = renderHook(() => useTutoringSync({ webViewRef }));
+
+    await act(async () => {
+      await result.current.startSync();
+    });
+
+    await act(async () => {
+      result.current.handleNavChange({
+        loading: false,
+        url: 'https://icas.pccu.edu.tw/cfp/',
+        title: 'Tutoring',
+      } as any);
+    });
+
+    let nextAcquired = false;
+    const nextLeasePromise = pccuBrowserSessionGate.acquire('schedule').then((lease) => {
+      nextAcquired = true;
+      return lease;
+    });
+
+    await flushMicrotasks();
+    expect(nextAcquired).toBe(false);
+    expect(result.current.phaseRef.current).toBe('fetching_courses');
+
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+      await flushMicrotasks();
+    });
+
+    const nextLease = await nextLeasePromise;
+    expect(nextAcquired).toBe(true);
+    expect(result.current.phaseRef.current).toBe('complete');
+    expect(result.current.statusText).toBe('同步逾時');
     nextLease.release();
   });
 });
