@@ -28,7 +28,9 @@ export function useScheduleSync() {
         syncInProgressRef.current = true;
         if (!silent) setSyncStatus('syncing');
 
-        const result = await PccuSyncEngine.getInstance().requestSync('schedule', priority);
+        const engine = PccuSyncEngine.getInstance();
+        await engine.waitForExecutorReady();
+        const result = await engine.requestSync('schedule', priority);
 
         if (result?.success) {
           const updatedAt = result.updatedAt ?? Date.now();

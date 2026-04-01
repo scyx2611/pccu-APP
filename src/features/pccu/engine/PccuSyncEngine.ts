@@ -102,6 +102,8 @@ class PriorityQueue {
 
 const TASK_TIMEOUT_MS = 30_000; // 30 seconds per task
 const PROCESSING_DELAY_MS = 300; // small delay between queued tasks
+const EXECUTOR_READY_TIMEOUT_MS = 2_000;
+const EXECUTOR_READY_POLL_MS = 50;
 
 let instance: PccuSyncEngine | null = null;
 
@@ -178,6 +180,32 @@ export class PccuSyncEngine {
 
   isExecutorReady(): boolean {
     return this.executorRecord !== null;
+  }
+
+  waitForExecutorReady(timeoutMs = EXECUTOR_READY_TIMEOUT_MS, pollIntervalMs = EXECUTOR_READY_POLL_MS): Promise<void> {
+    if (this.isExecutorReady()) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+
+      const poll = () => {
+        if (this.isExecutorReady()) {
+          resolve();
+          return;
+        }
+
+        if (Date.now() - startedAt >= timeoutMs) {
+          reject(new Error('Sync executor not ready. Shared scraper did not mount in time.'));
+          return;
+        }
+
+        setTimeout(poll, pollIntervalMs);
+      };
+
+      poll();
+    });
   }
 
   /**

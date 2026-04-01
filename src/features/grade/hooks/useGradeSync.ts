@@ -28,7 +28,9 @@ export function useGradeSync() {
         syncInProgressRef.current = true;
         if (!silent) setSyncStatus('syncing');
 
-        const result = await PccuSyncEngine.getInstance().requestSync('grade', priority);
+        const engine = PccuSyncEngine.getInstance();
+        await engine.waitForExecutorReady();
+        const result = await engine.requestSync('grade', priority);
 
         if (result?.success) {
           const updatedAt = result.updatedAt ?? Date.now();
