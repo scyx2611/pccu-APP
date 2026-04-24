@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
 import {
@@ -52,6 +52,15 @@ import {
   setAllAssignments,
 } from '../../tutoring/storage/tutoringStorage';
 import { useTutoringStore } from '../../tutoring/store/useTutoringStore';
+import {
+  getDeveloperDebugEnabled,
+  subscribeDeveloperDebugEnabled,
+} from '../../settings/storage/developerSettings';
+import {
+  getScraperDebugPreviewFrame,
+  subscribeScraperDebugPreviewFrame,
+  type ScraperDebugPreviewFrame,
+} from './scraperDebugPreview';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -161,7 +170,8 @@ export default function GlobalScraperWebView() {
   const unmountedRef = useRef(false);
   const [trafficUrl, setTrafficUrl] = useState(withTimestamp(TRAFFIC_DOWNHILL_URL));
   const [sourceUri, setSourceUri] = useState(PCCU_DEFAULT_URL);
-  const [debugVisible] = useState(false);
+  const [debugVisible, setDebugVisible] = useState(false);
+  const [debugFrame, setDebugFrame] = useState<ScraperDebugPreviewFrame | null>(() => getScraperDebugPreviewFrame());
   const [debugUrl, setDebugUrl] = useState(PCCU_DEFAULT_URL);
   const [debugMessage, setDebugMessage] = useState('idle');
 
@@ -172,6 +182,28 @@ export default function GlobalScraperWebView() {
 
   const updateDebugMessage = useCallback((message: string) => {
     setDebugMessage(message);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const applyDebugVisibility = (enabled: boolean) => {
+      if (!active) return;
+      setDebugVisible(__DEV__ && enabled);
+    };
+
+    void getDeveloperDebugEnabled().then(applyDebugVisibility);
+    const unsubscribe = subscribeDeveloperDebugEnabled(applyDebugVisibility);
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    setDebugFrame(getScraperDebugPreviewFrame());
+    return subscribeScraperDebugPreviewFrame(setDebugFrame);
   }, []);
 
   // -----------------------------------------------------------------------
@@ -534,13 +566,34 @@ export default function GlobalScraperWebView() {
 
         if (url.includes('inside.aspx')) {
           pending.lastHandledUrl = url;
-          pccuPhaseRef.current = 'open_target';
-          openPccuTarget(type, 'inside', 1200);
+          if (pccuPhaseRef.current === 'open_target') {
+            openPccuTarget(type, 'inside', 1200);
+            return;
+          }
+          if (pccuPhaseRef.current === 'logging_in') {
+            setTimeout(runLogin, 600);
+          }
           return;
         }
 
         if (pccuPhaseRef.current === 'open_target' && isTransUrlForType(url, type)) {
           pending.lastHandledUrl = url;
+          if (type === 'schedule') {
+            pccuPhaseRef.current = 'syncing';
+            setTimeout(() => {
+              const activePending = pendingRef.current;
+              if (
+                !activePending ||
+                activePending.completed ||
+                activePending.request.id !== pending.request.id ||
+                activePending.lastHandledUrl !== url
+              ) {
+                return;
+              }
+              injectPccuScript('schedule', 'transurl', url);
+            }, 1200);
+            return;
+          }
           openPccuTarget(type, 'transurl', 400);
           return;
         }
@@ -576,11 +629,16 @@ export default function GlobalScraperWebView() {
         console.log('[global-scraper][nav][pccu-tutoring]', tutoringPhaseRef.current, url);
 
         if (url.includes('inside.aspx')) {
-          tutoringPhaseRef.current = 'open_target';
-          useTutoringStore.getState().setSyncPhase('logging_in');
-          setTimeout(() => {
-            webViewRef.current?.injectJavaScript(buildServiceOpenScript('1202'));
-          }, 1200);
+          if (tutoringPhaseRef.current === 'open_target') {
+            useTutoringStore.getState().setSyncPhase('logging_in');
+            setTimeout(() => {
+              webViewRef.current?.injectJavaScript(buildServiceOpenScript('1202'));
+            }, 1200);
+            return;
+          }
+          if (tutoringPhaseRef.current === 'logging_in') {
+            setTimeout(runLogin, 600);
+          }
           return;
         }
 
@@ -654,27 +712,11 @@ export default function GlobalScraperWebView() {
             return;
           }
 
-      const debugTargetUrl = type === 'schedule'
-        ? 'https://ecampus.pccu.edu.tw/eCampus/queryCourse/queryByStudent.asp?QuerySource=queryCourse'
-        : 'https://ap2.pccu.edu.tw/studentscore/student/index.asp';
-      const shouldForceTargetFromPopup =
-        type === 'schedule' &&
-        typeof data.url === 'string' &&
-        /TransUrl\.aspx\?PrjNo=1208/i.test(data.url);
-
-      if (shouldForceTargetFromPopup) {
-        pccuPhaseRef.current = 'syncing';
-        pending.lastHandledUrl = debugTargetUrl;
-        updateDebugMessage(`popup-force:${type}:${debugTargetUrl}`);
-        webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(debugTargetUrl)};true;`);
-        return;
-      }
-
-      if (data.t === 'popup') {
-        pending.lastHandledUrl = '';
-        webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(data.url)};true;`);
-        return;
-      }
+          if (data.t === 'popup') {
+            pending.lastHandledUrl = '';
+            webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(data.url)};true;`);
+            return;
+          }
 
           if (data.t === 'html' && type === 'grade') {
             const parsed = parseGradesFromHtml(typeof data.h === 'string' ? data.h : '');
@@ -933,6 +975,22 @@ export default function GlobalScraperWebView() {
         if (pccuPhaseRef.current === 'open_target' && isTransUrlForType(currentUrl, type)) {
           updateDebugMessage(`loadend:${pccuPhaseRef.current}:${type}:${currentUrl}`);
           pending.lastHandledUrl = currentUrl;
+          if (type === 'schedule') {
+            pccuPhaseRef.current = 'syncing';
+            setTimeout(() => {
+              const activePending = pendingRef.current;
+              if (
+                !activePending ||
+                activePending.completed ||
+                activePending.request.id !== pending.request.id ||
+                activePending.lastHandledUrl !== currentUrl
+              ) {
+                return;
+              }
+              injectPccuScript('schedule', 'loadend-transurl', currentUrl, 1600);
+            }, 400);
+            return;
+          }
           openPccuTarget(type, 'loadend-transurl', 400);
         }
       } else if (mode === 'pccu-tutoring') {
@@ -945,6 +1003,48 @@ export default function GlobalScraperWebView() {
     },
     [runLogin, injectPccuScript, openPccuTarget, updateDebugMessage]
   );
+
+  const handleOpenWindow = useCallback(
+    (event: any) => {
+      const targetUrl = String(event?.nativeEvent?.targetUrl || '');
+      if (!targetUrl) return;
+
+      const pending = pendingRef.current;
+      if (!pending) return;
+
+      pending.request.refreshTimeout?.();
+
+      const mode = activeModeRef.current;
+      const phase =
+        mode === 'pccu-tutoring'
+          ? tutoringPhaseRef.current
+          : mode === 'traffic'
+            ? trafficPhaseRef.current
+            : pccuPhaseRef.current;
+
+      updateDebugMessage(`openwindow:${phase}:${pending.request.type}:${targetUrl}`);
+      console.log('[global-scraper][openwindow]', mode, pending.request.type, targetUrl);
+
+      pending.lastHandledUrl = '';
+      webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(targetUrl)};true;`);
+    },
+    [updateDebugMessage]
+  );
+
+  const handleDebugRefresh = useCallback(() => {
+    const pending = pendingRef.current;
+    const mode = activeModeRef.current;
+    const phase =
+      mode === 'pccu-tutoring'
+        ? tutoringPhaseRef.current
+        : mode === 'traffic'
+          ? trafficPhaseRef.current
+          : pccuPhaseRef.current;
+
+    pending?.request.refreshTimeout?.();
+    updateDebugMessage(`manual-refresh:${phase}:${pending?.request.type ?? 'none'}`);
+    webViewRef.current?.reload?.();
+  }, [updateDebugMessage]);
 
   // -----------------------------------------------------------------------
   // Traffic URL effect — when trafficUrl changes, navigate the WebView
@@ -1037,13 +1137,33 @@ export default function GlobalScraperWebView() {
       ? tutoringPhaseRef.current
       : pccuPhaseRef.current;
   const debugType = pendingRef.current?.request.type ?? 'none';
+  const showDebugPreview = debugVisible && !!debugFrame;
+  const debugPreviewStyle = showDebugPreview ? styles.debugWebView : styles.hiddenInner;
 
   return (
-    <View style={debugVisible ? styles.debugContainer : styles.hidden} pointerEvents="box-none">
+    <View
+      testID="scraper-debug-panel"
+      style={
+        showDebugPreview
+          ? [
+              styles.debugContainer,
+              {
+                left: debugFrame?.x ?? 0,
+                top: debugFrame?.y ?? 0,
+                width: debugFrame?.width ?? 0,
+                height: debugFrame?.height ?? 0,
+              },
+            ]
+          : styles.hidden
+      }
+      pointerEvents={showDebugPreview ? 'box-none' : 'none'}
+    >
       <WebView
         ref={webViewRef}
-        style={debugVisible ? styles.debugWebView : styles.hiddenInner}
+        style={debugPreviewStyle}
+        pointerEvents={showDebugPreview ? 'auto' : 'none'}
         source={{ uri: activeUri }}
+        containerStyle={showDebugPreview ? styles.debugWebViewContainer : styles.hiddenInner}
         originWhitelist={['*']}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
@@ -1052,17 +1172,35 @@ export default function GlobalScraperWebView() {
         userAgent={USER_AGENT}
         onNavigationStateChange={handleNavChange}
         onMessage={handleMessage}
+        onOpenWindow={handleOpenWindow}
         onLoadEnd={handleLoadEnd}
         onError={handleError}
+        javaScriptCanOpenWindowsAutomatically
         javaScriptEnabled
       />
-      {debugVisible ? (
-        <View style={styles.debugOverlay}>
-          <Text style={styles.debugText}>mode: {activeModeRef.current}</Text>
-          <Text style={styles.debugText}>type: {debugType}</Text>
-          <Text style={styles.debugText}>phase: {debugPhase}</Text>
-          <Text style={styles.debugText} numberOfLines={2}>msg: {debugMessage}</Text>
-          <Text style={styles.debugText} numberOfLines={3}>url: {debugUrl}</Text>
+      {showDebugPreview ? (
+        <View style={styles.debugOverlay} pointerEvents="box-none">
+          <View style={styles.debugHeaderRow}>
+            <View style={styles.debugTitleBlock}>
+              <Text style={styles.debugTitle}>LIVE SCRAPER PREVIEW</Text>
+              <Text style={styles.debugSlotHint}>顯示於頁面 Debug 框內</Text>
+            </View>
+            <Pressable
+              testID="scraper-debug-refresh-button"
+              onPress={handleDebugRefresh}
+              style={styles.debugRefreshButton}
+              accessibilityRole="button"
+              accessibilityLabel="重新整理 scraper 預覽"
+            >
+              <Text style={styles.debugRefreshText}>重新整理</Text>
+              <Text style={styles.debugRefreshVisibleText}>重新整理</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.debugText} numberOfLines={1}>
+            {activeModeRef.current} / {debugType} / {debugPhase}
+          </Text>
+          <Text style={styles.debugText} numberOfLines={1}>msg: {debugMessage}</Text>
+          <Text style={styles.debugText} numberOfLines={1}>url: {debugUrl}</Text>
         </View>
       ) : null}
     </View>
@@ -1072,23 +1210,73 @@ export default function GlobalScraperWebView() {
 const styles = StyleSheet.create({
   debugContainer: {
     position: 'absolute',
-    inset: 0,
-    backgroundColor: '#111',
+    zIndex: 10000,
+    elevation: 10000,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   debugWebView: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#fff',
+  },
+  debugWebViewContainer: {
     flex: 1,
-    marginTop: 112,
+    backgroundColor: '#fff',
   },
   debugOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    minHeight: 112,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.82)',
-    gap: 4,
+    top: 8,
+    left: 8,
+    right: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    gap: 2,
+  },
+  debugHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  debugTitleBlock: {
+    flex: 1,
+    minHeight: 30,
+    justifyContent: 'center',
+  },
+  debugTitle: {
+    color: '#7DFF9A',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    flex: 1,
+  },
+  debugSlotHint: {
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  debugRefreshButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(125, 255, 154, 0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(125, 255, 154, 0.5)',
+  },
+  debugRefreshText: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    opacity: 0,
+  },
+  debugRefreshVisibleText: {
+    color: '#7DFF9A',
+    fontSize: 11,
+    fontWeight: '800',
   },
   debugText: {
     color: '#fff',

@@ -268,9 +268,16 @@ export class PccuSyncEngine {
    */
   resume(): void {
     if (this.state !== 'paused') return;
-    this.state = 'idle';
     this._pausedReason = null;
     console.log('[PccuSyncEngine] Resumed');
+
+    if (this.activeRequest) {
+      this.state = 'processing';
+      this.startOrRefreshTimeout(this.activeRequest);
+      return;
+    }
+
+    this.state = 'idle';
     this.processQueue();
   }
 
@@ -417,6 +424,8 @@ export class PccuSyncEngine {
       this.state = 'idle';
       return;
     }
+
+    this.state = 'idle';
 
     // Small delay between tasks to avoid overwhelming the WebView
     this.processingTimer = setTimeout(() => {

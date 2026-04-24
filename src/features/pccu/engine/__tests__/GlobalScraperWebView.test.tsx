@@ -4,6 +4,7 @@ const mockGetSavedPCCUCredentials = jest.fn(async () => ({
 }));
 
 const mockInjectJavaScript = jest.fn();
+const mockReload = jest.fn();
 const webViewPropsRef: { current: any | null } = { current: null };
 
 jest.mock('react-native-webview', () => {
@@ -14,6 +15,7 @@ jest.mock('react-native-webview', () => {
       webViewPropsRef.current = props;
       React.useImperativeHandle(ref, () => ({
         injectJavaScript: mockInjectJavaScript,
+        reload: mockReload,
       }));
 
       return null;
@@ -102,30 +104,45 @@ jest.mock('../../../tutoring/store/useTutoringStore', () => ({
 }));
 
 import React from 'react';
-import { act, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 
 import GlobalScraperWebView from '../GlobalScraperWebView';
 import { PccuSyncEngine } from '../PccuSyncEngine';
 import { pccuBrowserSessionGate } from '../pccuBrowserSessionGate';
 import {
   buildAdaptiveSchedulePageScript,
+  buildRobustGradePageScript,
   buildServiceOpenScript,
 } from '../../sync/pccuSyncScripts';
+import { setDeveloperDebugEnabled } from '../../../settings/storage/developerSettings';
+import {
+  clearScraperDebugPreviewFrame,
+  setScraperDebugPreviewFrame,
+} from '../scraperDebugPreview';
 
 describe('GlobalScraperWebView PCCU session gate', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.useFakeTimers();
     PccuSyncEngine.resetInstance();
     pccuBrowserSessionGate.resetForTests();
+    await setDeveloperDebugEnabled(false);
+    clearScraperDebugPreviewFrame();
     mockGetSavedPCCUCredentials.mockClear();
     mockInjectJavaScript.mockClear();
+    mockReload.mockClear();
     (buildAdaptiveSchedulePageScript as jest.Mock).mockClear();
+    (buildRobustGradePageScript as jest.Mock).mockClear();
     (buildServiceOpenScript as jest.Mock).mockClear();
     webViewPropsRef.current = null;
   });
 
-  afterEach(() => {
-    jest.runOnlyPendingTimers();
+  afterEach(async () => {
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      clearScraperDebugPreviewFrame();
+      await Promise.resolve();
+    });
     jest.useRealTimers();
     PccuSyncEngine.resetInstance();
     pccuBrowserSessionGate.resetForTests();
@@ -160,6 +177,93 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     expect((error as Error).message).toBe(
       'Sync executor became unavailable. Shared scraper was unmounted.'
     );
+  });
+
+  it('renders the live scraper preview only inside a registered debug slot', async () => {
+    const rendered = render(<GlobalScraperWebView />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(rendered.queryByText('LIVE SCRAPER PREVIEW')).toBeNull();
+
+    await act(async () => {
+      await setDeveloperDebugEnabled(true);
+      await Promise.resolve();
+    });
+
+    expect(rendered.queryByText('LIVE SCRAPER PREVIEW')).toBeNull();
+    expect(webViewPropsRef.current?.pointerEvents).toBe('none');
+
+    await act(async () => {
+      setScraperDebugPreviewFrame({ x: 24, y: 320, width: 340, height: 260 });
+      await Promise.resolve();
+    });
+
+    expect(rendered.getByText('LIVE SCRAPER PREVIEW')).toBeTruthy();
+    const panelStyle = StyleSheet.flatten(rendered.getByTestId('scraper-debug-panel').props.style);
+    expect(panelStyle.position).toBe('absolute');
+    expect(panelStyle.backgroundColor).toBe('#fff');
+    expect(panelStyle.left).toBe(24);
+    expect(panelStyle.top).toBe(320);
+    expect(panelStyle.width).toBe(340);
+    expect(panelStyle.height).toBe(260);
+    expect(rendered.queryByTestId('scraper-debug-drag-handle')).toBeNull();
+    const previewStyle = StyleSheet.flatten(webViewPropsRef.current?.style);
+    const previewContainerStyle = StyleSheet.flatten(webViewPropsRef.current?.containerStyle);
+
+    expect(previewStyle.width).toBe('100%');
+    expect(previewStyle.height).toBe('100%');
+    expect(previewStyle.transform).toBeUndefined();
+    expect(previewStyle.backgroundColor).toBe('#fff');
+    expect(previewContainerStyle.backgroundColor).toBe('#fff');
+    expect(webViewPropsRef.current?.pointerEvents).toBe('auto');
+
+    fireEvent.press(rendered.getByTestId('scraper-debug-refresh-button'));
+    expect(mockReload).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      clearScraperDebugPreviewFrame();
+      await Promise.resolve();
+    });
+
+    expect(rendered.queryByText('LIVE SCRAPER PREVIEW')).toBeNull();
+    expect(webViewPropsRef.current?.pointerEvents).toBe('none');
+  });
+
+  it('does not open a PCCU target when inside.aspx is reached before login is verified', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('schedule').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(1_500);
+      await Promise.resolve();
+    });
+
+    expect(buildServiceOpenScript).not.toHaveBeenCalled();
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
   });
 
   it('releases the PCCU gate when an active shared scraper request times out', async () => {
@@ -320,6 +424,262 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     expect(error).toBeInstanceOf(Error);
   });
 
+  it('navigates schedule popup through TransUrl instead of forcing the query page directly', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('schedule').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(1_200);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            t: 'popup',
+            url: 'https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1208&Area=service',
+          }),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
+      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1208&Area=service";true;'
+    );
+    expect(mockInjectJavaScript).not.toHaveBeenCalledWith(
+      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/queryCourse/queryByStudent.asp?QuerySource=queryCourse";true;'
+    );
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('injects the schedule script on the 1208 TransUrl page so it can click student schedule query', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('schedule').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(1_200);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            t: 'popup',
+            url: 'https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1208&Area=service',
+          }),
+        },
+      });
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1208&Area=service',
+      });
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1208&Area=service',
+        },
+      });
+      jest.advanceTimersByTime(1_600);
+      await Promise.resolve();
+    });
+
+    expect(buildServiceOpenScript).toHaveBeenCalledTimes(1);
+    expect(buildAdaptiveSchedulePageScript).toHaveBeenCalledTimes(1);
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(expect.stringContaining('schedule-script;'));
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('injects the schedule script when the 1208 popup goes directly to ap1 queryByStudent', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('schedule').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(1_200);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            t: 'popup',
+            url: 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+          }),
+        },
+      });
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+      });
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+        },
+      });
+      jest.advanceTimersByTime(1_600);
+      await Promise.resolve();
+    });
+
+    expect(buildAdaptiveSchedulePageScript).toHaveBeenCalledTimes(1);
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(expect.stringContaining('schedule-script;'));
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('navigates popup target URLs received via onOpenWindow into the shared schedule webview', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('schedule').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(1_200);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onOpenWindow?.({
+        nativeEvent: {
+          targetUrl: 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
+      'window.location.href="https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse";true;'
+    );
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+      });
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+        },
+      });
+      jest.advanceTimersByTime(1_600);
+      await Promise.resolve();
+    });
+
+    expect(buildAdaptiveSchedulePageScript).toHaveBeenCalledTimes(1);
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(expect.stringContaining('schedule-script;'));
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
   it('resets schedule script state before injecting on query page handoff', async () => {
     const engine = PccuSyncEngine.getInstance();
     const rendered = render(<GlobalScraperWebView />);
@@ -387,6 +747,83 @@ describe('GlobalScraperWebView PCCU session gate', () => {
       expect.stringContaining("sessionStorage.removeItem('__PCCU_SCHEDULE_SEARCH_TS__');")
     );
     expect(mockInjectJavaScript).toHaveBeenLastCalledWith(expect.stringContaining('schedule-script;'));
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('navigates grade popup through TransUrl instead of forcing the score page directly', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('grade').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            t: 'login_ok',
+          }),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(1_200);
+      await Promise.resolve();
+    });
+
+    expect(buildServiceOpenScript).toHaveBeenCalledTimes(1);
+    expect(buildServiceOpenScript).toHaveBeenCalledWith('1220');
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            t: 'popup',
+            url: 'https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1220&Area=service',
+          }),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
+      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1220&Area=service";true;'
+    );
+    expect(mockInjectJavaScript).not.toHaveBeenCalledWith(
+      'window.location.href="https://ap2.pccu.edu.tw/studentscore/student/index.asp";true;'
+    );
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ap2.pccu.edu.tw/studentscore/student/index.asp',
+      });
+      jest.advanceTimersByTime(1_200);
+      await Promise.resolve();
+    });
+
+    expect(buildRobustGradePageScript).toHaveBeenCalledTimes(1);
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith('grade-script;');
 
     rendered.unmount();
     const error = await requestPromise;

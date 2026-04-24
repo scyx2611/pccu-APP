@@ -100,4 +100,48 @@ describe('PccuSyncEngine executor lifecycle', () => {
 
     await expect(requestPromise).resolves.toEqual({ success: true });
   });
+
+  it('does not start queued requests after resume while an active request is still pending', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const calls: string[] = [];
+    let resolveGrade: ((value: unknown) => void) | null = null;
+    let resolveSchedule: ((value: unknown) => void) | null = null;
+
+    engine.setExecutor(
+      (request) =>
+        new Promise((resolve) => {
+          calls.push(request.type);
+          if (request.type === 'grade') {
+            resolveGrade = resolve;
+          } else {
+            resolveSchedule = resolve;
+          }
+        })
+    );
+
+    const gradePromise = engine.requestSync('grade');
+    await Promise.resolve();
+    const schedulePromise = engine.requestSync('schedule');
+    await Promise.resolve();
+
+    expect(calls).toEqual(['grade']);
+
+    engine.pause('app_state_inactive');
+    engine.resume();
+    await Promise.resolve();
+
+    expect(calls).toEqual(['grade']);
+
+    resolveGrade?.({ success: true, type: 'grade' });
+    await Promise.resolve();
+    jest.advanceTimersByTime(300);
+    await Promise.resolve();
+
+    expect(calls).toEqual(['grade', 'schedule']);
+
+    resolveSchedule?.({ success: true, type: 'schedule' });
+
+    await expect(gradePromise).resolves.toEqual({ success: true, type: 'grade' });
+    await expect(schedulePromise).resolves.toEqual({ success: true, type: 'schedule' });
+  });
 });

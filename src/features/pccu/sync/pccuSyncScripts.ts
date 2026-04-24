@@ -121,12 +121,96 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
           }
         }
 
+        function hasPortalFunctionsAvailable() {
+          return (
+            typeof gfOpenLink === 'function' ||
+            (typeof window !== 'undefined' && typeof window.gfOpenLink === 'function') ||
+            typeof lfOpenLink === 'function' ||
+            (typeof window !== 'undefined' && typeof window.lfOpenLink === 'function')
+          );
+        }
+
+        function hasLoginInputsVisible() {
+          return !!firstElement([
+            'input[type="password"]',
+            'input[type="text"][name*="Account"]',
+            'input[type="text"][id*="Account"]',
+            'input[type="text"][name*="User"]',
+            'input[type="text"][id*="User"]'
+          ]);
+        }
+
+        function elements(selectors) {
+          var allDocs = docs();
+          var out = [];
+          var seen = [];
+          for (var d = 0; d < allDocs.length; d += 1) {
+            for (var s = 0; s < selectors.length; s += 1) {
+              try {
+                var nodes = allDocs[d].querySelectorAll(selectors[s]);
+                for (var i = 0; i < nodes.length; i += 1) {
+                  if (seen.indexOf(nodes[i]) === -1) {
+                    seen.push(nodes[i]);
+                    out.push(nodes[i]);
+                  }
+                }
+              } catch (error) {}
+            }
+          }
+          return out;
+        }
+
+        function isUsableCredentialField(node) {
+          if (!node) return false;
+          try {
+            if (node.disabled) return false;
+            if (String(node.type || '').toLowerCase() === 'hidden') return false;
+            var style = node.ownerDocument && node.ownerDocument.defaultView
+              ? node.ownerDocument.defaultView.getComputedStyle(node)
+              : window.getComputedStyle(node);
+            if (style && (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')) {
+              return false;
+            }
+            if (typeof node.getClientRects === 'function' && node.getClientRects().length === 0) {
+              return false;
+            }
+          } catch (error) {}
+          return true;
+        }
+
+        function findFirstUsableElement(selectors) {
+          var candidates = elements(selectors);
+          for (var i = 0; i < candidates.length; i += 1) {
+            if (isUsableCredentialField(candidates[i])) return candidates[i];
+          }
+          return candidates[0] || null;
+        }
+
+        function isFieldFilled(input) {
+          try {
+            return !!(input && String(input.value || '').length > 0);
+          } catch (error) {
+            return false;
+          }
+        }
+
+        function hasStrongAuthenticatedSignal(text, href) {
+          var safeText = text || '';
+          var safeHref = href || '';
+          var hasPortalShell = /inside\\.aspx|myccu|portal|service/i.test(safeHref);
+          var hasLogout = /登出|logout/i.test(safeText);
+          var hasStudentIdentity = /同學/i.test(safeText);
+          var hasPortalMenu = /課表|成績|課業|教務|校務|學生專區|選課|出缺勤/i.test(safeText);
+          return (
+            hasPortalFunctionsAvailable() ||
+            hasLogout ||
+            hasStudentIdentity ||
+            (hasPortalShell && hasPortalMenu)
+          );
+        }
+
         function detectAuthenticatedState() {
           try {
-            if (isInsidePage()) {
-              return { authenticated: true, signal: 'inside_page' };
-            }
-
             var allDocs = docs();
             for (var d = 0; d < allDocs.length; d += 1) {
               var doc = allDocs[d];
@@ -140,21 +224,10 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
               } catch (error) {}
 
               var hasPortalShell = /inside\\.aspx|myccu|portal|service/i.test(href);
-              var hasGreeting = /同學|您好|welcome|登出|logout/i.test(text);
-              var hasPortalFunctions =
-                typeof gfOpenLink === 'function' ||
-                (typeof window !== 'undefined' && typeof window.gfOpenLink === 'function') ||
-                typeof lfOpenLink === 'function' ||
-                (typeof window !== 'undefined' && typeof window.lfOpenLink === 'function');
-              var loginInputsStillVisible = !!firstElement([
-                'input[type="password"]',
-                'input[type="text"][name*="Account"]',
-                'input[type="text"][id*="Account"]',
-                'input[type="text"][name*="User"]',
-                'input[type="text"][id*="User"]'
-              ]);
+              var hasPortalFunctions = hasPortalFunctionsAvailable();
+              var loginInputsStillVisible = hasLoginInputsVisible();
 
-              if ((hasPortalShell || hasGreeting || hasPortalFunctions) && !loginInputsStillVisible) {
+              if (hasStrongAuthenticatedSignal(text, href) && !loginInputsStillVisible) {
                 return {
                   authenticated: true,
                   signal: hasPortalShell ? 'portal_shell' : (hasPortalFunctions ? 'portal_function' : 'portal_greeting')
@@ -169,8 +242,9 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
         function tryAuthenticatedFallbackNavigation() {
           try {
             var insideUrl = 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx';
+            var loginInputsVisible = hasLoginInputsVisible();
 
-            if (typeof gfOpenLink === 'function' || (typeof window !== 'undefined' && typeof window.gfOpenLink === 'function')) {
+            if (hasPortalFunctionsAvailable() && !loginInputsVisible) {
               post({ t: 'status', m: '\u5075\u6e2c\u5230\u5df2\u767b\u5165\u74b0\u5883\uff0c\u5617\u8a66\u5c0e\u5411 inside.aspx...' });
               window.location.href = insideUrl;
               return true;
@@ -182,7 +256,16 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
               'iframe[src*="inside.aspx"]'
             ]);
 
-            if (insideLink) {
+            if (insideLink && !loginInputsVisible) {
+              var linkBodyText = '';
+              try {
+                linkBodyText = (document.body && (document.body.innerText || document.body.textContent) || '');
+              } catch (error) {}
+
+              if (!hasStrongAuthenticatedSignal(linkBodyText, window.location.href || '')) {
+                return false;
+              }
+
               post({ t: 'status', m: '\u627e\u5230 inside.aspx \u5165\u53e3\uff0c\u5617\u8a66\u5c0e\u822a...' });
               if (insideLink.href) {
                 window.location.href = insideLink.href;
@@ -200,7 +283,7 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
                 bodyText = (document.body && (document.body.innerText || document.body.textContent) || '');
               } catch (error) {}
 
-              if (/同學|您好|welcome|登出|logout/i.test(bodyText)) {
+              if (!loginInputsVisible && hasStrongAuthenticatedSignal(bodyText, window.location.href || '')) {
                 post({ t: 'status', m: '\u767b\u5165\u5f8c\u4ecd\u505c\u5728 default.aspx\uff0c\u5f37\u5236\u9032\u5165 inside.aspx...' });
                 window.location.href = insideUrl;
                 return true;
@@ -213,9 +296,20 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
 
         function setValue(input, value) {
           if (!input) return;
+          var view = (input.ownerDocument && input.ownerDocument.defaultView) || window;
 
           try {
-            var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement && window.HTMLInputElement.prototype, 'value');
+            if (input.readOnly) input.readOnly = false;
+            input.removeAttribute && input.removeAttribute('readonly');
+          } catch (error) {}
+
+          try {
+            input.focus && input.focus();
+          } catch (error) {}
+
+          try {
+            var proto = view.HTMLInputElement && view.HTMLInputElement.prototype;
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value');
             if (setter && setter.set) setter.set.call(input, value);
             else input.value = value;
           } catch (error) {
@@ -223,14 +317,15 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
           }
 
           try {
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-            input.dispatchEvent(new Event('blur', { bubbles: true }));
+            input.dispatchEvent(new view.Event('input', { bubbles: true }));
+            input.dispatchEvent(new view.Event('change', { bubbles: true }));
+            input.dispatchEvent(new view.Event('keyup', { bubbles: true }));
+            input.dispatchEvent(new view.Event('blur', { bubbles: true }));
           } catch (error) {}
 
           try {
-            if (document.activeElement && typeof document.activeElement.blur === 'function') {
-              document.activeElement.blur();
+            if (input.ownerDocument && input.ownerDocument.activeElement && typeof input.ownerDocument.activeElement.blur === 'function') {
+              input.ownerDocument.activeElement.blur();
             }
           } catch (error) {}
         }
@@ -248,22 +343,37 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
 
         function submitLoginForm() {
           try {
-            var accountInput = firstElement([
+            var accountInput = findFirstUsableElement([
               'input[type="text"][name*="Account"]',
+              'input[type="text"][name*="account"]',
               'input[type="text"][id*="Account"]',
+              'input[type="text"][id*="account"]',
               'input[type="text"][name*="User"]',
+              'input[type="text"][name*="user"]',
               'input[type="text"][id*="User"]',
+              'input[type="text"][id*="user"]',
               'input[type="text"][name*="Login"]',
+              'input[type="text"][name*="login"]',
               'input[type="text"][id*="Login"]',
+              'input[type="text"][id*="login"]',
               'input[type="email"]',
               'input[type="text"]'
             ]);
-            var passwordInput = firstElement([
+            var passwordInput = findFirstUsableElement([
               'input[type="password"][name*="Password"]',
+              'input[type="password"][name*="password"]',
               'input[type="password"][id*="Password"]',
+              'input[type="password"][id*="password"]',
               'input[type="password"][name*="Pwd"]',
+              'input[type="password"][name*="pwd"]',
               'input[type="password"][id*="Pwd"]',
-              'input[type="password"]'
+              'input[type="password"][id*="pwd"]',
+              'input[type="password"]',
+              'input[name*="Password"]',
+              'input[name*="password"]',
+              'input[id*="Password"]',
+              'input[id*="password"]',
+              'input[placeholder*="密碼"]'
             ]);
 
             if (!accountInput || !passwordInput) {
@@ -275,6 +385,13 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
 
             setValue(accountInput, ${JSON.stringify(credentials.account)});
             setValue(passwordInput, ${JSON.stringify(credentials.password)});
+            var accountFilled = isFieldFilled(accountInput);
+            var passwordFilled = isFieldFilled(passwordInput);
+            post({ t: 'status', m: '登入欄位填寫狀態 account=' + accountFilled + ' password=' + passwordFilled });
+
+            if (!accountFilled || !passwordFilled) {
+              return false;
+            }
 
             var studentRole = firstElement([
               'input[type="radio"][value="student"]',
@@ -637,12 +754,16 @@ export function buildServiceOpenScript(code: '1208' | '1220' | '1202'): string {
     : code === '1202'
     ? "'\\u8ab2\\u696d\\u8f14\\u5c0e', '\\u8ab2\\u696d\\u8f14\\u5c0e\\u7cfb\\u7d71'"
     : "'\\u6210\\u7e3e', '\\u6b77\\u5e74\\u6210\\u7e3e', '\\u6210\\u7e3e\\u67e5\\u8a62'";
+  const fallbackTargetUrl =
+    code === '1208'
+      ? 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse'
+      : '';
   const targetReadyPattern =
     code === '1208'
       ? 'TransUrl\\.aspx\\?PrjNo=1208|queryByStudent'
       : code === '1202'
       ? 'TransUrl\\.aspx\\?PrjNo=1202|icas\\.pccu\\.edu\\.tw'
-      : 'TransUrl\\.aspx\\?PrjNo=1220|index_score|scoreListAll|StudentScore|studentscore';
+      : 'index_score|scoreListAll|StudentScore|studentscore';
 
   return `
     (function() {
@@ -679,6 +800,10 @@ export function buildServiceOpenScript(code: '1208' | '1220' | '1202'): string {
         }
 
         var attempts = 0;
+        var fallbackTargetUrl = ${JSON.stringify(fallbackTargetUrl)};
+        var gfOpenLinkTriggered = false;
+        var domLauncherTriggered = false;
+        var fallbackPosted = false;
 
         function tryDomLauncher() {
           var launcher = firstElement([
@@ -702,18 +827,29 @@ export function buildServiceOpenScript(code: '1208' | '1220' | '1202'): string {
              currentUrl = String(window.location.href || '');
            } catch (error) {}
 
-           if (new RegExp(${JSON.stringify(targetReadyPattern)}, 'i').test(currentUrl)) {
-             post({ t: 'status', m: '\u5075\u6e2c\u5230\u5df2\u9032\u5165\u76ee\u6a19\u529f\u80fd\u9801\uff0c\u7e7c\u7e8c\u8f09\u5165...' });
-             post({ t: 'popup', url: currentUrl });
-             return;
-           }
+            if (new RegExp(${JSON.stringify(targetReadyPattern)}, 'i').test(currentUrl)) {
+              post({ t: 'status', m: '\u5075\u6e2c\u5230\u5df2\u9032\u5165\u76ee\u6a19\u529f\u80fd\u9801\uff0c\u7e7c\u7e8c\u8f09\u5165...' });
+              post({ t: 'popup', url: currentUrl });
+              return;
+            }
 
-          if (typeof gfOpenLink === 'function') {
+          if (typeof gfOpenLink === 'function' && !gfOpenLinkTriggered) {
+            gfOpenLinkTriggered = true;
             gfOpenLink(${JSON.stringify(code)}, 'service', '0', '00', '', '');
+            setTimeout(openLoop, 300);
             return;
           }
 
-          if (tryDomLauncher()) {
+          if (!domLauncherTriggered && tryDomLauncher()) {
+            domLauncherTriggered = true;
+            setTimeout(openLoop, 300);
+            return;
+          }
+
+          if (fallbackTargetUrl && !fallbackPosted && attempts >= 6) {
+            fallbackPosted = true;
+            post({ t: 'status', m: '\u5617\u8a66\u76f4\u63a5\u9032\u5165\u8ab2\u8868\u9801...' });
+            post({ t: 'popup', url: fallbackTargetUrl });
             return;
           }
 
@@ -1222,6 +1358,77 @@ export function buildAdaptiveSchedulePageScript(): string {
           return document.documentElement ? document.documentElement.outerHTML : '';
         }
 
+        function pageText(doc) {
+          try {
+            return normalizeText((doc.body && (doc.body.innerText || doc.body.textContent)) || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function getDocUrl(doc) {
+          try {
+            return String((doc && doc.location && doc.location.href) || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function resolveUrl(baseUrl, maybeRelative) {
+          if (!maybeRelative) return '';
+          try {
+            return new URL(maybeRelative, baseUrl || window.location.href).toString();
+          } catch (error) {
+            return maybeRelative;
+          }
+        }
+
+        function hasReloginMarker(text) {
+          return /\u903e\u6642\u904e\u671f|\u8acb\u91cd\u65b0\u767b\u5165|\u8acb\u5148\u767b\u5165|login has expired|please login again|session expired/i.test(text || '');
+        }
+
+        function hasNoDataMarker(text) {
+          return /\u67e5\u7121\u8cc7\u6599|\u7121\u8ab2\u8868\u8cc7\u6599|\u76ee\u524d\u7121\u8cc7\u6599|\u67e5\u8a62\u689d\u4ef6\u4e0d\u53ef\u7a7a\u767d/i.test(text || '');
+        }
+
+        function hasQueryByStudentMarker(html, href) {
+          return /queryByStudent/i.test(href || '') || /name=["']queryByStudent["']|queryByStudent\.asp/i.test(html || '');
+        }
+
+        function hasScheduleResultMarker(html) {
+          return /pubTdItem_Period|PrintTitle/.test(html || '');
+        }
+
+        function classifyScheduleState(doc, html) {
+          var href = getDocUrl(doc);
+          var text = pageText(doc);
+          var markup = String(html || '');
+
+          if (hasReloginMarker(text) || hasReloginMarker(markup)) {
+            return 'relogin';
+          }
+
+          if (hasScheduleResultMarker(markup)) {
+            return 'ready';
+          }
+
+          if (hasNoDataMarker(text) || hasNoDataMarker(markup)) {
+            return 'no_data';
+          }
+
+          if (hasQueryByStudentMarker(markup, href)) {
+            return 'query_page';
+          }
+
+          return 'unknown';
+        }
+
+        function findScheduleWorkDoc() {
+          return findDoc(function(doc, html) {
+            return classifyScheduleState(doc, html) !== 'unknown';
+          });
+        }
+
         function findExactTextNode(labels, selector) {
           var normalized = {};
           for (var i = 0; i < labels.length; i += 1) {
@@ -1244,13 +1451,123 @@ export function buildAdaptiveSchedulePageScript(): string {
           return null;
         }
 
+        function compactScheduleText(value) {
+          return normalizeText(value).replace(/\\s+/g, '');
+        }
+
+        function scheduleEntryTextMatches(text) {
+          var compact = compactScheduleText(text);
+          if (!compact || compact.length < 4 || compact.length > 90) return false;
+
+          var hasSchedule = /\\u8ab2\\u8868/.test(compact);
+          var hasStudentish = /\\u5b78\\u751f|\\u500b\\u4eba|\\u6211\\u7684/.test(compact);
+          var hasQueryAction = /\\u67e5\\u8a62|\\u67e5|\\u9032\\u5165|\\u958b\\u555f/.test(compact);
+          var excluded =
+            /\\u6559\\u5e2b|\\u6559\\u5ba4|\\u6210\\u7e3e|\\u6b77\\u5e74|\\u8ab2\\u7a0b\\u5927\\u7db1/.test(compact);
+
+          return hasSchedule && !excluded && (hasStudentish || hasQueryAction) && (hasStudentish || compact.length <= 24);
+        }
+
+        function isClickableNode(node) {
+          if (!node || !node.tagName) return false;
+          var tag = String(node.tagName || '').toUpperCase();
+          if (tag === 'A' || tag === 'BUTTON' || tag === 'INPUT') return true;
+          try {
+            if (node.getAttribute('onclick')) return true;
+            if (node.getAttribute('href')) return true;
+            if (String(node.getAttribute('role') || '').toLowerCase() === 'button') return true;
+          } catch (error) {}
+          return false;
+        }
+
+        function firstClickableDescendant(node) {
+          if (!node || !node.querySelector) return null;
+          try {
+            return node.querySelector('a[href], button, input[type="button"], input[type="submit"], [onclick], [role="button"]');
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function closestClickableAncestor(node) {
+          var current = node;
+          var fallback = node;
+          var depth = 0;
+
+          while (current && current.nodeType === 1 && depth < 8) {
+            if (isClickableNode(current)) return current;
+
+            var descendant = firstClickableDescendant(current);
+            if (descendant && scheduleEntryTextMatches(textOfNode(descendant))) {
+              return descendant;
+            }
+
+            var tag = String(current.tagName || '').toUpperCase();
+            if (/^(TD|TR|LI|DIV|SPAN|LABEL)$/.test(tag)) {
+              fallback = current;
+            }
+
+            current = current.parentElement;
+            depth += 1;
+          }
+
+          return fallback || node;
+        }
+
+        function findStudentScheduleEntryByText() {
+          var allDocs = docs();
+          var selector = 'a, button, input[type="button"], input[type="submit"], td, th, span, div, label, li, tr';
+
+          for (var d = 0; d < allDocs.length; d += 1) {
+            try {
+              var nodes = allDocs[d].querySelectorAll(selector);
+              for (var i = 0; i < nodes.length; i += 1) {
+                var node = nodes[i];
+                var text = textOfNode(node);
+                if (!scheduleEntryTextMatches(text)) continue;
+                return closestClickableAncestor(node);
+              }
+            } catch (error) {}
+          }
+
+          return null;
+        }
+
+        function describeScheduleEntryCandidates() {
+          var allDocs = docs();
+          var out = [];
+          var seen = {};
+          var selector = 'a, button, input[type="button"], input[type="submit"], td, th, span, div, label, li, tr';
+
+          for (var d = 0; d < allDocs.length; d += 1) {
+            try {
+              var nodes = allDocs[d].querySelectorAll(selector);
+              for (var i = 0; i < nodes.length; i += 1) {
+                var node = nodes[i];
+                var text = compactScheduleText(textOfNode(node));
+                if (!text || text.length > 60 || (!/\\u8ab2\\u8868/.test(text) && !/queryByStudent/i.test(String(node.outerHTML || '')))) {
+                  continue;
+                }
+                if (seen[text]) continue;
+                seen[text] = true;
+                out.push(text.slice(0, 36));
+                if (out.length >= 5) return out.join(' | ');
+              }
+            } catch (error) {}
+          }
+
+          return out.join(' | ');
+        }
+
         function findStudentScheduleEntry() {
           return firstElement([
             'td[onclick*="queryByStudent"]',
             '[onclick*="queryByStudent"]',
             'a[href*="queryByStudent"]',
             'a[href*="queryByStudent.asp"]'
-          ]) || findExactTextNode(['\\u5b78\\u751f\\u8ab2\\u8868\\u67e5\\u8a62', '\\u5b78\\u751f\\u8ab2\\u8868'], 'a, button, td, th, span, div, label');
+          ]) ||
+            findStudentScheduleEntryByText() ||
+            findExactTextNode(['\\u5b78\\u751f\\u8ab2\\u8868\\u67e5\\u8a62', '\\u5b78\\u751f\\u8ab2\\u8868'], 'a, button, td, th, span, div, label');
         }
 
         function findScheduleSearchControl() {
@@ -1275,8 +1592,20 @@ export function buildAdaptiveSchedulePageScript(): string {
         function resolveNavTarget(doc, node) {
           if (!doc || !node) return '';
 
+          function extractScheduleUrlFromScript(value) {
+            var raw = String(value || '');
+            var quoted = raw.match(/['"]([^'"]*queryByStudent[^'"]*)['"]/i);
+            if (quoted && quoted[1]) return quoted[1];
+            var direct = raw.match(/(?:^|[^\\w/])(queryByStudent\\.asp[^'")\\s<>]*)/i);
+            return direct && direct[1] ? direct[1] : '';
+          }
+
           try {
             var href = node.getAttribute('href') || '';
+            if (href && /^javascript:/i.test(href)) {
+              var hrefTarget = extractScheduleUrlFromScript(href);
+              if (hrefTarget) return resolveUrl(getDocUrl(doc), hrefTarget);
+            }
             if (href && !/^javascript:/i.test(href)) {
               return resolveUrl(getDocUrl(doc), href);
             }
@@ -1291,10 +1620,15 @@ export function buildAdaptiveSchedulePageScript(): string {
 
           try {
             var onclick = node.getAttribute('onclick') || '';
+            var scriptTarget = extractScheduleUrlFromScript(onclick);
+            if (scriptTarget) {
+              return resolveUrl(getDocUrl(doc), scriptTarget);
+            }
+
             var match =
-              onclick.match(/window\.location\.href\s*=\s*['"]([^'"]+)['"]/i) ||
-              onclick.match(/location\.href\s*=\s*['"]([^'"]+)['"]/i) ||
-              onclick.match(/window\.open\(\s*['"]([^'"]+)['"]/i);
+              onclick.match(/window\\.location\\.href\\s*=\\s*['"]([^'"]+)['"]/i) ||
+              onclick.match(/location\\.href\\s*=\\s*['"]([^'"]+)['"]/i) ||
+              onclick.match(/window\\.open\\(\\s*['"]([^'"]+)['"]/i);
             if (match && match[1]) {
               return resolveUrl(getDocUrl(doc), match[1]);
             }
@@ -1328,6 +1662,16 @@ export function buildAdaptiveSchedulePageScript(): string {
           return false;
         }
 
+        function isScheduleMenuPage(url) {
+          return /\\/queryCourse\\/(?:index|queryByCourse)\\.asp/i.test(url || '');
+        }
+
+        function navigateToStudentSchedulePage(doc) {
+          var baseUrl = getDocUrl(doc) || window.location.href || 'https://ap1.pccu.edu.tw/queryCourse/index.asp';
+          var targetUrl = resolveUrl(baseUrl, 'queryByStudent.asp?QuerySource=queryCourse');
+          return navigateDoc(doc || document, targetUrl);
+        }
+
         function findQueryForm(doc) {
           if (!doc) return null;
 
@@ -1357,6 +1701,34 @@ export function buildAdaptiveSchedulePageScript(): string {
 
         function submitQueryForm(doc, form) {
           if (!doc || !form) return false;
+
+          try {
+            var searchFlag = form.querySelector('[name="hidChkSearch"]');
+            if (searchFlag) {
+              searchFlag.value = 'searchByStudent';
+            }
+          } catch (error) {}
+
+          try {
+            var studentName = form.querySelector('[name="hidStdName"]');
+            if (studentName) {
+              studentName.value = '';
+            }
+          } catch (error) {}
+
+          try {
+            var studentNo = form.querySelector('[name="hidStdNo"]');
+            if (studentNo) {
+              studentNo.value = '';
+            }
+          } catch (error) {}
+
+          try {
+            var studentDept = form.querySelector('[name="hidStdDept"]');
+            if (studentDept) {
+              studentDept.value = '';
+            }
+          } catch (error) {}
 
           try {
             var actionUrl = resolveFormAction(doc, form);
@@ -1431,7 +1803,7 @@ export function buildAdaptiveSchedulePageScript(): string {
             recentlySubmittedSearch = false;
           }
 
-          if (scheduleState === 'ready' || /pubTdItem_Period|pubContent/.test(workHtml)) {
+          if (scheduleState === 'ready' || hasScheduleResultMarker(workHtml)) {
             postResult({ t: 'html', h: workHtml });
             return;
           }
@@ -1460,6 +1832,14 @@ export function buildAdaptiveSchedulePageScript(): string {
           }
 
           if (!clickedEntry && !/queryByStudent/i.test(currentUrl)) {
+            if (isScheduleMenuPage(currentUrl) && navigateToStudentSchedulePage(workDoc)) {
+              clickedEntry = true;
+              syncState.clickedEntry = true;
+              post({ t: 'status', m: '\\u76f4\\u63a5\\u5207\\u5230\\u5b78\\u751f\\u8ab2\\u8868\\u67e5\\u8a62...' });
+              setTimeout(extractLoop, 1200);
+              return;
+            }
+
             var entry = findStudentScheduleEntry();
 
             if (entry) {
@@ -1473,11 +1853,30 @@ export function buildAdaptiveSchedulePageScript(): string {
                 return;
               }
             }
+
+            if (attempts === 1 || attempts % 4 === 0) {
+              var entryCandidates = describeScheduleEntryCandidates();
+              post({
+                t: 'status',
+                m: entryCandidates
+                  ? '\\u672a\\u9ede\\u5230\\u5b78\\u751f\\u8ab2\\u8868\\u67e5\\u8a62 candidates=' + entryCandidates
+                  : '\\u672a\\u627e\\u5230\\u5b78\\u751f\\u8ab2\\u8868\\u67e5\\u8a62\\u5165\\u53e3'
+              });
+            }
           }
 
           if (onQueryPage && !clickedSearch && !recentlySubmittedSearch) {
             var search = findScheduleSearchControl();
             var queryForm = findQueryForm(workDoc);
+
+            if (submitQueryForm(workDoc, queryForm)) {
+              clickedSearch = true;
+              syncState.clickedSearch = true;
+              markSearchSubmitted();
+              post({ t: 'status', m: '\\u67e5\\u8a62\\u8ab2\\u8868\\u4e2d...' });
+              setTimeout(extractLoop, 1800);
+              return;
+            }
 
             if (search) {
               clickedSearch = click(search);
@@ -1488,15 +1887,6 @@ export function buildAdaptiveSchedulePageScript(): string {
                 setTimeout(extractLoop, 1800);
                 return;
               }
-            }
-
-            if (submitQueryForm(workDoc, queryForm)) {
-              clickedSearch = true;
-              syncState.clickedSearch = true;
-              markSearchSubmitted();
-              post({ t: 'status', m: '\\u67e5\\u8a62\\u8ab2\\u8868\\u4e2d...' });
-              setTimeout(extractLoop, 1800);
-              return;
             }
           }
 
@@ -1537,7 +1927,8 @@ export function buildRobustGradePageScript(): string {
         if (!syncState) {
           syncState = window.__PCCU_GRADE_SYNC__ = {
             active: false,
-            clickedHistory: false
+            clickedHistory: false,
+            clickedSearch: false
           };
         }
 
@@ -1548,6 +1939,7 @@ export function buildRobustGradePageScript(): string {
         syncState.active = true;
         var attempts = 0;
         var clickedHistory = !!syncState.clickedHistory;
+        var clickedSearch = !!syncState.clickedSearch;
 
         function release() {
           try {
@@ -1568,15 +1960,15 @@ export function buildRobustGradePageScript(): string {
 
         function pageText(doc) {
           try {
-            return ((doc.body && (doc.body.innerText || doc.body.textContent)) || '').replace(/\s+/g, ' ');
+            return ((doc.body && (doc.body.innerText || doc.body.textContent)) || '').replace(/\\s+/g, ' ');
           } catch (error) {
             return '';
           }
         }
 
         function looksLikeGradeCode(value) {
-          var compact = (value || '').replace(/\s+/g, '').toUpperCase();
-          return /^(?:[A-Z]{1,4}\d{1,4}|\d{4,}|[A-Z0-9-]{4,})$/.test(compact);
+          var compact = (value || '').replace(/\\s+/g, '').toUpperCase();
+          return /^(?:[A-Z]{1,4}\\d{1,4}|\\d{4,}|[A-Z0-9-]{4,})$/.test(compact);
         }
 
         function countGradeRows(doc) {
@@ -1585,7 +1977,7 @@ export function buildRobustGradePageScript(): string {
           try {
             var rows = doc.querySelectorAll('tr');
             for (var i = 0; i < rows.length; i += 1) {
-              var rowText = ((rows[i].innerText || rows[i].textContent || '') + '').replace(/\s+/g, '');
+              var rowText = ((rows[i].innerText || rows[i].textContent || '') + '').replace(/\\s+/g, '');
               if (!rowText) continue;
 
               var tokens = rowText.match(/[A-Z0-9-]{4,}/gi) || [];
@@ -1597,8 +1989,10 @@ export function buildRobustGradePageScript(): string {
                 }
               }
 
-              if (!hasCode) continue;
-              if (!/(通過|及格|不及格|撤選|退選|免修|抵免|P|F|\d{1,3}(?:\.\d+)?)/i.test(rowText)) continue;
+              var hasGradeValue = /(通過|及格|不及格|撤選|退選|免修|抵免|P|F|\\d{1,3}(?:\\.\\d+)?)/i.test(rowText);
+              var hasCourseLikeText = /[\\u4e00-\\u9fff]{2,}/.test(rowText) &&
+                !/(查詢|列印|總平均|班排名|系排名|排名|學分數|歷年成績|成績單|學年度第?\\d?學期)/.test(rowText);
+              if (!hasGradeValue || (!hasCode && !hasCourseLikeText)) continue;
 
               matched += 1;
               if (matched >= 3) return matched;
@@ -1606,6 +2000,40 @@ export function buildRobustGradePageScript(): string {
           } catch (error) {}
 
           return matched;
+        }
+
+        function postGradeProbe(label, doc, html) {
+          try {
+            var targetDoc = doc || document;
+            var markup = html || (targetDoc.documentElement ? targetDoc.documentElement.outerHTML : '');
+            var forms = 0;
+            var rows = 0;
+            var inputs = 0;
+            var hasSearchFlag = false;
+            var hasSearchButton = false;
+            try { forms = targetDoc.querySelectorAll('form').length; } catch (error) {}
+            try { rows = targetDoc.querySelectorAll('tr').length; } catch (error) {}
+            try { inputs = targetDoc.querySelectorAll('input, button, select').length; } catch (error) {}
+            try { hasSearchFlag = !!targetDoc.querySelector('[name="hidChkSearch"]'); } catch (error) {}
+            try {
+              hasSearchButton = !!targetDoc.querySelector(
+                '#Search, input[type="submit"], input[type="button"], button[type="submit"], button[id*="Search"]'
+              );
+            } catch (error) {}
+            post({
+              t: 'grade_probe',
+              m:
+                label +
+                ' url=' + getDocUrl(targetDoc) +
+                ' html=' + String(markup || '').length +
+                ' rows=' + rows +
+                ' gradeRows=' + countGradeRows(targetDoc) +
+                ' forms=' + forms +
+                ' controls=' + inputs +
+                ' searchFlag=' + hasSearchFlag +
+                ' searchButton=' + hasSearchButton
+            });
+          } catch (error) {}
         }
 
         function resolveNavTarget(doc, node) {
@@ -1621,14 +2049,31 @@ export function buildRobustGradePageScript(): string {
           try {
             var onclick = node.getAttribute('onclick') || '';
             var match =
-              onclick.match(/window\.location\.href\s*=\s*['"]([^'"]+)['"]/i) ||
-              onclick.match(/location\.href\s*=\s*['"]([^'"]+)['"]/i);
+              onclick.match(/window\\.location\\.href\\s*=\\s*['"]([^'"]+)['"]/i) ||
+              onclick.match(/location\\.href\\s*=\\s*['"]([^'"]+)['"]/i);
             if (match && match[1]) {
               return new URL(match[1], doc.location.href).toString();
             }
           } catch (error) {}
 
           return '';
+        }
+
+        function getDocUrl(doc) {
+          try {
+            return String((doc && doc.location && doc.location.href) || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function resolveUrl(baseUrl, maybeRelative) {
+          if (!maybeRelative) return '';
+          try {
+            return new URL(maybeRelative, baseUrl || window.location.href).toString();
+          } catch (error) {
+            return maybeRelative;
+          }
         }
 
         function navigateDoc(doc, targetUrl) {
@@ -1655,6 +2100,16 @@ export function buildRobustGradePageScript(): string {
           return false;
         }
 
+        function isGradeMenuPage(url) {
+          return /\\/studentscore\\/student\\/(?:index|index_score)\\.asp/i.test(url || '');
+        }
+
+        function navigateToGradeHistoryPage(doc) {
+          var baseUrl = getDocUrl(doc) || window.location.href || 'https://ap2.pccu.edu.tw/studentscore/student/index.asp';
+          var targetUrl = resolveUrl(baseUrl, 'scoreListAll.asp');
+          return navigateDoc(doc || document, targetUrl);
+        }
+
         function hasGradeResult(doc, html) {
           if (!doc || !html) return false;
           if (html.length < 4000) return false;
@@ -1664,9 +2119,10 @@ export function buildRobustGradePageScript(): string {
             href = doc.location ? doc.location.href : '';
           } catch (error) {}
 
-          var text = pageText(doc).replace(/\s+/g, '');
+          var text = pageText(doc).replace(/\\s+/g, '');
           var gradeRows = countGradeRows(doc);
           var onHistoryPage = /scoreListAll/i.test(href);
+          if (!onHistoryPage) return false;
           var hasStats = /總平均|班排名|系排名|平均|實得學分/.test(text);
           var hasTranscriptHeader =
             /成績單列印|入學前抵免|歷年成績單/.test(text) || /學年度.*年級.*班/.test(text);
@@ -1712,6 +2168,100 @@ export function buildRobustGradePageScript(): string {
           return null;
         }
 
+        function findGradeSearchControl() {
+          return firstElement([
+            '#Search',
+            'input[type="submit"][id*="Search"]',
+            'input[type="submit"][name*="Search"]',
+            'input[type="submit"][value*="\\u67e5\\u8a62"]',
+            'input[type="button"][id*="Search"]',
+            'input[type="button"][name*="Search"]',
+            'input[type="button"][value*="\\u67e5\\u8a62"]',
+            'button[type="submit"]',
+            'button[id*="Search"]',
+            'button[name*="Search"]',
+            'button[onclick*="Search"]',
+            'a[onclick*="Search"]'
+          ]) || firstByText(['\\u67e5\\u8a62', 'Search']);
+        }
+
+        function findGradeQueryForm(doc) {
+          if (!doc) return null;
+
+          var selectors = [
+            'form[action*="scoreListAll"]',
+            'form[action*="StudentScore"]',
+            'form[action*="studentscore"]',
+            'form[name*="score"]',
+            'form[id*="score"]',
+            'form[name*="Score"]',
+            'form[id*="Score"]'
+          ];
+
+          for (var i = 0; i < selectors.length; i += 1) {
+            try {
+              var form = doc.querySelector(selectors[i]);
+              if (form) return form;
+            } catch (error) {}
+          }
+
+          try {
+            var searchFlag = doc.querySelector('[name="hidChkSearch"]');
+            if (searchFlag && searchFlag.form) return searchFlag.form;
+          } catch (error) {}
+
+          try {
+            var forms = doc.querySelectorAll('form');
+            if (forms.length === 1) return forms[0];
+          } catch (error) {}
+
+          return null;
+        }
+
+        function submitGradeSearchForm(doc, form) {
+          if (!doc || !form) return false;
+
+          var searchAction = 'search';
+          try {
+            var search = findGradeSearchControl();
+            var onclick = search ? String(search.getAttribute('onclick') || '') : '';
+            var match = onclick.match(/ToSearch\\([^,]+,\\s*['"]([^'"]+)['"]/i);
+            if (match && match[1]) {
+              searchAction = match[1];
+            }
+          } catch (error) {}
+
+          try {
+            var searchFlag = form.querySelector('[name="hidChkSearch"]');
+            if (searchFlag) {
+              searchFlag.value = searchAction;
+              searchAction = searchFlag.value || searchAction;
+            }
+          } catch (error) {}
+
+          try {
+            form.submit();
+            return true;
+          } catch (error) {}
+
+          try {
+            if (typeof form.requestSubmit === 'function') {
+              form.requestSubmit();
+              return true;
+            }
+          } catch (error) {}
+
+          try {
+            var view = (doc && doc.defaultView) || window;
+            if (view && typeof view.ToSearch === 'function') {
+              view.ToSearch(form, searchAction);
+              return true;
+            }
+          } catch (error) {}
+
+          return false;
+        }
+
         function extractLoop() {
           attempts += 1;
 
@@ -1720,6 +2270,7 @@ export function buildRobustGradePageScript(): string {
           });
 
           if (picked && picked.html && picked.html.length > 500) {
+            postGradeProbe('found-history-result', picked.doc, picked.html);
             postResult({ t: 'html', h: picked.html });
             return;
           }
@@ -1756,6 +2307,14 @@ export function buildRobustGradePageScript(): string {
             if (historyInfo && historyInfo.node) {
               var historyTab = historyInfo.node;
               var historyDoc = historyInfo.doc || workDoc;
+              clickedHistory = click(historyTab);
+              if (clickedHistory) {
+                syncState.clickedHistory = true;
+                post({ t: 'status', m: '\u958b\u555f\u6b77\u5e74\u6210\u7e3e\u55ae...' });
+                setTimeout(extractLoop, 1800);
+                return;
+              }
+
               var historyUrl = resolveNavTarget(historyDoc, historyTab);
               if (historyUrl && /scoreListAll/i.test(historyUrl)) {
                 clickedHistory = true;
@@ -1766,24 +2325,48 @@ export function buildRobustGradePageScript(): string {
                   return;
                 }
               }
+            }
 
-              clickedHistory = click(historyTab);
-              if (clickedHistory) {
-                syncState.clickedHistory = true;
-                post({ t: 'status', m: '\u958b\u555f\u6b77\u5e74\u6210\u7e3e\u55ae...' });
-                setTimeout(extractLoop, 1800);
+            if (attempts >= 4 && isGradeMenuPage(workUrl) && navigateToGradeHistoryPage(workDoc)) {
+              clickedHistory = true;
+              syncState.clickedHistory = true;
+              post({ t: 'status', m: '\\u76f4\\u63a5\\u5207\\u5230\\u6b77\\u5e74\\u6210\\u7e3e\\u55ae...' });
+              setTimeout(extractLoop, 1800);
+              return;
+            }
+          }
+
+          if (onHistoryPage && !clickedSearch) {
+            var gradeForm = findGradeQueryForm(workDoc);
+            if (submitGradeSearchForm(workDoc, gradeForm)) {
+              clickedSearch = true;
+              syncState.clickedSearch = true;
+              post({ t: 'status', m: '\\u67e5\\u8a62\\u6b77\\u5e74\\u6210\\u7e3e\\u4e2d...' });
+              setTimeout(extractLoop, 2200);
+              return;
+            }
+
+            var search = findGradeSearchControl();
+            if (search) {
+              clickedSearch = click(search);
+              syncState.clickedSearch = clickedSearch;
+              if (clickedSearch) {
+                post({ t: 'status', m: '\\u67e5\\u8a62\\u6b77\\u5e74\\u6210\\u7e3e\\u4e2d...' });
+                setTimeout(extractLoop, 2200);
                 return;
               }
             }
           }
 
           if (clickedHistory) {
+            postGradeProbe('waiting-history-result', workDoc, workDocMatch && workDocMatch.html ? workDocMatch.html : '');
             post({ t: 'status', m: '\\u7b49\\u5f85\\u6b77\\u5e74\\u6210\\u7e3e\\u55ae\\u8f09\\u5165...' });
           } else if (attempts <= 4) {
             post({ t: 'status', m: '\\u7b49\\u5f85\\u6210\\u7e3e\\u9801\\u9762\\u5b8c\\u6574\\u8f09\\u5165...' });
           }
 
           if (attempts >= 12) {
+            postGradeProbe('posting-fallback-html', workDoc, workDocMatch && workDocMatch.html ? workDocMatch.html : currentHtml());
             postResult({ t: 'html', h: workDocMatch && workDocMatch.html ? workDocMatch.html : currentHtml() });
             return;
           }
@@ -1800,4 +2383,3 @@ export function buildRobustGradePageScript(): string {
     true;
   `;
 }
-

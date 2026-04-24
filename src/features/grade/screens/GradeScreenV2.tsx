@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,6 +17,10 @@ import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { getDeveloperDebugEnabled } from '../../settings/storage/developerSettings';
 import { buildUpdatedAtText } from '../../../utils/updatedAt';
 import { type SemesterGrade } from '../../pccu/parsers/pccuScraper';
+import {
+  clearScraperDebugPreviewFrame,
+  setScraperDebugPreviewFrame,
+} from '../../pccu/engine/scraperDebugPreview';
 import { useGradeStore } from '../store/useGradeStore';
 import { useGradeSync } from '../hooks/useGradeSync';
 
@@ -120,10 +125,12 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
 
   const [resolvedShowPreview, setResolvedShowPreview] = useState(showPreview ?? false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
+  const debugPreviewRef = useRef<React.ElementRef<typeof View> | null>(null);
 
   const latestSemester = grades[0] || null;
   const isSyncing = syncStatus === 'syncing';
   const loading = isSyncing && grades.length === 0;
+  const keepWebViewVisibleForDebug = __DEV__ && resolvedShowPreview;
 
   const updatedAtText = buildUpdatedAtText({
     updatedAt: lastSyncedAt,
@@ -169,6 +176,37 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     });
   }, [sync, resetSync]);
 
+  const updateDebugPreviewFrame = useCallback(() => {
+    if (!keepWebViewVisibleForDebug) return;
+
+    debugPreviewRef.current?.measureInWindow((x, y, width, height) => {
+      if (width <= 0 || height <= 0) return;
+      setScraperDebugPreviewFrame({ x, y, width, height });
+    });
+  }, [keepWebViewVisibleForDebug]);
+
+  const handleDebugRefresh = useCallback(() => {
+    updateDebugPreviewFrame();
+    setPullRefreshing(true);
+    resetSync();
+    sync({ priority: 5 }).finally(() => {
+      setPullRefreshing(false);
+    });
+  }, [resetSync, sync, updateDebugPreviewFrame]);
+
+  useEffect(() => {
+    if (!keepWebViewVisibleForDebug) {
+      clearScraperDebugPreviewFrame();
+      return;
+    }
+
+    const timer = setTimeout(updateDebugPreviewFrame, 0);
+    return () => {
+      clearTimeout(timer);
+      clearScraperDebugPreviewFrame();
+    };
+  }, [keepWebViewVisibleForDebug, updateDebugPreviewFrame]);
+
   useFocusEffect(
     useCallback(() => {
       if (typeof showPreview === 'boolean') {
@@ -211,8 +249,6 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     }, [hydrate, sync])
   );
 
-  const keepWebViewVisibleForDebug = __DEV__ && resolvedShowPreview;
-
   const renderSummaryCard = () => {
     if (!latestSemester) return null;
 
@@ -248,6 +284,8 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
             colors={[theme.primary]}
           />
         )}
+        onScroll={keepWebViewVisibleForDebug ? updateDebugPreviewFrame : undefined}
+        scrollEventThrottle={keepWebViewVisibleForDebug ? 16 : undefined}
       >
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <View style={styles.heroHeader}>
@@ -256,6 +294,36 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
           </View>
           {renderSummaryCard()}
         </View>
+
+        {keepWebViewVisibleForDebug ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+            <View style={styles.debugHeaderRow}>
+              <View style={styles.debugHeaderTextBlock}>
+                <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 資訊</Text>
+                <Text style={[styles.debugText, { color: theme.textSub }]}>
+                  Status: {syncStatus} | Error: {error ?? '-'}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleDebugRefresh}
+                style={[styles.debugRefreshButton, { backgroundColor: theme.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="重新同步歷年成績"
+              >
+                <Text style={styles.debugRefreshButtonText}>重新同步</Text>
+              </Pressable>
+            </View>
+            <View
+              ref={debugPreviewRef}
+              style={[styles.debugPreviewSlot, { backgroundColor: theme.bg, borderColor: theme.border }]}
+              onLayout={updateDebugPreviewFrame}
+            >
+              <Text style={[styles.debugPreviewHint, { color: theme.textSub }]}>
+                Live WebView preview
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {loading ? (
           <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
@@ -368,6 +436,42 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 80 },
+  debugHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  debugHeaderTextBlock: {
+    flex: 1,
+  },
+  debugText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  debugRefreshButton: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  debugRefreshButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  debugPreviewSlot: {
+    height: 420,
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  debugPreviewHint: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   heroCard: {
     borderRadius: 28,
     padding: 22,

@@ -116,3 +116,96 @@ src/
 
 ---
 *Developed with ❤️*
+
+---
+
+## PCCU 同步除錯紀錄
+
+這段紀錄 health-check / 真機除錯期間確認的問題，避免之後再走回同一批坑。這次大多不是 parser 單點錯誤，而是 shared WebView 的導頁、session handoff、debug preview 呈現方式互相影響。
+
+### 1. 即時 debug 預覽不能做成全域懸浮層
+
+**現象：** Live WebView preview 蓋住整個 App、左右有大黑邊，而且會擋住正常操作。
+
+**根因：** `GlobalScraperWebView` 把 debug preview 當成全域 absolute/floating panel 渲染，沒有使用目前頁面註冊的 debug slot。
+
+**處理方向：** shared WebView preview 只能在頁面註冊 `scraperDebugPreviewFrame` 後顯示；沒有 frame 時必須 hidden 且 `pointerEvents="none"`。刷新按鈕可以保留，但也必須在 debug 框內。
+
+相關檔案：
+- `src/features/pccu/engine/GlobalScraperWebView.tsx`
+- `src/features/pccu/engine/scraperDebugPreview.ts`
+- `src/features/grade/screens/GradeScreenV2.tsx`
+- `src/features/schedule/screens/ScheduleScreen.tsx`
+
+### 2. 課表同步不能硬跳結果頁
+
+**現象：** 登入成功後，流程不是卡在錯頁，就是跳到 404，或最後超時沒有進入學生課表頁。
+
+**根因：** PCCU 需要自己的 session transfer 流程。直接跳 `queryByStudent.asp` 或其他 ap1 URL，可能缺少 eCampus 到 ap1 的 session handoff。課表流程必須從 eCampus 進入 `TransUrl.aspx?PrjNo=1208`。
+
+**處理方向：** 透過 eCampus 官方入口開啟服務，跟著 `TransUrl.aspx` 轉進 `ap1.pccu.edu.tw/queryCourse`。除非 WebView 已被 PCCU 自己導到目標頁，否則不要繞過 transfer 頁。
+
+相關檔案：
+- `src/features/pccu/engine/GlobalScraperWebView.tsx`
+- `src/features/pccu/sync/pccuSyncScripts.ts`
+
+### 3. `queryByCourse.asp` 不是學生課表結果頁
+
+**現象：** Scraper 看起來已進入課程查詢系統，但仍然超時或回傳錯誤 HTML。
+
+**根因：** 課表流程會先落在 `queryByCourse.asp`，那是「依課程查詢」頁，不是「學生課表」結果頁。過寬的 ready 判斷，例如只看到 `pubContent`，會誤判頁面已準備好。
+
+**處理方向：** 只有看到真正的課表結果 marker，例如 `pubTdItem_Period` 或 `PrintTitle`，才視為 ready。如果目前在 `queryByCourse.asp`，要先找到並切到學生課表查詢入口。
+
+相關檔案：
+- `src/features/pccu/sync/pccuSyncScripts.ts`
+
+### 4. 學生課表需要正確查詢動作
+
+**現象：** WebView 進入課表查詢區後，仍然沒有產生真正課表表格。
+
+**根因：** 頁面不是載入就會有學生課表。它需要進入學生課表查詢路徑，並帶著正確 form state。
+
+**處理方向：** 參考可運作的 CLI 流程：切到 `queryByStudent.asp`，設定 `hidChkSearch=searchByStudent`，清空不相關學生欄位，然後 submit form。按鈕 click 可以當 fallback，但 form submit 才是穩定路徑。
+
+參考：
+- `D:\Code\pccu-cli`
+
+### 5. 歷年成績不能硬跳 `scoreListAll.asp`
+
+**現象：** 歷年成績頁有載入，但拿到空殼、錯頁，或結果解析失敗。
+
+**根因：** 成績系統也依賴自己的 session 與頁面狀態。直接跳 `scoreListAll.asp` 可能缺少成績首頁建立的狀態。
+
+**處理方向：** 透過 `TransUrl.aspx?PrjNo=1220` 開啟成績服務，等成績 landing page 完成，再點/open「歷年成績單」tab，也就是 `scoreListAll.asp?fromasp=StudentScore&lvMainMenuIndex=1`。只有看到歷年成績結果 marker 後才解析。
+
+相關檔案：
+- `src/features/pccu/engine/GlobalScraperWebView.tsx`
+- `src/features/pccu/sync/pccuSyncScripts.ts`
+- `src/features/pccu/parsers/pccuScraper.ts`
+
+### 6. PCCU popup / new-window 導頁必須接回 shared WebView
+
+**現象：** Log 有 popup / open-target，但可視 scraper 沒有移動到預期頁面。
+
+**根因：** PCCU 會用 popup / window.open 進入服務。如果 `popup` message 或 `onOpenWindow` 沒有導回 shared WebView，engine 就會一直等在舊頁面。
+
+**處理方向：** 將 popup / open-window target URL 視為同一個 WebView 內的導頁目標，直接在 shared scraper WebView 裡指定 `window.location.href`。
+
+相關檔案：
+- `src/features/pccu/engine/GlobalScraperWebView.tsx`
+
+### 7. Expo / Metro 快取會讓已修好的問題看起來沒變
+
+**現象：** 程式碼已改，但真機看起來還在跑舊的 overlay 或導頁行為。
+
+**根因：** Expo Go / Metro 可能還持有舊 bundle，直到 App reload。
+
+**處理方向：** 改 WebView、debug preview、導頁狀態機後，要 reload Metro bundle 或用 cache clear 重啟 Expo。確認真機跑的是最新 bundle 前，不要直接判定修復失敗。
+
+常用命令：
+
+```powershell
+npx expo start -c
+curl.exe -s "http://127.0.0.1:8081/reload"
+```

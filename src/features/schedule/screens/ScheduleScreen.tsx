@@ -17,6 +17,10 @@ import AppSymbol from '../../../shared/components/AppSymbol';
 import DebugStamp from '../../../shared/components/DebugStamp';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { getDeveloperDebugEnabled } from '../../settings/storage/developerSettings';
+import {
+  clearScraperDebugPreviewFrame,
+  setScraperDebugPreviewFrame,
+} from '../../pccu/engine/scraperDebugPreview';
 import { CourseData } from '../../pccu/parsers/pccuScraper';
 import { buildUpdatedAtText } from '../../../utils/updatedAt';
 import { useScheduleStore } from '../store/useScheduleStore';
@@ -138,6 +142,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
   const summaryPulseAnim = useRef(new Animated.Value(1)).current;
   const animationTestMountedRef = useRef(false);
   const manualRefreshMountedRef = useRef(false);
+  const debugPreviewRef = useRef<React.ElementRef<typeof View> | null>(null);
 
   const isSyncing = syncStatus === 'syncing';
   const isLoading = courses.length === 0 && (syncStatus === 'syncing' || syncStatus === 'idle');
@@ -231,6 +236,28 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
       setMenuRefreshing(false);
     });
   }, [sync]);
+
+  const updateDebugPreviewFrame = useCallback(() => {
+    if (!developerDebugEnabled) return;
+
+    debugPreviewRef.current?.measureInWindow((x, y, width, height) => {
+      if (width <= 0 || height <= 0) return;
+      setScraperDebugPreviewFrame({ x, y, width, height });
+    });
+  }, [developerDebugEnabled]);
+
+  useEffect(() => {
+    if (!developerDebugEnabled) {
+      clearScraperDebugPreviewFrame();
+      return;
+    }
+
+    const timer = setTimeout(updateDebugPreviewFrame, 0);
+    return () => {
+      clearTimeout(timer);
+      clearScraperDebugPreviewFrame();
+    };
+  }, [developerDebugEnabled, updateDebugPreviewFrame]);
 
   useEffect(() => {
     if (!manualRefreshMountedRef.current) {
@@ -334,6 +361,8 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
             colors={[theme.primary]}
           />
         )}
+        onScroll={developerDebugEnabled ? updateDebugPreviewFrame : undefined}
+        scrollEventThrottle={developerDebugEnabled ? 16 : undefined}
       >
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <View style={styles.heroHeader}>
@@ -402,6 +431,15 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
             <Text style={[styles.debugText, { color: theme.textSub }]}>
               Status: {syncStatus} | Error: {error ?? '-'}
             </Text>
+            <View
+              ref={debugPreviewRef}
+              style={[styles.debugPreviewSlot, { backgroundColor: theme.bg, borderColor: theme.border }]}
+              onLayout={updateDebugPreviewFrame}
+            >
+              <Text style={[styles.debugPreviewHint, { color: theme.textSub }]}>
+                Live WebView preview
+              </Text>
+            </View>
           </View>
         ) : null}
 
@@ -442,6 +480,19 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
   debugText: { fontSize: 12, lineHeight: 18 },
+  debugPreviewSlot: {
+    height: 360,
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  debugPreviewHint: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   heroCard: {
     borderRadius: 28,
     padding: 22,

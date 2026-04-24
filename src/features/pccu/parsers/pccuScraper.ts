@@ -67,6 +67,8 @@ const splitCourseDescriptor = (value: string) => {
 
 const isNumeric = (value: string) => /^-?\d+(?:\.\d+)?$/.test(value);
 
+const looksLikeCourseCode = (value: string) => /^[A-Z0-9-]{4,}$/.test(value);
+
 const isScoreText = (value: string) =>
   /^(?:\u901a\u904e|\u53ca\u683c|\u514d\u4fee|\u62b5\u514d|\u64a4\u9078|\u9000\u9078|\u4e0d\u53ca\u683c|\u7f3a\u8003|\u4e0d\u901a\u904e|\u5408\u683c|\u4e0d\u5408\u683c|P|F)$/i.test(value);
 
@@ -122,6 +124,23 @@ const extractSemesterTitle = (text: string) => {
   return null;
 };
 
+const normalizeGradeHeader = (value: string) =>
+  normalize(value)
+    .replace(/[：:()（）[\]【】\s]/g, '')
+    .toLowerCase();
+
+const findHeaderIndex = (headers: string[], keywords: string[]) =>
+  headers.findIndex((header) => keywords.some((keyword) => header.includes(keyword)));
+
+const findGradeNameHeaderIndex = (headers: string[]) => {
+  const specificIndex = findHeaderIndex(headers, ['科目名稱', '課程名稱', '名稱']);
+  if (specificIndex >= 0) return specificIndex;
+
+  return headers.findIndex(
+    (header) => (header.includes('科目') || header.includes('課程')) && !/(?:代號|課號|編號)/.test(header)
+  );
+};
+
 export function parseGradesFromHtml(html: string): SemesterGrade[] {
   if (!html) return [];
   const $ = cheerio.load(html);
@@ -157,7 +176,7 @@ export function parseGradesFromHtml(html: string): SemesterGrade[] {
       if (!cells.some((c) => /^[A-Z0-9-]{4,}$/.test(c))) return;
     }
 
-    const codeIndex = cells.findIndex((c) => /^[A-Z0-9-]{4,}$/.test(c));
+    const codeIndex = cells.findIndex(looksLikeCourseCode);
     if (codeIndex === -1) return;
 
     if (!current) current = ensureSemester(fallbackTitle);
@@ -217,6 +236,76 @@ export function parseGradesFromHtml(html: string): SemesterGrade[] {
     if (!current.courses.some((c) => c.code === code && c.name === name)) {
       current.courses.push({ type, code, name, credits, score });
     }
+  });
+
+  $('table').each((_, table) => {
+    let headerMap: {
+      type: number;
+      code: number;
+      name: number;
+      credits: number;
+      score: number;
+    } | null = null;
+    let currentFromHeader: SemesterGrade | null = null;
+
+    $(table)
+      .find('tr')
+      .each((__, tr) => {
+        const cells = $(tr)
+          .children('td, th')
+          .map((___, cell) => normalize($(cell).text()))
+          .get()
+          .filter(Boolean);
+
+        if (cells.length === 0) return;
+
+        const rowText = cells.join(' ');
+        const semTitle = cells.map((cell) => extractSemesterTitle(cell)).find(Boolean) || extractSemesterTitle(rowText);
+        if (semTitle && cells.length <= 2) {
+          currentFromHeader = ensureSemester(semTitle);
+          return;
+        }
+
+        const headers = cells.map(normalizeGradeHeader);
+        const nextHeaderMap = {
+          type: findHeaderIndex(headers, ['選課別', '修別', '類別']),
+          code: findHeaderIndex(headers, ['科目代號', '課程代號', '課號', '代號']),
+          name: findGradeNameHeaderIndex(headers),
+          credits: findHeaderIndex(headers, ['學分']),
+          score: findHeaderIndex(headers, ['學期成績', '學年成績', '總成績', '成績', '分數']),
+        };
+
+        if (nextHeaderMap.name >= 0 && nextHeaderMap.credits >= 0 && nextHeaderMap.score >= 0) {
+          headerMap = nextHeaderMap;
+          return;
+        }
+
+        if (!headerMap) return;
+
+        const pick = (index: number) => (index >= 0 && index < cells.length ? normalize(cells[index]) : '');
+        const rawName = pick(headerMap.name);
+        const shouldShiftAfterSubject =
+          headerMap.code < 0 &&
+          looksLikeCourseCode(rawName) &&
+          cells.length > headers.length &&
+          headerMap.name + 1 < cells.length &&
+          !isNumeric(pick(headerMap.name + 1));
+        const offset = shouldShiftAfterSubject ? 1 : 0;
+        const name = cleanCourseNameText(pick(headerMap.name + offset));
+        const credits = pick(headerMap.credits + offset);
+        const score = pick(headerMap.score + offset);
+
+        if (!name || isGradeAnnouncementText(name)) return;
+        if (!guessCredits(credits) && !guessScore(score) && !isScoreText(score)) return;
+
+        const targetSemester = currentFromHeader || current || ensureSemester(fallbackTitle);
+        const code = shouldShiftAfterSubject ? rawName : pick(headerMap.code);
+        const type = pick(headerMap.type);
+
+        if (!targetSemester.courses.some((course) => course.code === code && course.name === name)) {
+          targetSemester.courses.push({ type, code, name, credits, score });
+        }
+      });
   });
 
   const allText = normalize($('body').text());
