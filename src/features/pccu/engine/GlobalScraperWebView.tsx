@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
 import {
@@ -39,6 +39,19 @@ import {
   sortTrafficArrivals,
 } from '../../traffic/types';
 import { refreshScheduledCourseReminders } from '../../notifications/services/courseReminderService';
+import {
+  buildTutoringOverviewScript,
+  buildTutoringAllAssignmentsScript,
+  buildTutoringPendingAssignmentsScript,
+  buildTutoringSingleCourseScript,
+  buildWaitForCourseFpScript,
+} from '../../tutoring/sync/tutoringScripts';
+import {
+  setCourses as storageSetCourses,
+  setPendingAssignments,
+  setAllAssignments,
+} from '../../tutoring/storage/tutoringStorage';
+import { useTutoringStore } from '../../tutoring/store/useTutoringStore';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -77,7 +90,18 @@ type TrafficPhase =
   | 'extract_uphill'
   | 'done';
 
-type ActiveMode = 'pccu' | 'traffic' | 'none';
+type TutoringPhase =
+  | 'idle'
+  | 'load_ecampus'
+  | 'logging_in'
+  | 'open_target'
+  | 'waiting_coursefp'
+  | 'fetching_courses'
+  | 'fetching_details'
+  | 'fetching_single_course'
+  | 'done';
+
+type ActiveMode = 'pccu' | 'pccu-tutoring' | 'traffic' | 'none';
 
 type PendingRequest = {
   request: SyncRequest;
@@ -86,6 +110,7 @@ type PendingRequest = {
   lastHandledUrl: string;
   lastInjectKey: string;
   lastInjectAt: number;
+  targetOpenRequested: boolean;
   completed: boolean;
 };
 
@@ -130,14 +155,23 @@ export default function GlobalScraperWebView() {
   const activeModeRef = useRef<ActiveMode>('none');
   const pccuPhaseRef = useRef<PccuPhase>('idle');
   const trafficPhaseRef = useRef<TrafficPhase>('idle');
+  const tutoringPhaseRef = useRef<TutoringPhase>('idle');
+  const tutoringCourseCodeRef = useRef<string | null>(null);
   const pccuSessionLeaseRef = useRef<PccuBrowserSessionLease | null>(null);
   const unmountedRef = useRef(false);
   const [trafficUrl, setTrafficUrl] = useState(withTimestamp(TRAFFIC_DOWNHILL_URL));
   const [sourceUri, setSourceUri] = useState(PCCU_DEFAULT_URL);
+  const [debugVisible] = useState(false);
+  const [debugUrl, setDebugUrl] = useState(PCCU_DEFAULT_URL);
+  const [debugMessage, setDebugMessage] = useState('idle');
 
   const releasePccuSessionLease = useCallback(() => {
     pccuSessionLeaseRef.current?.release();
     pccuSessionLeaseRef.current = null;
+  }, []);
+
+  const updateDebugMessage = useCallback((message: string) => {
+    setDebugMessage(message);
   }, []);
 
   // -----------------------------------------------------------------------
@@ -169,6 +203,7 @@ export default function GlobalScraperWebView() {
           activeModeRef.current = 'traffic';
           trafficPhaseRef.current = 'load_downhill';
           trafficPartialRef.current = { downhill: [], uphill: [] };
+          updateDebugMessage(`traffic:start:${request.id}`);
           setTrafficUrl(withTimestamp(TRAFFIC_DOWNHILL_URL));
           pendingRef.current = {
             request: { ...request, resolve: resolveOnce, reject: rejectOnce },
@@ -177,6 +212,7 @@ export default function GlobalScraperWebView() {
             lastHandledUrl: '',
             lastInjectKey: '',
             lastInjectAt: 0,
+            targetOpenRequested: false,
             completed: false,
           };
 
@@ -184,24 +220,25 @@ export default function GlobalScraperWebView() {
           return;
         }
 
-        let abortError: Error | null = null;
-        request.setAbortHandler?.((_, error) => {
-          abortError = error;
-          const activePending = pendingRef.current;
+    let abortError: Error | null = null;
+    request.setAbortHandler?.((_, error) => {
+      abortError = error;
+      const activePending = pendingRef.current;
 
-          if (activePending?.request.id === request.id && !activePending.completed) {
-            activePending.completed = true;
-            releasePccuSessionLease();
-            activePending.request.reject(error);
-            pendingRef.current = null;
-            activeModeRef.current = 'none';
-            pccuPhaseRef.current = 'done';
-            return;
-          }
+      if (activePending?.request.id === request.id && !activePending.completed) {
+        activePending.completed = true;
+        releasePccuSessionLease();
+        activePending.request.reject(error);
+        pendingRef.current = null;
+        activeModeRef.current = 'none';
+        pccuPhaseRef.current = 'done';
+        tutoringPhaseRef.current = 'done';
+        return;
+      }
 
-          releasePccuSessionLease();
-          rejectOnce(error);
-        });
+      releasePccuSessionLease();
+      rejectOnce(error);
+    });
 
         try {
           const lease = await pccuBrowserSessionGate.acquire(`shared-scraper:${type}:${request.id}`);
@@ -221,23 +258,32 @@ export default function GlobalScraperWebView() {
           return;
         }
 
-        activeModeRef.current = 'pccu';
-        pccuPhaseRef.current = 'idle';
-        pendingRef.current = {
-          request: { ...request, resolve: resolveOnce, reject: rejectOnce },
-          retries: 0,
-          phase: 'idle',
-          lastHandledUrl: '',
-          lastInjectKey: '',
-          lastInjectAt: 0,
-          completed: false,
-        };
+      // Tutoring types use the same PCCU login flow but diverge after inside.aspx
+      const isTutoring = type === 'tutoring' || type === 'tutoring-detail';
+      activeModeRef.current = isTutoring ? 'pccu-tutoring' : 'pccu';
+      pccuPhaseRef.current = 'idle';
+      if (isTutoring) {
+        tutoringPhaseRef.current = 'load_ecampus';
+        tutoringCourseCodeRef.current =
+          (request.options?.courseCode as string | undefined) ?? null;
+      }
+      updateDebugMessage(`${isTutoring ? 'pccu-tutoring' : 'pccu'}:start:${type}:${request.id}`);
+      pendingRef.current = {
+        request: { ...request, resolve: resolveOnce, reject: rejectOnce },
+        retries: 0,
+        phase: 'idle',
+        lastHandledUrl: '',
+        lastInjectKey: '',
+        lastInjectAt: 0,
+        targetOpenRequested: false,
+        completed: false,
+      };
 
-        // For PCCU types, load the default page then start the flow
-        setSourceUri(`${PCCU_DEFAULT_URL}?ts=${Date.now()}`);
+      // For PCCU types, load the default page then start the flow
+      setSourceUri(`${PCCU_DEFAULT_URL}?ts=${Date.now()}`);
       });
     },
-    [releasePccuSessionLease]
+    [releasePccuSessionLease, updateDebugMessage]
   );
 
   useEffect(() => {
@@ -261,16 +307,21 @@ export default function GlobalScraperWebView() {
       if (!pending || pending.completed) return;
       pending.completed = true;
 
+      updateDebugMessage(
+        result.success ? `pccu:done:${pending.request.type}` : `pccu:error:${result.message || 'failed'}`
+      );
+
       if (result.success) {
         pending.request.resolve(result.data);
       } else {
         pending.request.reject(new Error(result.message || 'Sync failed'));
       }
-      releasePccuSessionLease();
-      pendingRef.current = null;
-      activeModeRef.current = 'none';
-      pccuPhaseRef.current = 'done';
-    },
+    releasePccuSessionLease();
+    pendingRef.current = null;
+    activeModeRef.current = 'none';
+    pccuPhaseRef.current = 'done';
+    tutoringPhaseRef.current = 'done';
+  },
     [releasePccuSessionLease]
   );
 
@@ -292,8 +343,9 @@ export default function GlobalScraperWebView() {
       return;
     }
     pccuPhaseRef.current = 'logging_in';
+    updateDebugMessage(`pccu:login:${pending.request.type}`);
     webViewRef.current?.injectJavaScript(buildLoginScript(cred));
-  }, [finishPccu]);
+  }, [finishPccu, updateDebugMessage]);
 
   const injectPccuScript = useCallback(
     (type: SyncType, reason: string, rawUrl?: string, minIntervalMs = 1200) => {
@@ -311,15 +363,62 @@ export default function GlobalScraperWebView() {
 
       pending.lastInjectKey = key;
       pending.lastInjectAt = now;
+      updateDebugMessage(`inject:${type}:${reason}:${rawUrl || key || 'no-url'}`);
       console.log('[global-scraper][inject]', type, reason, rawUrl || key);
+
+      const scheduleScriptPrefix = `
+(function() {
+  try {
+    if (window.__PCCU_ADAPTIVE_SCHEDULE_SYNC__) {
+      window.__PCCU_ADAPTIVE_SCHEDULE_SYNC__.active = false;
+      window.__PCCU_ADAPTIVE_SCHEDULE_SYNC__.clickedEntry = false;
+      window.__PCCU_ADAPTIVE_SCHEDULE_SYNC__.clickedSearch = false;
+    }
+  } catch (error) {}
+  try {
+    sessionStorage.removeItem('__PCCU_SCHEDULE_SEARCH_TS__');
+  } catch (error) {}
+})();
+`;
 
       const script =
         type === 'grade'
           ? buildRobustGradePageScript()
-          : buildAdaptiveSchedulePageScript();
+          : `${scheduleScriptPrefix}${buildAdaptiveSchedulePageScript()}`;
       webViewRef.current?.injectJavaScript(script);
     },
     []
+  );
+
+  const openPccuTarget = useCallback(
+    (type: SyncType, reason: string, delayMs = 400) => {
+      const pending = pendingRef.current;
+      if (!pending || pending.targetOpenRequested || pccuPhaseRef.current !== 'open_target') return;
+
+      pending.targetOpenRequested = true;
+
+      setTimeout(() => {
+        const activePending = pendingRef.current;
+        if (
+          !activePending ||
+          activePending.completed ||
+          activePending.request.id !== pending.request.id ||
+          pccuPhaseRef.current !== 'open_target'
+        ) {
+          return;
+        }
+
+        if (type === 'schedule') {
+          updateDebugMessage(`open-target:${type}:${reason}:1208`);
+          webViewRef.current?.injectJavaScript(buildServiceOpenScript('1208'));
+          return;
+        }
+
+        updateDebugMessage(`open-target:${type}:${reason}:1220`);
+        webViewRef.current?.injectJavaScript(buildServiceOpenScript('1220'));
+      }, delayMs);
+    },
+    [updateDebugMessage]
   );
 
   const persistGrades = useCallback(
@@ -335,7 +434,7 @@ export default function GlobalScraperWebView() {
   const persistCourses = useCallback(
     async (incomingCourses: CourseData[]): Promise<boolean> => {
       const parsed = sanitizeCourseList(incomingCourses);
-      if (parsed.length === 0) return false;
+      if (parsed.length === 0 || hasSuspiciousCourseNames(parsed)) return false;
       const updatedAt = Date.now();
       await saveCourses(parsed, false, updatedAt);
       await refreshScheduledCourseReminders(parsed);
@@ -356,10 +455,12 @@ export default function GlobalScraperWebView() {
       pending.lastHandledUrl = '';
       pending.lastInjectKey = '';
       pending.lastInjectAt = 0;
+      pending.targetOpenRequested = false;
       pccuPhaseRef.current = 'syncing';
+      updateDebugMessage(`retry:${type}:${pending.retries}`);
       injectPccuScript(type, 'retry');
     },
-    [finishPccu, injectPccuScript]
+    [finishPccu, injectPccuScript, updateDebugMessage]
   );
 
   // -----------------------------------------------------------------------
@@ -419,6 +520,7 @@ export default function GlobalScraperWebView() {
     (nav: WebViewNavigation) => {
       if (nav.loading) return;
       const url = nav.url || '';
+      setDebugUrl(url);
       const pending = pendingRef.current;
       if (!pending) return;
 
@@ -427,27 +529,19 @@ export default function GlobalScraperWebView() {
       if (mode === 'pccu') {
         const type = pending.request.type as SyncType;
         pending.request.refreshTimeout?.();
+        updateDebugMessage(`nav:${pccuPhaseRef.current}:${type}:${url}`);
         console.log('[global-scraper][nav][pccu]', pccuPhaseRef.current, url);
 
         if (url.includes('inside.aspx')) {
+          pending.lastHandledUrl = url;
           pccuPhaseRef.current = 'open_target';
-          const serviceCode = type === 'schedule' ? '1208' : '1220';
-          setTimeout(() => {
-            webViewRef.current?.injectJavaScript(buildServiceOpenScript(serviceCode as '1208' | '1220'));
-          }, 1200);
+          openPccuTarget(type, 'inside', 1200);
           return;
         }
 
         if (pccuPhaseRef.current === 'open_target' && isTransUrlForType(url, type)) {
           pending.lastHandledUrl = url;
-          if (type === 'schedule') {
-            pccuPhaseRef.current = 'syncing';
-            setTimeout(() => injectPccuScript('schedule', 'transurl', url, 0), 400);
-          } else {
-            setTimeout(() => {
-              webViewRef.current?.injectJavaScript(buildServiceOpenScript('1220'));
-            }, 400);
-          }
+          openPccuTarget(type, 'transurl', 400);
           return;
         }
 
@@ -467,6 +561,7 @@ export default function GlobalScraperWebView() {
         }
       } else if (mode === 'traffic') {
         console.log('[global-scraper][nav][traffic]', trafficPhaseRef.current, url);
+        updateDebugMessage(`nav:${trafficPhaseRef.current}:traffic:${url}`);
 
         if (trafficPhaseRef.current === 'load_downhill' && url.includes('0111000505')) {
           trafficPhaseRef.current = 'extract_downhill';
@@ -475,9 +570,51 @@ export default function GlobalScraperWebView() {
           trafficPhaseRef.current = 'extract_uphill';
           setTimeout(() => injectTrafficScript('uphill', '0111000503'), 500);
         }
+      } else if (mode === 'pccu-tutoring') {
+        pending.request.refreshTimeout?.();
+        updateDebugMessage(`nav:${tutoringPhaseRef.current}:${pending.request.type}:${url}`);
+        console.log('[global-scraper][nav][pccu-tutoring]', tutoringPhaseRef.current, url);
+
+        if (url.includes('inside.aspx')) {
+          tutoringPhaseRef.current = 'open_target';
+          useTutoringStore.getState().setSyncPhase('logging_in');
+          setTimeout(() => {
+            webViewRef.current?.injectJavaScript(buildServiceOpenScript('1202'));
+          }, 1200);
+          return;
+        }
+
+        if (url.includes('icas.pccu.edu.tw')) {
+          const isDetail = pending.request.type === 'tutoring-detail';
+          const courseCode = tutoringCourseCodeRef.current;
+
+          if (isDetail && courseCode) {
+            tutoringPhaseRef.current = 'fetching_single_course';
+            useTutoringStore.getState().setSyncPhase('fetching_details');
+            setTimeout(() => {
+              webViewRef.current?.injectJavaScript(
+                buildWaitForCourseFpScript(buildTutoringSingleCourseScript(courseCode)),
+              );
+            }, 3000);
+          } else {
+            tutoringPhaseRef.current = 'fetching_courses';
+            useTutoringStore.getState().setSyncPhase('fetching_courses');
+            setTimeout(() => {
+              webViewRef.current?.injectJavaScript(
+                buildWaitForCourseFpScript(buildTutoringOverviewScript()),
+              );
+            }, 3000);
+          }
+          return;
+        }
+
+        if (tutoringPhaseRef.current === 'logging_in' && url.includes('default.aspx')) {
+          runLogin();
+          return;
+        }
       }
     },
-    [runLogin, injectPccuScript, injectTrafficScript]
+    [runLogin, injectPccuScript, injectTrafficScript, openPccuTarget, updateDebugMessage]
   );
 
   // -----------------------------------------------------------------------
@@ -496,6 +633,7 @@ export default function GlobalScraperWebView() {
         if (mode === 'pccu') {
           const type = pending.request.type as SyncType;
           pending.request.refreshTimeout?.();
+          updateDebugMessage(`msg:${pccuPhaseRef.current}:${type}:${data.t}${data.m ? `:${String(data.m)}` : ''}`);
           console.log('[global-scraper][msg][pccu]', data.t, data.m || '');
 
           if (data.t === 'user_name' && data.n) {
@@ -506,15 +644,37 @@ export default function GlobalScraperWebView() {
           if (data.t === 'login_ok') {
             pccuPhaseRef.current = 'open_target';
             pending.lastHandledUrl = '';
+            pending.targetOpenRequested = false;
             webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(PCCU_INSIDE_URL)};true;`);
             return;
           }
 
-          if (data.t === 'popup') {
-            pending.lastHandledUrl = '';
-            webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(data.url)};true;`);
+          if (data.t === 'login_fail') {
+            finishPccu({ success: false, message: '登入失敗，請確認帳號密碼' });
             return;
           }
+
+      const debugTargetUrl = type === 'schedule'
+        ? 'https://ecampus.pccu.edu.tw/eCampus/queryCourse/queryByStudent.asp?QuerySource=queryCourse'
+        : 'https://ap2.pccu.edu.tw/studentscore/student/index.asp';
+      const shouldForceTargetFromPopup =
+        type === 'schedule' &&
+        typeof data.url === 'string' &&
+        /TransUrl\.aspx\?PrjNo=1208/i.test(data.url);
+
+      if (shouldForceTargetFromPopup) {
+        pccuPhaseRef.current = 'syncing';
+        pending.lastHandledUrl = debugTargetUrl;
+        updateDebugMessage(`popup-force:${type}:${debugTargetUrl}`);
+        webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(debugTargetUrl)};true;`);
+        return;
+      }
+
+      if (data.t === 'popup') {
+        pending.lastHandledUrl = '';
+        webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(data.url)};true;`);
+        return;
+      }
 
           if (data.t === 'html' && type === 'grade') {
             const parsed = parseGradesFromHtml(typeof data.h === 'string' ? data.h : '');
@@ -576,8 +736,128 @@ export default function GlobalScraperWebView() {
               finishPccu({ success: false, message });
             }
           }
-        } else if (mode === 'traffic') {
+      } else if (mode === 'pccu-tutoring') {
+        pending.request.refreshTimeout?.();
+        updateDebugMessage(`msg:${tutoringPhaseRef.current}:${pending.request.type}:${data.t}${data.m ? `:${String(data.m)}` : ''}`);
+        console.log('[global-scraper][msg][pccu-tutoring]', data.t, data.m || '');
+
+        if (data.t === 'user_name' && data.n) {
+          await SecureStore.setItemAsync('user_name', data.n);
+          return;
+        }
+
+        if (data.t === 'login_ok') {
+          tutoringPhaseRef.current = 'open_target';
+          useTutoringStore.getState().setSyncPhase('logging_in');
+          webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(PCCU_INSIDE_URL)};true;`);
+          return;
+        }
+
+        if (data.t === 'login_fail') {
+          useTutoringStore.getState().setSyncPhase('error');
+          useTutoringStore.getState().setSyncStatus('error');
+          finishPccu({ success: false, message: '登入失敗' });
+          return;
+        }
+
+        if (data.t === 'popup' && data.url) {
+          webViewRef.current?.injectJavaScript(`window.location.href=${JSON.stringify(data.url)};true;`);
+          return;
+        }
+
+        if (data.t === 'courses') {
+          const parsedCourses = Array.isArray(data.courses) ? data.courses : [];
+          await storageSetCourses(parsedCourses);
+          useTutoringStore.getState().setCourses(parsedCourses);
+          if (data.semester) {
+            useTutoringStore.getState().setSemester(data.semester);
+          }
+          if (data.welcome) {
+            useTutoringStore.getState().setWelcomeText(data.welcome);
+          }
+          tutoringPhaseRef.current = 'fetching_details';
+          useTutoringStore.getState().setSyncPhase('fetching_details');
+          webViewRef.current?.injectJavaScript(buildTutoringAllAssignmentsScript());
+          return;
+        }
+
+        if (data.t === 'all_assignments') {
+          const allItems = Array.isArray(data.items) ? data.items : [];
+          await setAllAssignments(allItems);
+          webViewRef.current?.injectJavaScript(buildTutoringPendingAssignmentsScript());
+          return;
+        }
+
+        if (data.t === 'pending') {
+          const pendingItems = Array.isArray(data.items) ? data.items : [];
+          await setPendingAssignments(pendingItems);
+          useTutoringStore.getState().setPendingAssignments(pendingItems);
+          useTutoringStore.getState().setLastSyncedAt(Date.now());
+          useTutoringStore.getState().setSyncPhase('complete');
+          useTutoringStore.getState().setSyncStatus('idle');
+          finishPccu({ success: true, data: { success: true, updatedAt: Date.now() } });
+          return;
+        }
+
+        if (data.t === 'single_course') {
+          const courseCode = data.courseCode as string;
+          const detail = {
+            announcements: Array.isArray(data.announcements) ? data.announcements : [],
+            materials: Array.isArray(data.materials) ? data.materials : [],
+            assignments: Array.isArray(data.assignments) ? data.assignments : [],
+          };
+          useTutoringStore.getState().updateCourseDetail(courseCode, detail);
+          useTutoringStore.getState().setSyncPhase('complete');
+          useTutoringStore.getState().setSyncStatus('idle');
+          finishPccu({ success: true, data: { success: true, updatedAt: Date.now() } });
+          return;
+        }
+
+        if (data.t === 'err') {
+          const phase = tutoringPhaseRef.current;
+          if (phase === 'fetching_courses' || phase === 'fetching_details' || phase === 'fetching_single_course') {
+            if (pending.retries < 2) {
+              pending.retries += 1;
+              tutoringPhaseRef.current = 'fetching_courses';
+              useTutoringStore.getState().setSyncPhase('fetching_courses');
+              updateDebugMessage(`retry:tutoring:${pending.retries}`);
+              if (pending.request.type === 'tutoring-detail' && tutoringCourseCodeRef.current) {
+                webViewRef.current?.injectJavaScript(
+                  buildWaitForCourseFpScript(buildTutoringSingleCourseScript(tutoringCourseCodeRef.current)),
+                );
+              } else {
+                webViewRef.current?.injectJavaScript(buildTutoringOverviewScript());
+              }
+            } else {
+              useTutoringStore.getState().setSyncPhase('error');
+              useTutoringStore.getState().setSyncStatus('error');
+              const failMessage = pending.request.type === 'tutoring-detail'
+                ? '課程資料同步失敗'
+                : '同步失敗';
+              finishPccu({ success: false, message: failMessage });
+            }
+          } else {
+            useTutoringStore.getState().setSyncPhase('error');
+            useTutoringStore.getState().setSyncStatus('error');
+            finishPccu({
+              success: false,
+              message: data.m ? `同步失敗：${data.m}` : '同步失敗',
+            });
+          }
+          return;
+        }
+
+        // Diagnostic / waiting / status messages — log only, no phase change
+        if (
+          data.t === 'waiting' || data.t === 'coursefp_ready' ||
+          data.t === 'diagnostic' || data.t === 'final_diagnostic' || data.t === 'status'
+        ) {
+          console.log('[global-scraper][tutoring]', data.t, data);
+          return;
+        }
+      } else if (mode === 'traffic') {
           console.log('[global-scraper][msg][traffic]', data.t);
+          updateDebugMessage(`msg:${trafficPhaseRef.current}:traffic:${data.t}`);
 
           if (data.t === 'traffic_rows') {
             const drafts = Array.isArray(data.rows) ? (data.rows as TrafficStopArrivalDraft[]) : [];
@@ -593,67 +873,77 @@ export default function GlobalScraperWebView() {
             }
           }
         }
-      } catch (error) {
-        const pending = pendingRef.current;
-        if (pending && !pending.completed) {
-          const mode = activeModeRef.current;
-          if (mode === 'pccu') {
-            const type = pending.request.type as SyncType;
-            finishPccu({
-              success: false,
-              message: type === 'grade' ? '成績同步失敗' : '課表同步失敗',
-            });
-          } else if (mode === 'traffic') {
-            finishTraffic({ success: false, message: '交通資訊解析失敗' });
-          }
-        }
+    } catch (error) {
+      const pending = pendingRef.current;
+      if (pending && !pending.completed) {
+        const mode = activeModeRef.current;
+        if (mode === 'pccu') {
+          const type = pending.request.type as SyncType;
+          finishPccu({
+            success: false,
+            message: type === 'grade' ? '成績同步失敗' : '課表同步失敗',
+          });
+        } else if (mode === 'pccu-tutoring') {
+          useTutoringStore.getState().setSyncPhase('error');
+          useTutoringStore.getState().setSyncStatus('error');
+          finishPccu({ success: false, message: '課業同步失敗' });
+      } else if (mode === 'traffic') {
+        finishTraffic({ success: false, message: '交通資訊解析失敗' });
       }
-    },
-    [finishPccu, finishTraffic, persistGrades, persistCourses, retryPccu]
-  );
+    }
+  }
+},
+[finishPccu, finishTraffic, persistGrades, persistCourses, retryPccu, updateDebugMessage]
+);
 
-  // -----------------------------------------------------------------------
-  // Load end handler (PCCU only)
+// -----------------------------------------------------------------------
+// Load end handler (PCCU only)
   // -----------------------------------------------------------------------
 
   const handleLoadEnd = useCallback(
     (event: any) => {
       const currentUrl = event.nativeEvent.url || '';
+      setDebugUrl(currentUrl);
       const pending = pendingRef.current;
-      if (!pending || activeModeRef.current !== 'pccu') return;
+      if (!pending) return;
 
-      const type = pending.request.type as SyncType;
+      const mode = activeModeRef.current;
 
-      if (pccuPhaseRef.current === 'load_ecampus' && currentUrl.includes('default.aspx')) {
-        runLogin();
-        return;
-      }
+      if (mode === 'pccu') {
+        const type = pending.request.type as SyncType;
 
-      if (pccuPhaseRef.current === 'syncing') {
-        const isTarget =
-          type === 'grade' ? isGradeQueryUrl(currentUrl) : isScheduleQueryUrl(currentUrl);
-        if (isTarget) {
-          setTimeout(() => {
-            injectPccuScript(type, 'loadend', currentUrl, 1600);
-          }, 400);
+        if (pccuPhaseRef.current === 'load_ecampus' && currentUrl.includes('default.aspx')) {
+          updateDebugMessage(`loadend:${pccuPhaseRef.current}:${type}:${currentUrl}`);
+          runLogin();
+          return;
         }
-        return;
-      }
 
-      if (pccuPhaseRef.current === 'open_target' && isTransUrlForType(currentUrl, type)) {
-        if (type === 'schedule') {
-          pccuPhaseRef.current = 'syncing';
-          setTimeout(() => {
-            injectPccuScript('schedule', 'loadend-transurl', currentUrl, 0);
-          }, 400);
-        } else {
-          setTimeout(() => {
-            webViewRef.current?.injectJavaScript(buildServiceOpenScript('1220'));
-          }, 400);
+        if (pccuPhaseRef.current === 'syncing') {
+          updateDebugMessage(`loadend:${pccuPhaseRef.current}:${type}:${currentUrl}`);
+          const isTarget =
+            type === 'grade' ? isGradeQueryUrl(currentUrl) : isScheduleQueryUrl(currentUrl);
+          if (isTarget) {
+            setTimeout(() => {
+              injectPccuScript(type, 'loadend', currentUrl, 1600);
+            }, 400);
+          }
+          return;
+        }
+
+        if (pccuPhaseRef.current === 'open_target' && isTransUrlForType(currentUrl, type)) {
+          updateDebugMessage(`loadend:${pccuPhaseRef.current}:${type}:${currentUrl}`);
+          pending.lastHandledUrl = currentUrl;
+          openPccuTarget(type, 'loadend-transurl', 400);
+        }
+      } else if (mode === 'pccu-tutoring') {
+        if (tutoringPhaseRef.current === 'load_ecampus' && currentUrl.includes('default.aspx')) {
+          updateDebugMessage(`loadend:${tutoringPhaseRef.current}:tutoring:${currentUrl}`);
+          runLogin();
+          return;
         }
       }
     },
-    [runLogin, injectPccuScript]
+    [runLogin, injectPccuScript, openPccuTarget, updateDebugMessage]
   );
 
   // -----------------------------------------------------------------------
@@ -672,7 +962,9 @@ export default function GlobalScraperWebView() {
 
   useEffect(() => {
     const pending = pendingRef.current;
-    if (!pending || activeModeRef.current !== 'pccu') return;
+    if (!pending) return;
+    const mode = activeModeRef.current;
+    if (mode !== 'pccu' && mode !== 'pccu-tutoring') return;
 
     // Credentials are fetched once and cached
     const init = async () => {
@@ -689,7 +981,13 @@ export default function GlobalScraperWebView() {
       pending.lastHandledUrl = '';
       pending.lastInjectKey = '';
       pending.lastInjectAt = 0;
+      pending.targetOpenRequested = false;
       pccuPhaseRef.current = 'load_ecampus';
+      if (mode === 'pccu-tutoring') {
+        tutoringPhaseRef.current = 'load_ecampus';
+        useTutoringStore.getState().setSyncPhase('logging_in');
+        useTutoringStore.getState().setSyncStatus('syncing');
+      }
     };
     void init();
   }, [sourceUri, finishPccu]);
@@ -702,16 +1000,21 @@ export default function GlobalScraperWebView() {
     const pending = pendingRef.current;
     if (!pending || pending.completed) return;
     const mode = activeModeRef.current;
+    updateDebugMessage(`error:${mode}`);
     if (mode === 'pccu') {
       const type = pending.request.type as SyncType;
       finishPccu({
         success: false,
         message: type === 'grade' ? '成績頁面載入失敗' : '課表頁面載入失敗',
       });
+    } else if (mode === 'pccu-tutoring') {
+      useTutoringStore.getState().setSyncPhase('error');
+      useTutoringStore.getState().setSyncStatus('error');
+      finishPccu({ success: false, message: '課業頁面載入失敗' });
     } else if (mode === 'traffic') {
       finishTraffic({ success: false, message: '交通資訊頁面載入失敗' });
     }
-  }, [finishPccu, finishTraffic]);
+  }, [finishPccu, finishTraffic, updateDebugMessage]);
 
   // -----------------------------------------------------------------------
   // Determine which URL the WebView should show
@@ -728,11 +1031,18 @@ export default function GlobalScraperWebView() {
   // Render
   // -----------------------------------------------------------------------
 
+  const debugPhase = activeModeRef.current === 'traffic'
+    ? trafficPhaseRef.current
+    : activeModeRef.current === 'pccu-tutoring'
+      ? tutoringPhaseRef.current
+      : pccuPhaseRef.current;
+  const debugType = pendingRef.current?.request.type ?? 'none';
+
   return (
-    <View style={styles.hidden} pointerEvents="none">
+    <View style={debugVisible ? styles.debugContainer : styles.hidden} pointerEvents="box-none">
       <WebView
         ref={webViewRef}
-        style={styles.hiddenInner}
+        style={debugVisible ? styles.debugWebView : styles.hiddenInner}
         source={{ uri: activeUri }}
         originWhitelist={['*']}
         sharedCookiesEnabled
@@ -746,11 +1056,44 @@ export default function GlobalScraperWebView() {
         onError={handleError}
         javaScriptEnabled
       />
+      {debugVisible ? (
+        <View style={styles.debugOverlay}>
+          <Text style={styles.debugText}>mode: {activeModeRef.current}</Text>
+          <Text style={styles.debugText}>type: {debugType}</Text>
+          <Text style={styles.debugText}>phase: {debugPhase}</Text>
+          <Text style={styles.debugText} numberOfLines={2}>msg: {debugMessage}</Text>
+          <Text style={styles.debugText} numberOfLines={3}>url: {debugUrl}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  debugContainer: {
+    position: 'absolute',
+    inset: 0,
+    backgroundColor: '#111',
+  },
+  debugWebView: {
+    flex: 1,
+    marginTop: 112,
+  },
+  debugOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    minHeight: 112,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.82)',
+    gap: 4,
+  },
+  debugText: {
+    color: '#fff',
+    fontSize: 12,
+  },
   hidden: {
     position: 'absolute',
     width: 375,

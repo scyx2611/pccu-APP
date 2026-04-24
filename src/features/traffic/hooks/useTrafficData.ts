@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTrafficSnapshot } from '../storage/trafficStorage';
-import { TrafficSnapshot, TrafficSyncResult } from '../types';
+import { TrafficSnapshot } from '../types';
+import { useTrafficSync } from './useTrafficSync';
 
 type UseTrafficDataOptions = {
   active?: boolean;
@@ -18,9 +19,8 @@ export function useTrafficData({
   const [refreshing, setRefreshing] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
   const refreshingRef = useRef(false);
-  const refreshModeRef = useRef<'manual' | 'auto'>('auto');
+  const { sync: trafficSync } = useTrafficSync();
 
   const loadSnapshot = useCallback(async () => {
     const cached = await getTrafficSnapshot();
@@ -29,30 +29,33 @@ export function useTrafficData({
     return cached;
   }, []);
 
-  const refresh = useCallback((mode: 'manual' | 'auto' = 'manual') => {
-    if (refreshingRef.current) return;
+  const refresh = useCallback(
+    async (mode: 'manual' | 'auto' = 'manual') => {
+      if (refreshingRef.current) return;
 
-    refreshingRef.current = true;
-    refreshModeRef.current = mode;
-    setError(null);
-    setRefreshing(true);
-    setPullRefreshing(mode === 'manual');
-    setReloadKey((value) => value + 1);
-  }, []);
-
-  const handleSyncComplete = useCallback(async (result: TrafficSyncResult) => {
-    refreshingRef.current = false;
-    setRefreshing(false);
-    setPullRefreshing(false);
-    await loadSnapshot();
-
-    if (result.success) {
+      refreshingRef.current = true;
       setError(null);
-      return;
-    }
+      setRefreshing(true);
+      setPullRefreshing(mode === 'manual');
 
-    setError(result.message || '交通資訊更新失敗');
-  }, [loadSnapshot]);
+      const result = await trafficSync();
+
+      refreshingRef.current = false;
+      setRefreshing(false);
+      setPullRefreshing(false);
+
+      if (result?.success) {
+        // Re-hydrate from storage (PccuSyncEngine executor already persisted)
+        const updated = await loadSnapshot();
+        if (!updated) {
+          setError('交通資訊更新失敗');
+        }
+      } else {
+        setError(result?.message ?? '交通資訊更新失敗');
+      }
+    },
+    [trafficSync, loadSnapshot]
+  );
 
   useEffect(() => {
     void loadSnapshot();
@@ -63,11 +66,11 @@ export function useTrafficData({
 
     const hasFreshSnapshot = snapshot && Date.now() - snapshot.updatedAt <= staleAfterMs;
     if (!hasFreshSnapshot) {
-      refresh('auto');
+      void refresh('auto');
     }
 
     const intervalId = setInterval(() => {
-      refresh('auto');
+      void refresh('auto');
     }, refreshIntervalMs);
 
     return () => clearInterval(intervalId);
@@ -87,10 +90,5 @@ export function useTrafficData({
     error,
     isStale,
     refresh,
-    sync: {
-      enabled: active && refreshing,
-      reloadKey,
-      onComplete: handleSyncComplete,
-    },
   };
 }

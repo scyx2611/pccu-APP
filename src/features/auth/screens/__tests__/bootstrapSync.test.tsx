@@ -83,6 +83,28 @@ describe('bootstrap sync hooks wait for shared executor readiness', () => {
     expect(useScheduleStore.getState().syncStatus).toBe('idle');
   });
 
+  it('schedule sync still waits when executor mount is delayed beyond the old 2s budget', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const { result } = renderHook(() => useScheduleSync());
+
+    const syncPromise = act(async () => {
+      const promise = result.current.sync({ priority: 1 });
+
+      setTimeout(() => {
+        engine.setExecutor(async () => ({ success: true, updatedAt: 123 }));
+      }, 3_000);
+
+      jest.advanceTimersByTime(3_000);
+      await promise;
+    });
+
+    await syncPromise;
+
+    expect(useScheduleStore.getState().courses).toHaveLength(1);
+    expect(useScheduleStore.getState().lastSyncedAt).toBe(123);
+    expect(useScheduleStore.getState().syncStatus).toBe('idle');
+  });
+
   it('grade sync waits for a late executor mount and rehydrates cached data', async () => {
     const engine = PccuSyncEngine.getInstance();
     const { result } = renderHook(() => useGradeSync());

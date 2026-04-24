@@ -42,3 +42,11 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Agent tooling
+.codex/
+.sisyphus/
+
+# Stray analysis/test scripts
+super_analysis.js
+test js/

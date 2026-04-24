@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { useTheme } from '../../src/providers/theme/ThemeProvider';
 import AppSymbol from '../../src/shared/components/AppSymbol';
+import { CourseData } from '../../src/features/pccu/parsers/pccuScraper';
 
 export default function CourseDetailsScreen() {
   const { data } = useLocalSearchParams<{ data: string }>();
   const { theme } = useTheme();
 
-  let course: any = null;
+  let course: CourseData | null = null;
   try {
     if (data) course = JSON.parse(data);
   } catch (e) {}

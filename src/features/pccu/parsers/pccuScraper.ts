@@ -505,6 +505,7 @@ const parseScheduleFromTable = ($: cheerio.CheerioAPI) => {
             lines
               .filter((line) => line !== titleLine)
               .filter((line) => !prefix || line !== prefix)
+              .filter((line) => !isRequirementOnly(line))
               .filter((line) => !hasDayToken(line) && !hasPeriodToken(line))
               .join(' ')
           );
@@ -564,7 +565,11 @@ const parseScheduleFromCards = ($: cheerio.CheerioAPI) => {
     if (!parsedTitle.name || !parsedSlot) return;
 
     const infoLine =
-      lines.find((line, index) => line !== titleInfo.titleLine && index !== scheduleIndex && (!titleInfo.prefix || line !== titleInfo.prefix)) || '';
+      lines
+        .filter((line, index) => line !== titleInfo.titleLine && index !== scheduleIndex)
+        .filter((line) => !titleInfo.prefix || line !== titleInfo.prefix)
+        .filter((line) => !isRequirementOnly(line))
+        .join(' ');
     const info = splitTeacherLocation(infoLine);
 
     courses.push({

@@ -35,25 +35,7 @@ export default function ModalLayout() {
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen
-        name="grade"
-        options={{
-          title: '歷年成績',
-          headerLargeTitle: true,
-          unstable_headerRightItems: iosCloseHeaderItem,
-          headerRight: Platform.OS !== 'ios' ? fallbackCloseButton : undefined,
-        }}
-      />
       <Stack.Screen name="gradeDetails" options={{ title: '成績詳細', presentation: 'card' }} />
-      <Stack.Screen
-        name="schedule"
-        options={{
-          title: '完整課表',
-          headerLargeTitle: true,
-          unstable_headerRightItems: iosCloseHeaderItem,
-          headerRight: Platform.OS !== 'ios' ? fallbackCloseButton : undefined,
-        }}
-      />
       <Stack.Screen name="courseDetails" options={{ title: '課程詳細', presentation: 'card' }} />
     </Stack>
   );

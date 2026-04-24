@@ -12,7 +12,6 @@ import {
 import { useIsFocused } from '@react-navigation/native';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
-import TrafficSyncAgent from '../components/TrafficSyncAgent';
 import { useTrafficData } from '../hooks/useTrafficData';
 import {
   TRAFFIC_SOURCE_URL,
@@ -88,14 +87,8 @@ export default function TrafficScreen() {
           colors={[theme.primary]}
         />
       )}
-    >
-      <TrafficSyncAgent
-        enabled={traffic.sync.enabled}
-        reloadKey={traffic.sync.reloadKey}
-        onComplete={traffic.sync.onComplete}
-      />
-
-      <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}> 
+      >
+        <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
         <View style={styles.heroHeader}>
           <AppSymbol name="bus.fill" size={28} tintColor={theme.warning} fallback={<Text>Bus</Text>} />
           <Text style={[styles.heroTitle, { color: theme.text }]}>交通動態</Text>

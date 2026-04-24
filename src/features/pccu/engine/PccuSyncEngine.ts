@@ -4,12 +4,13 @@ import { AppState, type AppStateStatus } from 'react-native';
 // Types
 // ---------------------------------------------------------------------------
 
-export type SyncType = 'grade' | 'schedule' | 'traffic';
+export type SyncType = 'grade' | 'schedule' | 'traffic' | 'tutoring' | 'tutoring-detail';
 
 export interface SyncRequest {
   id: string;
   type: SyncType;
   priority: number;
+  options?: Record<string, unknown>;
   resolve: (data: any) => void;
   reject: (error: Error) => void;
   setAbortHandler?: (handler: SyncAbortHandler | null) => void;
@@ -112,7 +113,7 @@ class PriorityQueue {
 
 const TASK_TIMEOUT_MS = 30_000; // 30 seconds per task
 const PROCESSING_DELAY_MS = 300; // small delay between queued tasks
-const EXECUTOR_READY_TIMEOUT_MS = 2_000;
+const EXECUTOR_READY_TIMEOUT_MS = 8_000;
 const EXECUTOR_READY_POLL_MS = 50;
 
 let instance: PccuSyncEngine | null = null;
@@ -225,25 +226,26 @@ export class PccuSyncEngine {
    * Enqueue a sync request. Returns a Promise that resolves/rejects when
    * the request is processed.
    */
-  requestSync(type: SyncType, priority: number = 5): Promise<any> {
+  requestSync(type: SyncType, priority?: number, options?: Record<string, unknown>): Promise<any> {
     return new Promise((resolve, reject) => {
-      const request: InternalSyncRequest = {
-        id: this.generateId(type),
-        type,
-        priority,
-        resolve,
-        reject,
-        abortHandler: null,
-        setAbortHandler: (handler) => {
-          request.abortHandler = handler;
-        },
-        refreshTimeout: () => {
-          this.refreshActiveTimeout(request.id);
-        },
-      };
+    const request: InternalSyncRequest = {
+      id: this.generateId(type),
+      type,
+      priority: priority ?? 5,
+      options,
+      resolve,
+      reject,
+      abortHandler: null,
+      setAbortHandler: (handler) => {
+        request.abortHandler = handler;
+      },
+      refreshTimeout: () => {
+        this.refreshActiveTimeout(request.id);
+      },
+    };
 
       this.queue.enqueue(request);
-      console.log(`[PccuSyncEngine] Enqueued ${type} (id=${request.id}, priority=${priority}, queue=${this.queue.size})`);
+      console.log(`[PccuSyncEngine] Enqueued ${type} (id=${request.id}, priority=${priority ?? 5}, queue=${this.queue.size})`);
 
       this.processQueue();
     });

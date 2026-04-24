@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, Animated, Pressable, ActivityIndicator, ScrollV
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import AppSymbol from '../../../components/AppSymbol';
-import { useTheme } from '../../../contexts/ThemeContext';
+import AppSymbol from '../../../shared/components/AppSymbol';
+import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { CourseData } from '../../pccu/parsers/pccuScraper';
 import { getCourses } from '../../schedule/storage/scheduleStorage';
 import { useTrafficData } from '../../traffic/hooks/useTrafficData';
@@ -13,8 +13,8 @@ import {
   formatTrafficUpdatedAt,
   pickBestTrafficArrival,
 } from '../../traffic/types';
-import { SemesterGrade } from '../../../services/scraper';
-import { getGrades } from '../../../services/GradeStore';
+import { SemesterGrade } from '../../pccu/parsers/pccuScraper';
+import { getGrades } from '../../grade/storage/gradeStorage';
 import { getHideHomeGradeDetails } from '../../settings/storage/privacySettings';
 import { usePendingCount } from '../../tutoring/hooks/useTutoringData';
 import TutoringPendingBadge from '../../tutoring/components/TutoringPendingBadge';

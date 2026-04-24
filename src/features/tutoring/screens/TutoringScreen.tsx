@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   RefreshControl,
   ScrollView,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 
@@ -20,8 +19,6 @@ import TutoringPendingBadge from '../components/TutoringPendingBadge';
 import { buildUpdatedAtText } from '../../../utils/updatedAt';
 
 export default function TutoringScreen() {
-  const webViewRef = useRef<WebView>(null);
-  const [webViewKey, setWebViewKey] = useState(0);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const { theme } = useTheme();
 
@@ -33,14 +30,25 @@ export default function TutoringScreen() {
   const lastSyncedAt = useTutoringStore((s) => s.lastSyncedAt);
   const syncStatus = useTutoringStore((s) => s.syncStatus);
   const syncPhase = useTutoringStore((s) => s.syncPhase);
+  const error = useTutoringStore((s) => s.error);
   const hydrate = useTutoringStore((s) => s.hydrate);
 
-  // Sync hook
-  const { statusText, handleMessage, handleNavChange, startSync } = useTutoringSync({
-    webViewRef,
-  });
+  // Sync hook — thin PccuSyncEngine wrapper, no WebView
+  const { sync } = useTutoringSync();
 
-  const isSyncing = syncStatus === 'syncing' || syncPhase !== 'idle' && syncPhase !== 'complete' && syncPhase !== 'error';
+  // Derive statusText from store syncPhase + error
+  const statusText = useMemo(() => {
+    switch (syncPhase) {
+      case 'logging_in': return '登入中...';
+      case 'fetching_courses': return '同步課程列表中...';
+      case 'fetching_details': return '同步作業狀態中...';
+      case 'complete': return '課業資料同步完成';
+      case 'error': return error ?? '同步失敗';
+      default: return '';
+    }
+  }, [syncPhase, error]);
+
+  const isSyncing = syncStatus === 'syncing' || (syncPhase !== 'idle' && syncPhase !== 'complete' && syncPhase !== 'error');
   const loading = isSyncing && courses.length === 0;
 
   const updatedAtLineText = buildUpdatedAtText({
@@ -63,7 +71,7 @@ export default function TutoringScreen() {
       const syncOnFocus = async () => {
         if (!active) return;
         // Silent sync if we have cached data
-        await startSync({ silent: courses.length > 0 });
+        await sync({ silent: courses.length > 0 });
       };
 
       void syncOnFocus();
@@ -71,35 +79,19 @@ export default function TutoringScreen() {
       return () => {
         active = false;
       };
-    }, [startSync, courses.length])
+    }, [sync, courses.length]),
   );
 
   const handlePullRefresh = useCallback(() => {
     setPullRefreshing(true);
-    void startSync({ manual: true, silent: false }).finally(() => {
+    void sync({ silent: false }).finally(() => {
       setPullRefreshing(false);
     });
-  }, [startSync]);
+  }, [sync]);
 
   const handleCoursePress = useCallback((courseCode: string) => {
     router.push(`/tutoring/${courseCode}`);
   }, []);
-
-  const renderSyncWebView = () => (
-    <WebView
-      key={webViewKey}
-      ref={webViewRef}
-      style={styles.hiddenWebViewInner}
-      source={{ uri: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx' }}
-      originWhitelist={['*']}
-      sharedCookiesEnabled
-      thirdPartyCookiesEnabled
-      domStorageEnabled
-      cacheEnabled={false}
-      onNavigationStateChange={handleNavChange}
-      onMessage={handleMessage}
-    />
-  );
 
   return (
     <ScrollView
@@ -116,8 +108,6 @@ export default function TutoringScreen() {
         />
       }
     >
-      {isSyncing ? <View style={styles.hiddenWebView}>{renderSyncWebView()}</View> : null}
-
       <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
         <View style={styles.heroHeader}>
           <AppSymbol name="book.fill" size={28} tintColor={theme.primary} fallback={<Text>📚</Text>} />
@@ -210,8 +200,6 @@ export default function TutoringScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16 },
-  hiddenWebView: { position: 'absolute', width: 375, height: 667, opacity: 0, left: -1000, top: -1000 },
-  hiddenWebViewInner: { width: 375, height: 667 },
   heroCard: {
     borderRadius: 28,
     padding: 22,

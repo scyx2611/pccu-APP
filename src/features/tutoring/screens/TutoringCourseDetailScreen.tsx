@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { useTutoringSync } from '../hooks/useTutoringSync';
 import { useTutoringStore } from '../store/useTutoringStore';
@@ -39,27 +38,40 @@ export default function TutoringCourseDetailScreen({
 }: TutoringCourseDetailScreenProps) {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('announcements');
-  const webViewRef = useRef<WebView>(null);
 
-  // Read data from Zustand store instead of the old hook
+  // Read data from Zustand store
   const courseDetail = useTutoringStore((state) => state.courseDetails.get(courseCode));
   const announcements = courseDetail?.announcements ?? [];
   const materials = courseDetail?.materials ?? [];
   const assignments = courseDetail?.assignments ?? [];
+  const syncPhase = useTutoringStore((s) => s.syncPhase);
+  const error = useTutoringStore((s) => s.error);
 
-  const {
-    statusText,
-    startSync,
-    handleMessage,
-    handleNavChange,
-    phaseRef,
-  } = useTutoringSync({ webViewRef });
+  // Sync hook — thin PccuSyncEngine wrapper, no WebView
+  const { syncCourseDetail } = useTutoringSync();
 
-  const isSyncing = phaseRef.current !== 'idle' && phaseRef.current !== 'complete' && phaseRef.current !== 'error';
+  // Derive statusText from store syncPhase + error
+  const statusText = useMemo(() => {
+    switch (syncPhase) {
+      case 'logging_in': return '登入中...';
+      case 'fetching_courses': return '同步課程列表中...';
+      case 'fetching_details': return '同步課程資料中...';
+      case 'complete': return '課程資料同步完成';
+      case 'error': return error ?? '同步失敗';
+      default: return '';
+    }
+  }, [syncPhase, error]);
+
+  const isSyncing = syncPhase !== 'idle' && syncPhase !== 'complete' && syncPhase !== 'error';
+
+  // Auto-sync on mount
+  useEffect(() => {
+    void syncCourseDetail(courseCode);
+  }, [courseCode, syncCourseDetail]);
 
   const handleRefresh = useCallback(() => {
-    startSync({ courseCode, manual: true });
-  }, [startSync, courseCode]);
+    void syncCourseDetail(courseCode);
+  }, [syncCourseDetail, courseCode]);
 
   const renderHeader = () => (
     <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
@@ -229,21 +241,6 @@ export default function TutoringCourseDetailScreen({
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {renderHeader()}
       {renderContent()}
-
-      {/* Hidden WebView for real-time scraping */}
-      <WebView
-        ref={webViewRef}
-        source={{ uri: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx' }}
-        style={styles.hiddenWebView}
-        onMessage={handleMessage}
-        onNavigationStateChange={handleNavChange}
-        javaScriptEnabled
-        domStorageEnabled
-        startInLoadingState={false}
-        mixedContentMode="always"
-        allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={false}
-      />
     </View>
   );
 }
@@ -347,13 +344,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-  hiddenWebView: {
-    position: 'absolute',
-    top: -1000,
-    left: -1000,
-    width: 375,
-    height: 667,
-    opacity: 0,
   },
 });
