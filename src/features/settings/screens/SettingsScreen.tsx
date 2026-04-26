@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   navigationSeparator: {
     position: 'absolute',
     left: 76,
-    right: 0,
+    right: 44,
     bottom: 0,
     height: StyleSheet.hairlineWidth,
   },
