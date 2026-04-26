@@ -2,5 +2,5 @@
 import { Redirect } from 'expo-router';
 
 export default function ScheduleRootScreen() {
-  return <Redirect href="/(tabs)/home/schedule" />;
+  return <Redirect href="/(tabs)/schedule" />;
 }

@@ -2,21 +2,31 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
-import { getDeveloperDebugEnabled, setDeveloperDebugEnabled } from '../storage/developerSettings';
+import {
+  getDeveloperDebugEnabled,
+  getHomeCourseCardTestEnabled,
+  setDeveloperDebugEnabled,
+  setHomeCourseCardTestEnabled,
+} from '../storage/developerSettings';
 import { getCourseReminderPresentationMode } from '../../notifications/services/courseReminderService';
 
 export default function DeveloperScreen() {
   const { theme } = useTheme();
   const [developerDebugEnabled, setDeveloperDebugEnabledState] = useState(false);
+  const [homeCourseCardTestEnabled, setHomeCourseCardTestEnabledState] = useState(false);
   const [sendingTestNotification, setSendingTestNotification] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     const loadSettings = async () => {
-      const debugEnabled = await getDeveloperDebugEnabled();
+      const [debugEnabled, courseCardTestEnabled] = await Promise.all([
+        getDeveloperDebugEnabled(),
+        getHomeCourseCardTestEnabled(),
+      ]);
       if (!active) return;
       setDeveloperDebugEnabledState(debugEnabled);
+      setHomeCourseCardTestEnabledState(courseCardTestEnabled);
     };
 
     void loadSettings();
@@ -29,6 +39,12 @@ export default function DeveloperScreen() {
   const handleDeveloperDebugToggle = async (value: boolean) => {
     setDeveloperDebugEnabledState(value);
     await setDeveloperDebugEnabled(value);
+  };
+
+  const handleHomeCourseCardTestToggle = async () => {
+    const nextValue = !homeCourseCardTestEnabled;
+    setHomeCourseCardTestEnabledState(nextValue);
+    await setHomeCourseCardTestEnabled(nextValue);
   };
 
   const handleSendTestNotification = async () => {
@@ -103,6 +119,18 @@ export default function DeveloperScreen() {
             thumbColor="#FFFFFF"
           />
         </View>
+
+        <View style={[styles.separator, { backgroundColor: theme.border }]} />
+
+        <Pressable style={styles.actionRow} onPress={() => void handleHomeCourseCardTestToggle()}>
+          <View style={styles.textWrap}>
+            <Text style={[styles.cellTitle, { color: theme.text }]}>首頁課程卡測試</Text>
+            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>暫時顯示目前上計算機概論，下節為程式設計。</Text>
+          </View>
+          <Text style={[styles.actionLabel, { color: homeCourseCardTestEnabled ? theme.danger : theme.primary }]}>
+            {homeCourseCardTestEnabled ? '關閉' : '啟用'}
+          </Text>
+        </Pressable>
 
         <View style={[styles.separator, { backgroundColor: theme.border }]} />
 

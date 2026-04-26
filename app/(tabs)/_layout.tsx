@@ -1,23 +1,15 @@
 import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useTheme } from '../../src/providers/theme/ThemeProvider';
+import { MAIN_TAB_APPEARANCE, MAIN_TABS } from '../../src/navigation/mainTabs';
 
 export default function TabLayout() {
-  const { theme } = useTheme();
-
   return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="home">
-        <Label>首頁</Label>
-        <Icon sf="house.fill" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="tutoring">
-        <Label>課輔</Label>
-        <Icon sf="book.fill" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
-        <Label>設定</Label>
-        <Icon sf="gear" />
-      </NativeTabs.Trigger>
+    <NativeTabs {...MAIN_TAB_APPEARANCE}>
+      {MAIN_TABS.map((tab) => (
+        <NativeTabs.Trigger key={tab.name} name={tab.name}>
+          <Label>{tab.label}</Label>
+          <Icon sf={tab.sfSymbol} />
+        </NativeTabs.Trigger>
+      ))}
     </NativeTabs>
   );
 }

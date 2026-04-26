@@ -19,7 +19,17 @@ export default function HomeLayout() {
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen name="index" options={{ title: '首頁' }} />
+      <Stack.Screen
+        name="index"
+        options={{
+          title: '',
+          headerLargeTitle: true,
+          headerTransparent: true,
+          headerShadowVisible: false,
+          headerTitleStyle: { color: 'transparent' },
+          headerLargeTitleStyle: { color: 'transparent' },
+        }}
+      />
       <Stack.Screen name="schedule" options={{ title: '完整課表' }} />
       <Stack.Screen name="grade" options={{ title: '歷年成績' }} />
       <Stack.Screen name="traffic" options={{ title: '交通動態' }} />

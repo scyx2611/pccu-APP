@@ -1,94 +1,129 @@
-import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, ColorValue, Platform, PlatformColor, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { ThemeMode, useTheme } from '../../../providers/theme/ThemeProvider';
 import { logoutPCCU } from '../../auth/services/authService';
+import { getGrades } from '../../grade/storage/gradeStorage';
 import AppSymbol from '../../../shared/components/AppSymbol';
 
+const SETTINGS_ICON_SIZE = 19;
+const SETTINGS_CARD_RADIUS = 19;
+const SETTINGS_ROW_VERTICAL_PADDING = 15;
+const SETTINGS_ROW_HORIZONTAL_PADDING = 16;
+const SETTINGS_ICON_TITLE_GAP = 16;
+const IOS_CHEVRON_COLOR = '#C7C7CC';
+const IOS_SEPARATOR_COLOR = '#ECECF0';
+
 type SettingsNavigationRowProps = {
+  icon: string;
   title: string;
-  iconName: string;
-  iconBackgroundColor: string;
-  iconFallback: string;
+  value?: string;
   onPress: () => void;
-  trailingValue?: string;
-  showSeparator?: boolean;
-  isFirst?: boolean;
-  isLast?: boolean;
-  titleColor: string;
+  iconTint: string;
+  textColor: string;
   valueColor: string;
   chevronColor: string;
-  separatorColor: string;
-  pressedColor: string;
+  separatorColor: ColorValue;
+  pressedBackground: ColorValue;
+  showSeparator?: boolean;
 };
 
 function SettingsNavigationRow({
+  icon,
   title,
-  iconName,
-  iconBackgroundColor,
-  iconFallback,
+  value,
   onPress,
-  trailingValue,
-  showSeparator = true,
-  isFirst = false,
-  isLast = false,
-  titleColor,
+  iconTint,
+  textColor,
   valueColor,
   chevronColor,
   separatorColor,
-  pressedColor,
+  pressedBackground,
+  showSeparator = true,
 }: SettingsNavigationRowProps) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.navigationCell,
-        isFirst && styles.firstNavigationCell,
-        isLast && styles.lastNavigationCell,
-        pressed && { backgroundColor: pressedColor },
-      ]}
-    >
-      <View style={[styles.iconContainer, { backgroundColor: iconBackgroundColor }]}> 
-        <AppSymbol
-          name={iconName}
-          size={22}
-          tintColor="#FFF"
-          weight="semibold"
-          fallback={<Text style={styles.iconFallbackText}>{iconFallback}</Text>}
-        />
-      </View>
-
-      <Text style={[styles.cellTitle, { color: titleColor }]} numberOfLines={1}>
-        {title}
-      </Text>
-
-      {trailingValue ? (
-        <Text style={[styles.cellValue, { color: valueColor }]} numberOfLines={1}>
-          {trailingValue}
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
+        onPress={onPress}
+        style={({ pressed }) => [styles.navigationCell, pressed && { backgroundColor: pressedBackground }]}
+      >
+        <View style={styles.navigationIconContainer}>
+          <AppSymbol
+            name={icon}
+            size={SETTINGS_ICON_SIZE}
+            tintColor={iconTint}
+            weight="semibold"
+            fallback={<Text style={{ color: iconTint }}>?</Text>}
+          />
+        </View>
+        <Text style={[styles.navigationTitle, { color: textColor }]} numberOfLines={1}>
+          {title}
         </Text>
-      ) : null}
-
-      <AppSymbol
-        name="chevron.right"
-        size={15}
-        tintColor={chevronColor}
-        weight="semibold"
-        fallback={<Text style={[styles.chevronFallback, { color: chevronColor }]}>&gt;</Text>}
-      />
-
-      {showSeparator ? (
-        <View
-          pointerEvents="none"
-          style={[styles.navigationSeparator, { backgroundColor: separatorColor }]}
+        {value ? (
+          <Text style={[styles.navigationValue, { color: valueColor }]} numberOfLines={1}>
+            {value}
+          </Text>
+        ) : null}
+        <AppSymbol
+          name="chevron.right"
+          size={15}
+          tintColor={chevronColor}
+          weight="semibold"
+          fallback={<Text style={{ color: chevronColor }}>&gt;</Text>}
         />
-      ) : null}
-    </Pressable>
+      </Pressable>
+      {showSeparator ? <View style={[styles.navigationSeparator, { backgroundColor: separatorColor }]} /> : null}
+    </View>
   );
 }
 
+const extractStudentProgram = (title?: string | null) => {
+  if (!title) return null;
+
+  const normalized = title.replace(/\s+/g, ' ').trim();
+  const match = normalized.match(/(?:\d{2,3}學年度\s*)?(.+?系)?\s*(\d{1,2}年級(?:\s*[A-Z]班)?)/);
+  if (!match) return null;
+
+  return [match[1], match[2]].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+};
+
 export default function SettingsScreen() {
-  const { mode, theme, isDark } = useTheme();
+  const { mode, theme } = useTheme();
+  const [userName, setUserName] = useState('');
+  const [studentProgram, setStudentProgram] = useState('系級未同步');
+  const groupedBackground = Platform.OS === 'ios' ? PlatformColor('systemGroupedBackground') : theme.bg;
+  const groupedCardBackground = Platform.OS === 'ios' ? PlatformColor('secondarySystemGroupedBackground') : theme.syncBtnBg;
+  const groupedSeparator = Platform.OS === 'ios' ? IOS_SEPARATOR_COLOR : theme.border;
+  const groupedSectionText = Platform.OS === 'ios' ? PlatformColor('secondaryLabel') : theme.textSub;
+  const avatarBackground = Platform.OS === 'ios' ? PlatformColor('systemGray5') : theme.rankBg;
+  const avatarBorder = Platform.OS === 'ios' ? PlatformColor('separator') : theme.border;
+  const cellPressedBackground = Platform.OS === 'ios' ? PlatformColor('systemGray5') : 'rgba(0, 0, 0, 0.10)';
+  const chevronColor = Platform.OS === 'ios' ? IOS_CHEVRON_COLOR : theme.textSub;
+
+  useEffect(() => {
+    let active = true;
+
+    const loadProfile = async () => {
+      const [storedName, cachedGrades] = await Promise.all([
+        SecureStore.getItemAsync('user_name'),
+        getGrades(),
+      ]);
+      if (!active) return;
+
+      setUserName((storedName || '').trim());
+      const program = cachedGrades.grades?.map((grade) => extractStudentProgram(grade.title)).find(Boolean);
+      setStudentProgram(program || '系級未同步');
+    };
+
+    void loadProfile();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleLogout = () => {
     Alert.alert('登出帳號', '確定要登出目前的 PCCU 帳號嗎？', [
@@ -109,87 +144,110 @@ export default function SettingsScreen() {
     light: '淺色',
     dark: '深色',
   };
-
-  const settingsCardBackground = isDark ? theme.card : '#FFFFFF';
-  const pressedColor = isDark ? 'rgba(255,255,255,0.08)' : '#F2F2F7';
-  const separatorColor = isDark ? theme.border : '#E5E5EA';
-  const chevronColor = isDark ? '#636366' : '#C7C7CC';
-
-  const settingsItems = [
-    {
-      title: '通知',
-      iconName: 'bell.fill',
-      iconBackgroundColor: theme.danger,
-      iconFallback: 'B',
-      onPress: () => router.push('/settings/notifications'),
-    },
-    {
-      title: '外觀',
-      trailingValue: modeLabels[mode],
-      iconName: isDark ? 'moon.fill' : 'sun.max.fill',
-      iconBackgroundColor: theme.primary,
-      iconFallback: 'T',
-      onPress: () => router.push('/settings/appearance'),
-    },
-    {
-      title: '安全性',
-      iconName: 'lock.fill',
-      iconBackgroundColor: theme.warning,
-      iconFallback: 'S',
-      onPress: () => router.push('/settings/security'),
-    },
-    {
-      title: '隱私',
-      iconName: 'hand.raised.fill',
-      iconBackgroundColor: '#5AC8FA',
-      iconFallback: 'P',
-      onPress: () => router.push('/settings/privacy'),
-    },
-    {
-      title: '開發者',
-      iconName: 'wrench.and.screwdriver.fill',
-      iconBackgroundColor: theme.purple,
-      iconFallback: 'D',
-      onPress: () => router.push('/settings/developer'),
-    },
-    {
-      title: '關於',
-      iconName: 'info.circle.fill',
-      iconBackgroundColor: theme.success,
-      iconFallback: 'i',
-      onPress: () => router.push('/settings/about'),
-    },
-  ];
+  const displayName = userName ? `${userName} 同學` : '同學';
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.bg }]}
+      style={[styles.container, { backgroundColor: groupedBackground }]}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.sectionTitle, { color: theme.textSub }]}>應用設定</Text>
-      <View style={[styles.settingsCard, { backgroundColor: settingsCardBackground }]}> 
-        {settingsItems.map((item, index) => (
-          <SettingsNavigationRow
-            key={item.title}
-            {...item}
-            isFirst={index === 0}
-            isLast={index === settingsItems.length - 1}
-            showSeparator={index !== settingsItems.length - 1}
-            titleColor={theme.text}
-            valueColor={theme.textSub}
-            chevronColor={chevronColor}
-            separatorColor={separatorColor}
-            pressedColor={pressedColor}
-          />
-        ))}
+      <View style={[styles.profileCard, { backgroundColor: groupedCardBackground }]}>
+        <View style={[styles.avatar, { backgroundColor: avatarBackground, borderColor: avatarBorder }]}>
+          <AppSymbol name="person.fill" size={28} tintColor={theme.textSub} fallback={<Text style={{ color: theme.textSub }}>人</Text>} />
+        </View>
+        <View style={styles.profileTextWrap}>
+          <Text style={[styles.profileName, { color: theme.text }]} numberOfLines={1}>
+            {displayName}
+          </Text>
+          <Text style={[styles.profileMeta, { color: theme.textSub }]} numberOfLines={1}>
+            {`中國文化大學 · ${studentProgram}`}
+          </Text>
+        </View>
       </View>
 
-      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}> 
-        <TouchableOpacity style={styles.cellRowCenter} onPress={handleLogout}>
+      <Text style={[styles.sectionTitle, { color: groupedSectionText }]}>應用設定</Text>
+      <View style={[styles.insetGroup, { backgroundColor: groupedCardBackground }]}>
+        <SettingsNavigationRow
+          icon="bell"
+          title="通知"
+          onPress={() => router.push('/settings/notifications')}
+          iconTint={theme.text}
+          textColor={theme.text}
+          valueColor={theme.textSub}
+          chevronColor={chevronColor}
+          separatorColor={groupedSeparator}
+          pressedBackground={cellPressedBackground}
+        />
+        <SettingsNavigationRow
+          icon="sun.max"
+          title="外觀"
+          value={modeLabels[mode]}
+          onPress={() => router.push('/settings/appearance')}
+          iconTint={theme.text}
+          textColor={theme.text}
+          valueColor={theme.textSub}
+          chevronColor={chevronColor}
+          separatorColor={groupedSeparator}
+          pressedBackground={cellPressedBackground}
+        />
+        <SettingsNavigationRow
+          icon="person.badge.shield.checkmark"
+          title="安全性"
+          onPress={() => router.push('/settings/security')}
+          iconTint={theme.text}
+          textColor={theme.text}
+          valueColor={theme.textSub}
+          chevronColor={chevronColor}
+          separatorColor={groupedSeparator}
+          pressedBackground={cellPressedBackground}
+        />
+        <SettingsNavigationRow
+          icon="hand.raised"
+          title="隱私"
+          onPress={() => router.push('/settings/privacy')}
+          iconTint={theme.text}
+          textColor={theme.text}
+          valueColor={theme.textSub}
+          chevronColor={chevronColor}
+          separatorColor={groupedSeparator}
+          pressedBackground={cellPressedBackground}
+        />
+        <SettingsNavigationRow
+          icon="wrench.and.screwdriver"
+          title="開發者"
+          onPress={() => router.push('/settings/developer')}
+          iconTint={theme.text}
+          textColor={theme.text}
+          valueColor={theme.textSub}
+          chevronColor={chevronColor}
+          separatorColor={groupedSeparator}
+          pressedBackground={cellPressedBackground}
+        />
+        <SettingsNavigationRow
+          icon="info.circle"
+          title="關於"
+          onPress={() => router.push('/settings/about')}
+          iconTint={theme.text}
+          textColor={theme.text}
+          valueColor={theme.textSub}
+          chevronColor={chevronColor}
+          separatorColor={groupedSeparator}
+          pressedBackground={cellPressedBackground}
+          showSeparator={false}
+        />
+      </View>
+
+      <View style={[styles.insetGroup, { backgroundColor: groupedCardBackground }]}>
+        <Pressable
+          accessibilityRole="button"
+          android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
+          style={({ pressed }) => [styles.cellRowCenter, pressed && { backgroundColor: cellPressedBackground }]}
+          onPress={handleLogout}
+        >
           <Text style={[styles.logoutText, { color: theme.danger }]}>登出目前帳號</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       <View style={styles.bottomSpacer} />
@@ -200,86 +258,94 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingTop: 16 },
-  sectionTitle: {
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    overflow: 'hidden',
+  },
+  avatar: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  profileTextWrap: { flex: 1, minWidth: 0 },
+  profileName: {
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: '800',
+  },
+  profileMeta: {
     fontSize: 14,
-    fontWeight: '600',
+    lineHeight: 20,
+    fontWeight: '500',
+    marginTop: 3,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '400',
     marginLeft: 36,
     marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  settingsCard: {
-    marginHorizontal: 20,
-    borderRadius: 26,
-    marginBottom: 24,
-    overflow: 'hidden',
+    textTransform: 'none',
+    letterSpacing: 0,
   },
   insetGroup: {
     marginHorizontal: 20,
-    borderRadius: 16,
+    borderRadius: SETTINGS_CARD_RADIUS,
     marginBottom: 24,
     overflow: 'hidden',
   },
   navigationCell: {
-    minHeight: 70,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 22,
-    paddingRight: 18,
+    alignSelf: 'stretch',
+    paddingLeft: SETTINGS_ROW_HORIZONTAL_PADDING,
+    paddingRight: SETTINGS_ROW_HORIZONTAL_PADDING,
+    paddingVertical: SETTINGS_ROW_VERTICAL_PADDING,
   },
-  firstNavigationCell: {
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+  navigationIconContainer: {
+    width: SETTINGS_ICON_SIZE,
+    height: SETTINGS_ICON_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SETTINGS_ICON_TITLE_GAP,
   },
-  lastNavigationCell: {
-    borderBottomLeftRadius: 26,
-    borderBottomRightRadius: 26,
+  navigationTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  navigationValue: {
+    maxWidth: 130,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '400',
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  navigationSeparator: {
+    height: 1,
+    marginLeft: SETTINGS_ROW_HORIZONTAL_PADDING + SETTINGS_ICON_SIZE + SETTINGS_ICON_TITLE_GAP,
+    marginRight: 20,
   },
   cellRowCenter: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    alignSelf: 'stretch',
     paddingVertical: 14,
     minHeight: 52,
-  },
-  iconContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  iconFallbackText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  cellTitle: {
-    flex: 1,
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '600',
-  },
-  cellValue: {
-    flexShrink: 1,
-    fontSize: 19,
-    lineHeight: 23,
-    marginLeft: 12,
-    marginRight: 8,
-    fontWeight: '400',
-  },
-  chevronFallback: {
-    fontSize: 18,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  navigationSeparator: {
-    position: 'absolute',
-    left: 76,
-    right: 44,
-    bottom: 0,
-    height: StyleSheet.hairlineWidth,
   },
   logoutText: {
     fontSize: 17,

@@ -13,7 +13,7 @@ export default function SettingsLayout() {
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen name="index" options={{ title: '設置' }} />
+      <Stack.Screen name="index" options={{ title: '我的' }} />
       <Stack.Screen name="appearance" options={{ title: '外觀', headerLargeTitle: false }} />
       <Stack.Screen name="security" options={{ title: '安全性', headerLargeTitle: false }} />
       <Stack.Screen name="privacy" options={{ title: '隱私', headerLargeTitle: false }} />

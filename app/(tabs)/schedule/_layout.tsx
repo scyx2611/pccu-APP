@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { useTheme } from '../../../src/providers/theme/ThemeProvider';
 
-export default function TutoringLayout() {
+export default function ScheduleLayout() {
   const { theme } = useTheme();
 
   return (
@@ -19,7 +19,7 @@ export default function TutoringLayout() {
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen name="index" options={{ title: '課輔' }} />
+      <Stack.Screen name="index" options={{ title: '行程' }} />
     </Stack>
   );
 }
