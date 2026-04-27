@@ -880,4 +880,55 @@ describe('GlobalScraperWebView PCCU session gate', () => {
       'Sync executor became unavailable. Shared scraper was unmounted.'
     );
   });
+
+  it('restarts the PCCU login flow when schedule query requires relogin', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    void engine.requestSync('schedule').catch(() => null);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(1_200);
+      await Promise.resolve();
+    });
+
+    const uriBeforeRelogin = webViewPropsRef.current?.source?.uri;
+    mockInjectJavaScript.mockClear();
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({ t: 'err', m: 'Schedule query requires relogin' }),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(webViewPropsRef.current?.source?.uri).toContain('default.aspx');
+    expect(webViewPropsRef.current?.source?.uri).not.toBe(uriBeforeRelogin);
+    rendered.unmount();
+  });
 });

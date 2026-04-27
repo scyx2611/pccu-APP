@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
 import {
@@ -58,6 +58,7 @@ import {
 } from '../../settings/storage/developerSettings';
 import {
   getScraperDebugPreviewFrame,
+  setScraperDebugRuntimeState,
   subscribeScraperDebugPreviewFrame,
   type ScraperDebugPreviewFrame,
 } from './scraperDebugPreview';
@@ -495,6 +496,26 @@ export default function GlobalScraperWebView() {
     [finishPccu, injectPccuScript, updateDebugMessage]
   );
 
+  const restartPccuLogin = useCallback(
+    (type: SyncType, message: string) => {
+      const pending = pendingRef.current;
+      if (!pending) return;
+      if (pending.retries >= 2) {
+        finishPccu({ success: false, message });
+        return;
+      }
+      pending.retries += 1;
+      pending.lastHandledUrl = '';
+      pending.lastInjectKey = '';
+      pending.lastInjectAt = 0;
+      pending.targetOpenRequested = false;
+      pccuPhaseRef.current = 'load_ecampus';
+      updateDebugMessage(`relogin:${type}:${pending.retries}`);
+      setSourceUri(`${PCCU_DEFAULT_URL}?ts=${Date.now()}`);
+    },
+    [finishPccu, updateDebugMessage]
+  );
+
   // -----------------------------------------------------------------------
   // Traffic helpers
   // -----------------------------------------------------------------------
@@ -766,6 +787,13 @@ export default function GlobalScraperWebView() {
               ? `${type === 'grade' ? '成績' : '課表'}同步失敗：${data.m}`
               : `${type === 'grade' ? '成績' : '課表'}同步失敗`;
             if (
+              typeof data.m === 'string' &&
+              /requires relogin|session expired|please login again|請重新登入|請先登入|逾時過期/i.test(data.m)
+            ) {
+              restartPccuLogin(type, message);
+              return;
+            }
+            if (
               (pccuPhaseRef.current === 'open_target' || pccuPhaseRef.current === 'syncing') &&
               typeof data.m === 'string' &&
               /Network request failed|Login request timed out|Login request aborted/i.test(data.m)
@@ -934,9 +962,9 @@ export default function GlobalScraperWebView() {
       }
     }
   }
-},
-[finishPccu, finishTraffic, persistGrades, persistCourses, retryPccu, updateDebugMessage]
-);
+  },
+[finishPccu, finishTraffic, persistGrades, persistCourses, restartPccuLogin, retryPccu, updateDebugMessage]
+  );
 
 // -----------------------------------------------------------------------
 // Load end handler (PCCU only)
@@ -1140,6 +1168,14 @@ export default function GlobalScraperWebView() {
   const showDebugPreview = debugVisible && !!debugFrame;
   const debugPreviewStyle = showDebugPreview ? styles.debugWebView : styles.hiddenInner;
 
+  useEffect(() => {
+    setScraperDebugRuntimeState({
+      status: `${activeModeRef.current} / ${debugType} / ${debugPhase}`,
+      message: debugMessage,
+      url: debugUrl,
+    });
+  }, [debugMessage, debugPhase, debugType, debugUrl]);
+
   return (
     <View
       testID="scraper-debug-panel"
@@ -1178,31 +1214,6 @@ export default function GlobalScraperWebView() {
         javaScriptCanOpenWindowsAutomatically
         javaScriptEnabled
       />
-      {showDebugPreview ? (
-        <View style={styles.debugOverlay} pointerEvents="box-none">
-          <View style={styles.debugHeaderRow}>
-            <View style={styles.debugTitleBlock}>
-              <Text style={styles.debugTitle}>LIVE SCRAPER PREVIEW</Text>
-              <Text style={styles.debugSlotHint}>顯示於頁面 Debug 框內</Text>
-            </View>
-            <Pressable
-              testID="scraper-debug-refresh-button"
-              onPress={handleDebugRefresh}
-              style={styles.debugRefreshButton}
-              accessibilityRole="button"
-              accessibilityLabel="重新整理 scraper 預覽"
-            >
-              <Text style={styles.debugRefreshText}>重新整理</Text>
-              <Text style={styles.debugRefreshVisibleText}>重新整理</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.debugText} numberOfLines={1}>
-            {activeModeRef.current} / {debugType} / {debugPhase}
-          </Text>
-          <Text style={styles.debugText} numberOfLines={1}>msg: {debugMessage}</Text>
-          <Text style={styles.debugText} numberOfLines={1}>url: {debugUrl}</Text>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -1211,8 +1222,7 @@ const styles = StyleSheet.create({
   debugContainer: {
     position: 'absolute',
     zIndex: 10000,
-    elevation: 10000,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -1224,63 +1234,6 @@ const styles = StyleSheet.create({
   debugWebViewContainer: {
     flex: 1,
     backgroundColor: '#fff',
-  },
-  debugOverlay: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    right: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
-    gap: 2,
-  },
-  debugHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  debugTitleBlock: {
-    flex: 1,
-    minHeight: 30,
-    justifyContent: 'center',
-  },
-  debugTitle: {
-    color: '#7DFF9A',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    flex: 1,
-  },
-  debugSlotHint: {
-    color: 'rgba(255, 255, 255, 0.72)',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  debugRefreshButton: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(125, 255, 154, 0.18)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(125, 255, 154, 0.5)',
-  },
-  debugRefreshText: {
-    position: 'absolute',
-    width: 0,
-    height: 0,
-    opacity: 0,
-  },
-  debugRefreshVisibleText: {
-    color: '#7DFF9A',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  debugText: {
-    color: '#fff',
-    fontSize: 12,
   },
   hidden: {
     position: 'absolute',

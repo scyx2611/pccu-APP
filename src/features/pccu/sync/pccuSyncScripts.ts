@@ -304,10 +304,6 @@ export function buildLoginScript(credentials: PCCUCredentials): string {
           } catch (error) {}
 
           try {
-            input.focus && input.focus();
-          } catch (error) {}
-
-          try {
             var proto = view.HTMLInputElement && view.HTMLInputElement.prototype;
             var setter = Object.getOwnPropertyDescriptor(proto, 'value');
             if (setter && setter.set) setter.set.call(input, value);
@@ -1358,6 +1354,46 @@ export function buildAdaptiveSchedulePageScript(): string {
           return document.documentElement ? document.documentElement.outerHTML : '';
         }
 
+        function postScheduleProbe(label, doc, extracted, search, form) {
+          try {
+            var targetDoc = doc || document;
+            var href = getDocUrl(targetDoc);
+            var markup = targetDoc.documentElement ? targetDoc.documentElement.outerHTML : '';
+            var forms = 0;
+            var controls = 0;
+            var searchFlag = '';
+            var searchValue = '';
+            var searchText = '';
+            var action = '';
+            var method = '';
+
+            try { forms = targetDoc.querySelectorAll('form').length; } catch (error) {}
+            try { controls = targetDoc.querySelectorAll('input, button, select, a[onclick]').length; } catch (error) {}
+            try { searchFlag = form ? String((form.querySelector('[name="hidChkSearch"]') || {}).value || '') : ''; } catch (error) {}
+            try { searchValue = search ? String(search.getAttribute('value') || search.value || '') : ''; } catch (error) {}
+            try { searchText = search ? textOfNode(search) : ''; } catch (error) {}
+            try { action = form ? String(form.getAttribute('action') || '') : ''; } catch (error) {}
+            try { method = form ? String(form.getAttribute('method') || '') : ''; } catch (error) {}
+
+            post({
+              t: 'schedule_probe',
+              m:
+                label +
+                ' url=' + href +
+                ' html=' + String(markup || '').length +
+                ' forms=' + forms +
+                ' controls=' + controls +
+                ' courses=' + ((extracted && extracted.courses && extracted.courses.length) || 0) +
+                ' hasSearch=' + !!search +
+                ' searchText=' + searchText +
+                ' searchValue=' + searchValue +
+                ' method=' + method +
+                ' action=' + action +
+                ' searchFlag=' + searchFlag
+            });
+          } catch (error) {}
+        }
+
         function pageText(doc) {
           try {
             return normalizeText((doc.body && (doc.body.innerText || doc.body.textContent)) || '');
@@ -1396,7 +1432,10 @@ export function buildAdaptiveSchedulePageScript(): string {
         }
 
         function hasScheduleResultMarker(html) {
-          return /pubTdItem_Period|PrintTitle/.test(html || '');
+          var markup = String(html || '');
+          return /pubTdItem_Period|PrintTitle/.test(markup) &&
+            /(?:\u661f\u671f|\u9031)[\u65e5\u5929\u4e00\u4e8c\u4e09\u56db\u4e94\u516d]/.test(markup) &&
+            /(?:\(\u5fc5\)|\(\u9078\)|\u5fc5\u4fee|\u9078\u4fee)/.test(markup);
         }
 
         function classifyScheduleState(doc, html) {
@@ -1699,34 +1738,23 @@ export function buildAdaptiveSchedulePageScript(): string {
           return resolveUrl(getDocUrl(doc), action);
         }
 
-        function submitQueryForm(doc, form) {
+        function submitQueryForm(doc, form, search) {
           if (!doc || !form) return false;
+
+          var searchAction = 'searchByStudent';
+
+          try {
+            var searchOnclick = search ? String(search.getAttribute('onclick') || '') : '';
+            var searchMatch = searchOnclick.match(/ToSearch\\([^,]+,\\s*['"]([^'"]+)['"]/i);
+            if (searchMatch && searchMatch[1]) {
+              searchAction = searchMatch[1];
+            }
+          } catch (error) {}
 
           try {
             var searchFlag = form.querySelector('[name="hidChkSearch"]');
             if (searchFlag) {
-              searchFlag.value = 'searchByStudent';
-            }
-          } catch (error) {}
-
-          try {
-            var studentName = form.querySelector('[name="hidStdName"]');
-            if (studentName) {
-              studentName.value = '';
-            }
-          } catch (error) {}
-
-          try {
-            var studentNo = form.querySelector('[name="hidStdNo"]');
-            if (studentNo) {
-              studentNo.value = '';
-            }
-          } catch (error) {}
-
-          try {
-            var studentDept = form.querySelector('[name="hidStdDept"]');
-            if (studentDept) {
-              studentDept.value = '';
+              searchFlag.value = searchAction;
             }
           } catch (error) {}
 
@@ -1741,6 +1769,27 @@ export function buildAdaptiveSchedulePageScript(): string {
             var method = (form.getAttribute('method') || 'post').toLowerCase();
             if (!method) {
               form.setAttribute('method', 'post');
+            }
+          } catch (error) {}
+
+          try {
+            if (search && click(search)) {
+              return true;
+            }
+          } catch (error) {}
+
+          try {
+            var view = (doc && doc.defaultView) || window;
+            if (view && typeof view.ToSearch === 'function') {
+              view.ToSearch(form, searchAction);
+              return true;
+            }
+          } catch (error) {}
+
+          try {
+            if (typeof form.requestSubmit === 'function') {
+              form.requestSubmit();
+              return true;
             }
           } catch (error) {}
 
@@ -1792,6 +1841,7 @@ export function buildAdaptiveSchedulePageScript(): string {
           var workDocMatch = findScheduleWorkDoc();
           var workDoc = workDocMatch ? workDocMatch.doc : document;
           var workHtml = workDocMatch && workDocMatch.html ? workDocMatch.html : currentHtml();
+          var extractedSchedule = extractScheduleDataFromDoc(workDoc);
           var scheduleState = classifyScheduleState(workDoc, workHtml);
           var currentUrl = getDocUrl(workDoc) || window.location.href || '';
           var onQueryPage = scheduleState === 'query_page' || scheduleState === 'ready';
@@ -1803,8 +1853,12 @@ export function buildAdaptiveSchedulePageScript(): string {
             recentlySubmittedSearch = false;
           }
 
-          if (scheduleState === 'ready' || hasScheduleResultMarker(workHtml)) {
-            postResult({ t: 'html', h: workHtml });
+          if (extractedSchedule.courses.length > 0) {
+            postResult({
+              t: 'courses',
+              c: extractedSchedule.courses,
+              h: extractedSchedule.html || workHtml
+            });
             return;
           }
 
@@ -1868,11 +1922,13 @@ export function buildAdaptiveSchedulePageScript(): string {
           if (onQueryPage && !clickedSearch && !recentlySubmittedSearch) {
             var search = findScheduleSearchControl();
             var queryForm = findQueryForm(workDoc);
+            postScheduleProbe('before-search', workDoc, extractedSchedule, search, queryForm);
 
-            if (submitQueryForm(workDoc, queryForm)) {
+            if (submitQueryForm(workDoc, queryForm, search)) {
               clickedSearch = true;
               syncState.clickedSearch = true;
               markSearchSubmitted();
+              postScheduleProbe('submitted-search', workDoc, extractedSchedule, search, queryForm);
               post({ t: 'status', m: '\\u67e5\\u8a62\\u8ab2\\u8868\\u4e2d...' });
               setTimeout(extractLoop, 1800);
               return;
@@ -1883,11 +1939,14 @@ export function buildAdaptiveSchedulePageScript(): string {
               syncState.clickedSearch = clickedSearch;
               if (clickedSearch) {
                 markSearchSubmitted();
+                postScheduleProbe('clicked-search', workDoc, extractedSchedule, search, queryForm);
                 post({ t: 'status', m: '\\u67e5\\u8a62\\u8ab2\\u8868\\u4e2d...' });
                 setTimeout(extractLoop, 1800);
                 return;
               }
             }
+
+            postScheduleProbe('search-not-triggered', workDoc, extractedSchedule, search, queryForm);
           }
 
           if (onQueryPage && recentlySubmittedSearch) {

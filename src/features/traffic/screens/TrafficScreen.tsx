@@ -1,4 +1,4 @@
-﻿import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import AppSymbol from '../../../shared/components/AppSymbol';
+import DebugStamp from '../../../shared/components/DebugStamp';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { useTrafficData } from '../hooks/useTrafficData';
 import {
@@ -20,6 +21,13 @@ import {
   sortTrafficArrivals,
 } from '../types';
 import { buildUpdatedAtText } from '../../../utils/updatedAt';
+import { getDeveloperDebugEnabled } from '../../settings/storage/developerSettings';
+import {
+  clearScraperDebugPreviewFrame,
+  getScraperDebugRuntimeState,
+  subscribeScraperDebugRuntimeState,
+  type ScraperDebugRuntimeState,
+} from '../../pccu/engine/scraperDebugPreview';
 
 function renderArrivalMeta(arrival: TrafficStopArrival) {
   return `${arrival.stopName} · ${arrival.branchLabel}`;
@@ -29,6 +37,8 @@ export default function TrafficScreen() {
   const { theme } = useTheme();
   const isFocused = useIsFocused();
   const traffic = useTrafficData({ active: isFocused });
+  const [developerDebugEnabled, setDeveloperDebugEnabled] = useState(false);
+  const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() => getScraperDebugRuntimeState());
 
   const downhill = useMemo(
     () => sortTrafficArrivals('downhill', traffic.snapshot?.downhill || []),
@@ -49,6 +59,29 @@ export default function TrafficScreen() {
   const openSource = () => {
     void Linking.openURL(TRAFFIC_SOURCE_URL);
   };
+
+  useEffect(() => {
+    let active = true;
+
+    const loadDebugEnabled = async () => {
+      const enabled = await getDeveloperDebugEnabled();
+      if (active) {
+        setDeveloperDebugEnabled(enabled);
+      }
+    };
+
+    void loadDebugEnabled();
+
+    return () => {
+      active = false;
+    };
+  }, [isFocused]);
+
+  useEffect(() => {
+    clearScraperDebugPreviewFrame();
+  }, [developerDebugEnabled]);
+
+  useEffect(() => subscribeScraperDebugRuntimeState(setDebugRuntime), []);
 
   const renderSection = (title: string, direction: TrafficDirection, items: TrafficStopArrival[]) => (
     <View style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]} key={direction}>
@@ -74,54 +107,93 @@ export default function TrafficScreen() {
   );
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.bg }]}
-      contentContainerStyle={styles.content}
-      contentInsetAdjustmentBehavior="automatic"
-      showsVerticalScrollIndicator={false}
-      refreshControl={(
-        <RefreshControl
-          refreshing={traffic.pullRefreshing}
-          onRefresh={() => traffic.refresh('manual')}
-          tintColor={theme.primary}
-          colors={[theme.primary]}
-        />
-      )}
+    <>
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.bg }]}
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={traffic.pullRefreshing}
+            onRefresh={() => traffic.refresh('manual')}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        )}
       >
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-        <View style={styles.heroHeader}>
-          <AppSymbol name="bus.fill" size={28} tintColor={theme.warning} fallback={<Text>Bus</Text>} />
-          <Text style={[styles.heroTitle, { color: theme.text }]}>交通動態</Text>
+          <View style={styles.heroHeader}>
+            <AppSymbol name="bus.fill" size={28} tintColor={theme.warning} fallback={<Text>Bus</Text>} />
+            <Text style={[styles.heroTitle, { color: theme.text }]}>交通動態</Text>
+          </View>
+          <Text style={[styles.heroText, { color: theme.textSub }]}>
+            以大臺北公車紅 5 經文大路線為主，整理上下山校園站點的即時到站資訊。
+          </Text>
+          <View style={styles.actionRow}>
+            <Pressable style={[styles.actionButton, { backgroundColor: theme.syncBtnBg }]} onPress={openSource}>
+              <AppSymbol name="doc.text.magnifyingglass" size={16} tintColor={theme.text} fallback={<Text>i</Text>} />
+              <Text style={[styles.actionText, { color: theme.text }]}>官方來源</Text>
+            </Pressable>
+          </View>
         </View>
-        <Text style={[styles.heroText, { color: theme.textSub }]}>以大臺北公車紅 5 經文大路線為主，整理上下山校園站點的即時到站資訊。</Text>
-        <View style={styles.actionRow}>
-          <Pressable style={[styles.actionButton, { backgroundColor: theme.syncBtnBg }]} onPress={openSource}>
-            <AppSymbol name="doc.text.magnifyingglass" size={16} tintColor={theme.text} fallback={<Text>i</Text>} />
-            <Text style={[styles.actionText, { color: theme.text }]}>官方來源</Text>
-          </Pressable>
-        </View>
-      </View>
 
-      {traffic.loading && !traffic.snapshot ? (
-        <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-          <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={[styles.statusText, { color: theme.textSub }]}>正在載入紅 5 即時資訊...</Text>
-        </View>
-      ) : null}
+        {developerDebugEnabled ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 資訊</Text>
+            <Text style={[styles.debugText, { color: theme.textSub }]}>
+              Loading: {String(traffic.loading)} | Error: {traffic.error ?? '-'}
+            </Text>
+            <View style={[styles.debugPreviewSlot, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+              <View style={styles.debugRuntimeStack}>
+                <View style={styles.debugRuntimeRow}>
+                  <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>Mode</Text>
+                  <Text style={[styles.debugRuntimeValue, { color: theme.text }]} numberOfLines={1}>
+                    {debugRuntime.status || 'idle'}
+                  </Text>
+                </View>
+                <View style={styles.debugRuntimeRow}>
+                  <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>Message</Text>
+                  <Text style={[styles.debugRuntimeValue, { color: theme.text }]} numberOfLines={2}>
+                    {debugRuntime.message || 'idle'}
+                  </Text>
+                </View>
+                <View style={[styles.debugRuntimeRow, styles.debugRuntimeRowLast]}>
+                  <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>URL</Text>
+                  <Text style={[styles.debugRuntimeValue, { color: theme.text }]} numberOfLines={3}>
+                    {debugRuntime.url || 'waiting'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.debugPreviewHint, { color: theme.textSub }]}>
+                Live preview disabled to avoid shared-session timeout.
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
-      {traffic.error ? (
-        <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-          <Text style={[styles.noticeTitle, { color: theme.text }]}>同步狀態</Text>
-          <Text style={[styles.noticeText, { color: theme.textSub }]}>{traffic.error}</Text>
-        </View>
-      ) : null}
+        {traffic.loading && !traffic.snapshot ? (
+          <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+            <ActivityIndicator size="small" color={theme.primary} />
+            <Text style={[styles.statusText, { color: theme.textSub }]}>正在載入紅 5 即時資訊...</Text>
+          </View>
+        ) : null}
 
-      {renderSection('下山 · 往劍潭方向', 'downhill', downhill)}
-      {renderSection('上山 · 往陽明山方向', 'uphill', uphill)}
+        {traffic.error ? (
+          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>同步狀態</Text>
+            <Text style={[styles.noticeText, { color: theme.textSub }]}>{traffic.error}</Text>
+          </View>
+        ) : null}
 
-      <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtText}</Text>
-      <View style={styles.bottomSpacer} />
-    </ScrollView>
+        {renderSection('下山 · 往劍潭方向', 'downhill', downhill)}
+        {renderSection('上山 · 往陽明山方向', 'uphill', uphill)}
+
+        <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtText}</Text>
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+      {developerDebugEnabled ? <DebugStamp label="DBG-TRAFFIC" /> : null}
+    </>
   );
 }
 
@@ -151,6 +223,31 @@ const styles = StyleSheet.create({
   },
   actionText: { fontSize: 14, fontWeight: '600', marginLeft: 6 },
   updatedText: { marginTop: 4, marginBottom: 8, fontSize: 13, textAlign: 'center' },
+  debugText: { fontSize: 12, lineHeight: 18 },
+  debugPreviewSlot: {
+    minHeight: 164,
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  debugRuntimeStack: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  debugRuntimeRow: {
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DADDE4',
+    gap: 4,
+  },
+  debugRuntimeRowLast: {
+    borderBottomWidth: 0,
+  },
+  debugRuntimeLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  debugRuntimeValue: { fontSize: 12, lineHeight: 18, fontWeight: '600' },
+  debugPreviewHint: { marginTop: 10, fontSize: 11, lineHeight: 16, fontWeight: '600' },
   statusCard: {
     borderRadius: 24,
     padding: 18,

@@ -1,9 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -19,7 +17,9 @@ import { buildUpdatedAtText } from '../../../utils/updatedAt';
 import { type SemesterGrade } from '../../pccu/parsers/pccuScraper';
 import {
   clearScraperDebugPreviewFrame,
-  setScraperDebugPreviewFrame,
+  getScraperDebugRuntimeState,
+  subscribeScraperDebugRuntimeState,
+  type ScraperDebugRuntimeState,
 } from '../../pccu/engine/scraperDebugPreview';
 import { useGradeStore } from '../store/useGradeStore';
 import { useGradeSync } from '../hooks/useGradeSync';
@@ -29,7 +29,8 @@ type GradeScreenProps = {
   onScrollY?: Animated.Value;
 };
 
-const FAIL_TEXT = new Set(['不及格', '不通過', 'F']);
+const FAIL_TEXT = new Set(['不及格', '未通過', 'F']);
+const PRE_ENROLLMENT_TITLE = '入學前抵免';
 
 const isFailScore = (value: string) => {
   if (FAIL_TEXT.has(value)) return true;
@@ -38,14 +39,14 @@ const isFailScore = (value: string) => {
 };
 
 const shouldUseFailColor = (semesterTitle: string, score: string) => {
-  if (semesterTitle.includes('入學前抵免')) return false;
+  if (semesterTitle.includes(PRE_ENROLLMENT_TITLE)) return false;
   return isFailScore(score);
 };
 
 const isPassedScore = (semesterTitle: string, score: string) => {
   const normalizedScore = score.trim().toUpperCase();
 
-  if (semesterTitle.includes('入學前抵免') && score.trim() === '2') {
+  if (semesterTitle.includes(PRE_ENROLLMENT_TITLE) && score.trim() === '2') {
     return true;
   }
 
@@ -61,23 +62,19 @@ const isPassedScore = (semesterTitle: string, score: string) => {
 const formatCourseScore = (semesterTitle: string, score: string) => {
   const normalizedScore = score.trim().toUpperCase();
 
-  if (semesterTitle.includes('入學前抵免') && score.trim() === '2') {
-    return '抵免';
+  if (semesterTitle.includes(PRE_ENROLLMENT_TITLE) && score.trim() === '2') {
+    return '已抵免';
   }
 
-  if (normalizedScore === 'P') {
-    return '通過';
-  }
-
-  if (normalizedScore === 'F') {
-    return '未通過';
-  }
+  if (normalizedScore === 'P') return '通過';
+  if (normalizedScore === 'F') return '未通過';
 
   return score || '--';
 };
 
 const normalizeRank = (value?: string) => (value ? value.replace(/\s+/g, '') : '');
-const isPreEnrollmentSemester = (title: string) => title.includes('入學前抵免');
+const isPreEnrollmentSemester = (title: string) => title.includes(PRE_ENROLLMENT_TITLE);
+
 const getSemesterCredits = (semester: SemesterGrade) => {
   if (semester.stats.earnedCredits) return semester.stats.earnedCredits;
 
@@ -89,6 +86,7 @@ const getSemesterCredits = (semester: SemesterGrade) => {
   if (!total) return '';
   return Number.isInteger(total) ? String(total) : total.toFixed(1);
 };
+
 const getCumulativeCredits = (semesters: SemesterGrade[]) => {
   const total = semesters.reduce((sum, semester) => {
     const credits = Number(getSemesterCredits(semester));
@@ -125,12 +123,12 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
 
   const [resolvedShowPreview, setResolvedShowPreview] = useState(showPreview ?? false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
-  const debugPreviewRef = useRef<React.ElementRef<typeof View> | null>(null);
+  const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() => getScraperDebugRuntimeState());
 
   const latestSemester = grades[0] || null;
   const isSyncing = syncStatus === 'syncing';
   const loading = isSyncing && grades.length === 0;
-  const keepWebViewVisibleForDebug = __DEV__ && resolvedShowPreview;
+  const showDebug = __DEV__ && resolvedShowPreview;
 
   const updatedAtText = buildUpdatedAtText({
     updatedAt: lastSyncedAt,
@@ -148,7 +146,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     return [
       { label: '平均', value: latestSemester.stats.average || '--' },
       { label: '班排', value: normalizeRank(latestSemester.stats.classRank) || '--' },
-      { label: '累計通過', value: getPassSummary(grades) },
+      { label: '通過數', value: getPassSummary(grades) },
       { label: '累計學分', value: getCumulativeCredits(grades) || '--' },
     ];
   }, [grades, latestSemester]);
@@ -176,36 +174,11 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     });
   }, [sync, resetSync]);
 
-  const updateDebugPreviewFrame = useCallback(() => {
-    if (!keepWebViewVisibleForDebug) return;
-
-    debugPreviewRef.current?.measureInWindow((x, y, width, height) => {
-      if (width <= 0 || height <= 0) return;
-      setScraperDebugPreviewFrame({ x, y, width, height });
-    });
-  }, [keepWebViewVisibleForDebug]);
-
-  const handleDebugRefresh = useCallback(() => {
-    updateDebugPreviewFrame();
-    setPullRefreshing(true);
-    resetSync();
-    sync({ priority: 5 }).finally(() => {
-      setPullRefreshing(false);
-    });
-  }, [resetSync, sync, updateDebugPreviewFrame]);
-
   useEffect(() => {
-    if (!keepWebViewVisibleForDebug) {
-      clearScraperDebugPreviewFrame();
-      return;
-    }
+    clearScraperDebugPreviewFrame();
+  }, [showDebug]);
 
-    const timer = setTimeout(updateDebugPreviewFrame, 0);
-    return () => {
-      clearTimeout(timer);
-      clearScraperDebugPreviewFrame();
-    };
-  }, [keepWebViewVisibleForDebug, updateDebugPreviewFrame]);
+  useEffect(() => subscribeScraperDebugRuntimeState(setDebugRuntime), []);
 
   useFocusEffect(
     useCallback(() => {
@@ -230,7 +203,6 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
     }, [showPreview])
   );
 
-  // Hydrate and trigger sync on focus
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -284,42 +256,44 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
             colors={[theme.primary]}
           />
         )}
-        onScroll={keepWebViewVisibleForDebug ? updateDebugPreviewFrame : undefined}
-        scrollEventThrottle={keepWebViewVisibleForDebug ? 16 : undefined}
       >
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <View style={styles.heroHeader}>
             <AppSymbol name="medal.fill" size={28} tintColor={summaryIconTint} />
-            <Text style={[styles.heroTitle, { color: theme.text }]}>概覽</Text>
+            <Text style={[styles.heroTitle, { color: theme.text }]}>成績概覽</Text>
           </View>
           {renderSummaryCard()}
         </View>
 
-        {keepWebViewVisibleForDebug ? (
+        {showDebug ? (
           <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-            <View style={styles.debugHeaderRow}>
-              <View style={styles.debugHeaderTextBlock}>
-                <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 資訊</Text>
-                <Text style={[styles.debugText, { color: theme.textSub }]}>
-                  Status: {syncStatus} | Error: {error ?? '-'}
-                </Text>
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 資訊</Text>
+            <Text style={[styles.debugText, { color: theme.textSub }]}>
+              Status: {syncStatus} | Error: {error ?? '-'}
+            </Text>
+            <View style={[styles.debugPreviewSlot, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+              <View style={styles.debugRuntimeStack}>
+                <View style={styles.debugRuntimeRow}>
+                  <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>Mode</Text>
+                  <Text style={[styles.debugRuntimeValue, { color: theme.text }]} numberOfLines={1}>
+                    {debugRuntime.status || 'idle'}
+                  </Text>
+                </View>
+                <View style={styles.debugRuntimeRow}>
+                  <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>Message</Text>
+                  <Text style={[styles.debugRuntimeValue, { color: theme.text }]} numberOfLines={2}>
+                    {debugRuntime.message || 'idle'}
+                  </Text>
+                </View>
+                <View style={[styles.debugRuntimeRow, styles.debugRuntimeRowLast]}>
+                  <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>URL</Text>
+                  <Text style={[styles.debugRuntimeValue, { color: theme.text }]} numberOfLines={3}>
+                    {debugRuntime.url || 'waiting'}
+                  </Text>
+                </View>
               </View>
-              <Pressable
-                onPress={handleDebugRefresh}
-                style={[styles.debugRefreshButton, { backgroundColor: theme.primary }]}
-                accessibilityRole="button"
-                accessibilityLabel="重新同步歷年成績"
-              >
-                <Text style={styles.debugRefreshButtonText}>重新同步</Text>
-              </Pressable>
-            </View>
-            <View
-              ref={debugPreviewRef}
-              style={[styles.debugPreviewSlot, { backgroundColor: theme.bg, borderColor: theme.border }]}
-              onLayout={updateDebugPreviewFrame}
-            >
               <Text style={[styles.debugPreviewHint, { color: theme.textSub }]}>
-                Live WebView preview
+                Live preview disabled to avoid shared-session timeout.
               </Text>
             </View>
           </View>
@@ -328,7 +302,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
         {loading ? (
           <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
             <ActivityIndicator size="small" color={theme.primary} />
-            <Text style={[styles.statusText, { color: theme.textSub }]}>正在同步成績資料...</Text>
+            <Text style={[styles.statusText, { color: theme.textSub }]}>正在載入歷年成績...</Text>
           </View>
         ) : null}
 
@@ -341,8 +315,10 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
 
         {grades.length === 0 && !loading ? (
           <View style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>暫無成績資料</Text>
-            <Text style={[styles.emptyText, { color: theme.textSub }]}>目前沒有可顯示的成績，請確認已登入並嘗試重新整理。</Text>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>尚無成績資料</Text>
+            <Text style={[styles.emptyText, { color: theme.textSub }]}>
+              目前還沒有可顯示的歷年成績，請下拉或稍後重新同步。
+            </Text>
           </View>
         ) : null}
 
@@ -363,72 +339,69 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
                 { backgroundColor: theme.card, shadowColor: theme.text },
               ]}
             >
-            <View style={[styles.sectionHeader, isPreEnrollment ? styles.preEnrollmentHeader : null]}>
-              <View style={styles.sectionHeading}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>{semester.title}</Text>
-                <Text style={[styles.sectionMeta, { color: theme.textSub }]}>
-                  {isPreEnrollment ? `${semester.courses.length} 筆抵免` : `${semester.courses.length} 門課`}
-                </Text>
-              </View>
-            </View>
-
-            {metaItems.length > 0 ? (
-              <View style={[styles.metaRow, isPreEnrollment ? styles.preEnrollmentMetaRow : null]}>
-                {metaItems.map((item) => (
-                  <Text
-                    key={`${semester.title}-${item}`}
-                    style={[styles.metaPill, { color: theme.textSub, backgroundColor: theme.syncBtnBg }]}
-                  >
-                    {item}
+              <View style={[styles.sectionHeader, isPreEnrollment ? styles.preEnrollmentHeader : null]}>
+                <View style={styles.sectionHeading}>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>{semester.title}</Text>
+                  <Text style={[styles.sectionMeta, { color: theme.textSub }]}>
+                    {isPreEnrollment ? `${semester.courses.length} 筆抵免` : `${semester.courses.length} 門課程`}
                   </Text>
-                ))}
+                </View>
               </View>
-            ) : null}
 
-            <View style={[styles.courseStack, isPreEnrollment ? styles.preEnrollmentCourseStack : null]}>
-              {semester.courses.map((course, courseIndex) => (
-                <View
-                  key={`${semester.title}-${course.code}-${courseIndex}`}
-                  style={[
-                    styles.courseCard,
-                    isPreEnrollment ? styles.preEnrollmentCourseCard : null,
-                    { backgroundColor: theme.syncBtnBg, borderColor: theme.border },
-                  ]}
-                >
-                  <View style={styles.courseHeader}>
-                    <View style={styles.courseMain}>
-                      <Text style={[styles.courseName, { color: theme.text }]}>{course.name}</Text>
-                      <Text style={[styles.courseMeta, { color: theme.textSub }]}>
-                        {[
-                          course.code || '',
-                          course.type || '',
-                          course.credits ? `${course.credits} 學分` : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' • ') || '未提供課程資訊'}
+              {metaItems.length > 0 ? (
+                <View style={[styles.metaRow, isPreEnrollment ? styles.preEnrollmentMetaRow : null]}>
+                  {metaItems.map((item) => (
+                    <Text
+                      key={`${semester.title}-${item}`}
+                      style={[styles.metaPill, { color: theme.textSub, backgroundColor: theme.syncBtnBg }]}
+                    >
+                      {item}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+
+              <View style={[styles.courseStack, isPreEnrollment ? styles.preEnrollmentCourseStack : null]}>
+                {semester.courses.map((course, courseIndex) => (
+                  <View
+                    key={`${semester.title}-${course.code}-${courseIndex}`}
+                    style={[
+                      styles.courseCard,
+                      isPreEnrollment ? styles.preEnrollmentCourseCard : null,
+                      { backgroundColor: theme.syncBtnBg, borderColor: theme.border },
+                    ]}
+                  >
+                    <View style={styles.courseHeader}>
+                      <View style={styles.courseMain}>
+                        <Text style={[styles.courseName, { color: theme.text }]}>{course.name}</Text>
+                        <Text style={[styles.courseMeta, { color: theme.textSub }]}>
+                          {[
+                            course.code || '',
+                            course.type || '',
+                            course.credits ? `${course.credits} 學分` : '',
+                          ].filter(Boolean).join(' · ') || '尚無完整課程資訊'}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.courseScore,
+                          { color: shouldUseFailColor(semester.title, course.score) ? theme.danger : theme.text },
+                        ]}
+                      >
+                        {formatCourseScore(semester.title, course.score)}
                       </Text>
                     </View>
-                    <Text
-                      style={[
-                        styles.courseScore,
-                        { color: shouldUseFailColor(semester.title, course.score) ? theme.danger : theme.text },
-                      ]}
-                    >
-                      {formatCourseScore(semester.title, course.score)}
-                    </Text>
                   </View>
-                </View>
-              ))}
+                ))}
+              </View>
             </View>
-          </View>
           );
         })}
 
         <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtText}</Text>
-
         <View style={styles.bottomSpacer} />
       </ScrollView>
-      {keepWebViewVisibleForDebug ? <DebugStamp label="DBG-GRADE-V2" /> : null}
+      {showDebug ? <DebugStamp label="DBG-GRADE-V2" /> : null}
     </>
   );
 }
@@ -436,42 +409,39 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 80 },
-  debugHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  debugHeaderTextBlock: {
-    flex: 1,
-  },
   debugText: {
     fontSize: 12,
     lineHeight: 18,
   },
-  debugRefreshButton: {
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  debugRefreshButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
   debugPreviewSlot: {
-    height: 420,
+    minHeight: 164,
     marginTop: 12,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   debugPreviewHint: {
-    fontSize: 12,
+    marginTop: 10,
+    fontSize: 11,
+    lineHeight: 16,
     fontWeight: '600',
   },
+  debugRuntimeStack: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  debugRuntimeRow: {
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DADDE4',
+    gap: 4,
+  },
+  debugRuntimeRowLast: {
+    borderBottomWidth: 0,
+  },
+  debugRuntimeLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  debugRuntimeValue: { fontSize: 12, lineHeight: 18, fontWeight: '600' },
   heroCard: {
     borderRadius: 28,
     padding: 22,

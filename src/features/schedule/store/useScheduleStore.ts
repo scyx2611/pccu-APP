@@ -17,7 +17,7 @@ export interface ScheduleStoreActions {
   setSyncStatus: (status: ScheduleSyncStatus) => void;
   setError: (error: string | null) => void;
   resetSync: () => void;
-  hydrate: () => Promise<void>;
+  hydrate: () => Promise<{ courses: CourseData[]; updatedAt: number | null }>;
 }
 
 export type UseScheduleStore = ScheduleStoreState & ScheduleStoreActions;
@@ -36,20 +36,26 @@ export const useScheduleStore = create<UseScheduleStore>()((set) => ({
 
   setSyncStatus: (syncStatus) => set({ syncStatus }),
 
-  setError: (error) => set({ error, syncStatus: 'error' }),
+  setError: (error) => set({ error, syncStatus: error ? 'error' : 'idle' }),
 
   resetSync: () => set({ syncStatus: 'idle', error: null }),
 
   hydrate: async () => {
     try {
       const cached = await scheduleStorage.getCourses();
-      set({
+      const nextState = {
         courses: cached.courses ?? [],
         lastSyncedAt: cached.updatedAt,
-      });
+      };
+      set(nextState);
+      return {
+        courses: nextState.courses,
+        updatedAt: nextState.lastSyncedAt,
+      };
     } catch (error) {
       console.error('[ScheduleStore] Hydration failed:', error);
       set({ error: 'Failed to load cached schedule' });
+      return { courses: [], updatedAt: null };
     }
   },
 }));

@@ -403,7 +403,7 @@ export default function HomeScreen() {
   const weatherValueText = weather?.temp !== undefined ? `${weather.temp}°C` : '--';
   const weatherCaptionText = weather?.code !== undefined && weather.code >= 51 ? '山區有雨' : '陽明山天氣';
   const gradeValueText = gradeSummary?.avg || '--';
-  const gradeCaptionText = gradeSummary ? '最新成績' : gradeLoading ? '讀取成績中' : '尚未同步';
+  const gradeCaptionText = gradeSummary ? '平均分數' : gradeLoading ? '讀取成績中' : '尚未同步';
   const tutoringValueText = pendingTutoringCount > 0 ? String(pendingTutoringCount) : '0';
   const tutoringCaptionText = pendingTutoringCount > 0 ? '份作業待繳交' : '尚無待繳交';
 
@@ -499,11 +499,13 @@ export default function HomeScreen() {
                 <AppSymbol name="bus.fill" size={24} tintColor={theme.primary} style={styles.smallIcon} fallback={<Text>Bus</Text>} />
                 <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>公車動態</Text>
               </View>
-              <View style={styles.busValueRow}>
-                <Text style={[styles.busCardValueChinese, { color: theme.text }]} numberOfLines={1}>紅</Text>
-                <Text style={[styles.busCardValueNumber, { color: theme.text }]} numberOfLines={1}>5</Text>
+              <View style={styles.smallCardBody}>
+                <View style={styles.busValueRow}>
+                  <Text style={[styles.busCardValueChinese, { color: theme.text }]} numberOfLines={1}>G</Text>
+                  <Text style={[styles.busCardValueNumber, { color: theme.text }]} numberOfLines={1}>5</Text>
+                </View>
               </View>
-              <Text style={[styles.busCardCaption, { color: theme.primary }]} numberOfLines={1}>將到站</Text>
+              <Text style={[styles.smallCardCaption, { color: theme.primary }]} numberOfLines={1}>將到站</Text>
             </AnimatedPressable>
 
             <View style={[styles.smallCard, { backgroundColor: courseCardBackground, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
@@ -511,7 +513,9 @@ export default function HomeScreen() {
                 <AppSymbol name="sun.max.fill" size={22} tintColor={theme.warning} style={styles.smallIcon} fallback={<Text>天氣</Text>} />
                 <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>天氣狀況</Text>
               </View>
-              <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{weatherValueText}</Text>
+              <View style={styles.smallCardBody}>
+                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{weatherValueText}</Text>
+              </View>
               <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>{weatherCaptionText}</Text>
             </View>
 
@@ -523,9 +527,11 @@ export default function HomeScreen() {
           >
               <View style={styles.smallCardHeader}>
                 <AppSymbol name="medal.fill" size={22} tintColor={theme.warning} style={styles.smallIcon} fallback={<Text>成績</Text>} />
-                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>最新成績</Text>
+                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>成績蓋覽</Text>
               </View>
-              <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{gradeValueText}</Text>
+              <View style={styles.smallCardBody}>
+                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{gradeValueText}</Text>
+              </View>
               <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>{gradeCaptionText}</Text>
             </AnimatedPressable>
 
@@ -537,7 +543,9 @@ export default function HomeScreen() {
                 <AppSymbol name="book.fill" size={22} tintColor={theme.success} style={styles.smallIcon} fallback={<Text>課輔</Text>} />
                 <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>待交作業</Text>
               </View>
-              <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{tutoringValueText}</Text>
+              <View style={styles.smallCardBody}>
+                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{tutoringValueText}</Text>
+              </View>
               <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>{tutoringCaptionText}</Text>
             </AnimatedPressable>
           </View>
@@ -632,24 +640,32 @@ const styles = StyleSheet.create({
     width: '47.5%',
     aspectRatio: 1,
     marginBottom: 6,
-    padding: 25,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 20,
     alignItems: 'flex-start',
     borderRadius: 34,
     borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.08,
     shadowRadius: 28,
     elevation: 6,
   },
-  smallCardHeader: { flexDirection: 'row', alignItems: 'center', width: '100%', minHeight: 22, marginBottom: 16 },
+  smallCardHeader: { flexDirection: 'row', alignItems: 'center', width: '100%', minHeight: 24 },
   smallIcon: { marginRight: 8 },
   smallCardLabel: { fontSize: 14, lineHeight: 20, fontWeight: '800' },
-  smallCardValue: { fontSize: 36, lineHeight: 40, fontWeight: '900' },
+  smallCardBody: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  smallCardValue: { fontSize: 34, lineHeight: 40, fontWeight: '900' },
   smallCardCaption: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
-  busValueRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4, marginBottom: -1 },
-  busCardValueChinese: { fontSize: 40, lineHeight: 46, fontWeight: '800', marginRight: 5, transform: [{ translateY: -3 }] },
-  busCardValueNumber: { fontSize: 42, lineHeight: 46, fontWeight: '700' },
-  busCardCaption: { fontSize: 18, lineHeight: 22, fontWeight: '900' },
+  busValueRow: { flexDirection: 'row', alignItems: 'baseline' },
+  busCardValueChinese: { fontSize: 34, lineHeight: 40, fontWeight: '900', marginRight: 3 },
+  busCardValueNumber: { fontSize: 34, lineHeight: 40, fontWeight: '900' },
   gridLoadingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
 });

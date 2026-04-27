@@ -26,6 +26,7 @@ export function useScheduleSync() {
 
       try {
         syncInProgressRef.current = true;
+        setError(null);
         if (!silent) setSyncStatus('syncing');
 
         const engine = PccuSyncEngine.getInstance();
@@ -39,8 +40,9 @@ export function useScheduleSync() {
           // Re-hydrate courses from storage (GlobalScraperWebView already persisted them)
           const cached = await scheduleStorage.getCourses();
           setCourses(cached.courses ?? []);
+          setError(null);
 
-          if (!silent) setSyncStatus('idle');
+          setSyncStatus('idle');
         } else {
           setError(result?.message ?? '課表同步失敗');
         }
