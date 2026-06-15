@@ -47,7 +47,15 @@ export const useTutoringStore = create<UseTutoringStore>()((set) => ({
   updateCourseDetail: (courseCode, detail) =>
     set((state) => {
       const next = new Map(state.courseDetails);
-      next.set(courseCode, detail);
+      const current = next.get(courseCode);
+      next.set(courseCode, {
+        announcements: detail.announcements ?? current?.announcements ?? [],
+        materials: detail.materials ?? current?.materials ?? [],
+        assignments: detail.assignments ?? current?.assignments ?? [],
+        progress: detail.progress ?? current?.progress ?? [],
+        classmates: detail.classmates ?? current?.classmates ?? [],
+        courseInfo: detail.courseInfo ?? current?.courseInfo,
+      });
       return { courseDetails: next };
     }),
 
@@ -72,9 +80,43 @@ export const useTutoringStore = create<UseTutoringStore>()((set) => ({
         tutoringStorage.getCourses(),
         tutoringStorage.getPendingAssignments(),
       ]);
+      const courseDetails = new Map<string, CourseDetail>();
+
+      await Promise.all(
+        (courses ?? []).map(async (course) => {
+          const courseCode = String(course.courseCode || '').trim();
+          if (!courseCode) return;
+
+          const [announcements, materials, assignments, progress, classmates, courseInfo] = await Promise.all([
+            tutoringStorage.getCourseDetail(courseCode, 'announcements'),
+            tutoringStorage.getCourseDetail(courseCode, 'materials'),
+            tutoringStorage.getCourseDetail(courseCode, 'assignments'),
+            tutoringStorage.getCourseDetail(courseCode, 'progress'),
+            tutoringStorage.getCourseDetail(courseCode, 'classmates'),
+            tutoringStorage.getCourseInfo(courseCode),
+          ]);
+
+          if (announcements || materials || assignments || progress || classmates || courseInfo) {
+            const detail: CourseDetail = {
+              announcements: announcements ?? [],
+              materials: materials ?? [],
+              assignments: assignments ?? [],
+              courseInfo: courseInfo ?? undefined,
+            };
+            if (progress) {
+              detail.progress = progress;
+            }
+            if (classmates) {
+              detail.classmates = classmates;
+            }
+            courseDetails.set(courseCode, detail);
+          }
+        }),
+      );
 
       set({
         courses: courses ?? [],
+        courseDetails,
         pendingAssignments: pendingAssignments ?? [],
         pendingAssignmentsCount: pendingAssignments?.length ?? 0,
       });

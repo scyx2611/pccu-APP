@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react';
 import type { NativeTabs } from 'expo-router/unstable-native-tabs';
 import type { SFSymbol } from 'sf-symbols-typescript';
+import { TAB_LABEL_STYLE, TAB_MATERIAL_COLORS } from './tabMaterials';
 
 export type MainTabName = 'home' | 'schedule' | 'tutoring' | 'settings';
 
@@ -14,11 +15,8 @@ export type MainTabConfig = {
 };
 
 export const MAIN_TAB_APPEARANCE = {
-  iconColor: { default: '#8E8E93', selected: '#000000' },
-  labelStyle: {
-    default: { color: '#8E8E93', fontSize: 11, fontWeight: '600' },
-    selected: { color: '#000000', fontSize: 11, fontWeight: '700' },
-  },
+  iconColor: { default: TAB_MATERIAL_COLORS.idle, selected: TAB_MATERIAL_COLORS.selected },
+  labelStyle: TAB_LABEL_STYLE,
 } satisfies Pick<ComponentProps<typeof NativeTabs>, 'iconColor' | 'labelStyle'>;
 
 export const MAIN_TABS: readonly MainTabConfig[] = [

@@ -753,6 +753,8 @@ export function buildServiceOpenScript(code: '1208' | '1220' | '1202'): string {
   const fallbackTargetUrl =
     code === '1208'
       ? 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse'
+      : code === '1202'
+      ? 'https://icas.pccu.edu.tw/cfp/'
       : '';
   const targetReadyPattern =
     code === '1208'
@@ -844,7 +846,7 @@ export function buildServiceOpenScript(code: '1208' | '1220' | '1202'): string {
 
           if (fallbackTargetUrl && !fallbackPosted && attempts >= 6) {
             fallbackPosted = true;
-            post({ t: 'status', m: '\u5617\u8a66\u76f4\u63a5\u9032\u5165\u8ab2\u8868\u9801...' });
+            post({ t: 'status', m: '\u5617\u8a66\u76f4\u63a5\u9032\u5165\u76ee\u6a19\u9801...' });
             post({ t: 'popup', url: fallbackTargetUrl });
             return;
           }

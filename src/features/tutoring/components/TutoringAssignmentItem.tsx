@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { TutoringAssignment } from '../types';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
 import AppSymbol from '../../../shared/components/AppSymbol';
@@ -39,6 +39,7 @@ function isOverdue(assignment: TutoringAssignment): boolean {
 export default function TutoringAssignmentItem({ assignment, isExpanded: controlledExpanded, onToggle }: TutoringAssignmentItemProps) {
   const { theme } = useTheme();
   const [internalExpanded, setInternalExpanded] = useState(false);
+  const pressAnim = React.useRef(new Animated.Value(0)).current;
   const isExpanded = controlledExpanded ?? internalExpanded;
   const statusInfo = getStatusInfo(assignment);
   const overdue = isOverdue(assignment);
@@ -51,6 +52,12 @@ export default function TutoringAssignmentItem({ assignment, isExpanded: control
     }
   };
 
+  const pressStyle: any = {
+    transform: [{ scale: pressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.98] }) }],
+  };
+
+  const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '未設定';
     try {
@@ -62,7 +69,12 @@ export default function TutoringAssignmentItem({ assignment, isExpanded: control
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+    <AnimatedPressable
+      style={[styles.card, { backgroundColor: theme.card, shadowColor: theme.text }, pressStyle]}
+      onPress={handleToggle}
+      onPressIn={() => Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true }).start()}
+      onPressOut={() => Animated.spring(pressAnim, { toValue: 0, useNativeDriver: true }).start()}
+    >
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
           {assignment.title}
@@ -84,7 +96,7 @@ export default function TutoringAssignmentItem({ assignment, isExpanded: control
         </Text>
       )}
 
-      <TouchableOpacity style={styles.expandToggle} onPress={handleToggle} activeOpacity={0.6}>
+      <View style={styles.expandToggle}>
         <AppSymbol
           name={isExpanded ? 'chevron.up' : 'chevron.down'}
           size={16}
@@ -94,7 +106,7 @@ export default function TutoringAssignmentItem({ assignment, isExpanded: control
         <Text style={[styles.expandText, { color: theme.primary }]}>
           {isExpanded ? '收合' : '展開'}
         </Text>
-      </TouchableOpacity>
+      </View>
 
       {isExpanded && (
         <View style={styles.expandedContent}>
@@ -131,19 +143,21 @@ export default function TutoringAssignmentItem({ assignment, isExpanded: control
           )}
         </View>
       )}
-    </View>
+    </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(150,150,150,0.1)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   headerRow: {
     flexDirection: 'row',
@@ -152,8 +166,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   title: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 22,
     flex: 1,
     marginRight: 10,
   },
@@ -169,6 +184,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
+    fontWeight: '600',
     marginBottom: 4,
   },
   expandToggle: {

@@ -6,12 +6,14 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import DebugStamp from '../../../shared/components/DebugStamp';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
@@ -45,6 +47,26 @@ type ScheduleScreenProps = {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
+const CALENDAR_WEEKDAYS = ['\u65e5', '\u4e00', '\u4e8c', '\u4e09', '\u56db', '\u4e94', '\u516d'] as const;
+
+const getDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const buildCalendarMonthCells = (monthDate: Date) => {
+  const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  const cells: Array<Date | null> = Array.from({ length: firstDay.getDay() }, () => null);
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
+  }
+
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+};
+
+const formatCalendarMonthTitle = (date: Date) => `${date.getFullYear()}\u5e74 ${date.getMonth() + 1}\u6708`;
+
 const STATUS_META: Record<
   TimelineCourseStatus,
   {
@@ -58,7 +80,7 @@ const STATUS_META: Record<
   }
 > = {
   completed: {
-    label: '已結束',
+    label: '\u5df2\u7d50\u675f',
     icon: 'checkmark',
     pillTextColor: '#8E8E93',
     pillBackgroundColor: '#F2F2F7',
@@ -67,7 +89,7 @@ const STATUS_META: Record<
     cardBorderColor: '#E5E5EA',
   },
   active: {
-    label: '進行中',
+    label: '\u9032\u884c\u4e2d',
     icon: 'hourglass',
     pillTextColor: '#0A6CFF',
     pillBackgroundColor: '#EAF3FF',
@@ -76,7 +98,7 @@ const STATUS_META: Record<
     cardBorderColor: '#0A6CFF',
   },
   upcoming: {
-    label: '待開始',
+    label: '\u5c1a\u672a\u958b\u59cb',
     icon: 'arrow.right',
     pillTextColor: '#6B7280',
     pillBackgroundColor: '#F4F4F7',
@@ -87,9 +109,9 @@ const STATUS_META: Record<
 };
 
 const normalizeCourseType = (course: CourseData) => {
-  if (course.required) return '必修';
+  if (course.required) return '\u5fc5\u4fee';
   if (course.type?.trim()) return course.type.trim();
-  return '選修';
+  return '\u9078\u4fee';
 };
 
 export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTick = 0 }: ScheduleScreenProps) {
@@ -106,6 +128,12 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [menuRefreshing, setMenuRefreshing] = useState(false);
   const [now, setNow] = useState(new Date());
+  const [scheduleAnchorDate, setScheduleAnchorDate] = useState(() => new Date());
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [calendarMonthDate, setCalendarMonthDate] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(toJsDay(new Date().getDay()));
   const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() => getScraperDebugRuntimeState());
   const highlightAnim = useRef(new Animated.Value(1)).current;
@@ -117,8 +145,8 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
   const todayDayOfWeek = toJsDay(now.getDay());
 
   const dateChips = useMemo(
-    () => buildScheduleDateChips(courses, now, selectedDayOfWeek),
-    [courses, now, selectedDayOfWeek]
+    () => buildScheduleDateChips(courses, scheduleAnchorDate, selectedDayOfWeek),
+    [courses, scheduleAnchorDate, selectedDayOfWeek]
   );
 
   useEffect(() => {
@@ -128,21 +156,24 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
   }, [dateChips, selectedDayOfWeek, todayDayOfWeek]);
 
   const selectedDate = useMemo(
-    () => getDateForDayOfWeek(now, selectedDayOfWeek),
-    [now, selectedDayOfWeek]
+    () => getDateForDayOfWeek(scheduleAnchorDate, selectedDayOfWeek),
+    [scheduleAnchorDate, selectedDayOfWeek]
   );
   const selectedCourses = useMemo(
     () => getCoursesForScheduleDay(courses, selectedDayOfWeek),
     [courses, selectedDayOfWeek]
   );
   const selectedDateText = useMemo(() => formatScheduleFullDate(selectedDate), [selectedDate]);
-  const isViewingToday = selectedDayOfWeek === todayDayOfWeek;
+  const selectedDateKey = useMemo(() => getDateKey(selectedDate), [selectedDate]);
+  const todayDateKey = useMemo(() => getDateKey(now), [now]);
+  const isViewingToday = selectedDateKey === todayDateKey;
+  const calendarMonthCells = useMemo(() => buildCalendarMonthCells(calendarMonthDate), [calendarMonthDate]);
 
   const updatedAtLineText = buildUpdatedAtText({
     updatedAt: lastSyncedAt,
     isUpdating: pullRefreshing || menuRefreshing,
-    updatingLabel: '正在更新課表...',
-    emptyLabel: '尚未同步課表',
+    updatingLabel: '\u6b63\u5728\u66f4\u65b0\u8ab2\u8868...',
+    emptyLabel: '\u5c1a\u672a\u540c\u6b65\u8ab2\u8868',
   });
 
   useEffect(() => {
@@ -193,6 +224,21 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
       setMenuRefreshing(false);
     });
   }, [sync]);
+
+  const openCalendar = useCallback(() => {
+    setCalendarMonthDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+    setCalendarVisible(true);
+  }, [selectedDate]);
+
+  const moveCalendarMonth = useCallback((offset: number) => {
+    setCalendarMonthDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  }, []);
+
+  const selectCalendarDate = useCallback((date: Date) => {
+    setScheduleAnchorDate(date);
+    setSelectedDayOfWeek(toJsDay(date.getDay()));
+    setCalendarVisible(false);
+  }, []);
 
   useEffect(() => {
     clearScraperDebugPreviewFrame();
@@ -274,7 +320,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                 name={statusMeta.icon}
                 size={16}
                 tintColor={iconColor}
-                fallback={<Text style={{ color: iconColor }}>{status === 'active' ? '●' : '•'}</Text>}
+                fallback={<Text style={{ color: iconColor }}>{status === 'active' ? 'Now' : 'Ok'}</Text>}
               />
             </View>
           </View>
@@ -313,7 +359,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                 name={status === 'active' ? 'sparkles' : statusMeta.icon}
                 size={12}
                 tintColor={status === 'active' ? theme.primary : statusMeta.pillTextColor}
-                fallback={<Text style={{ color: status === 'active' ? theme.primary : statusMeta.pillTextColor }}>•</Text>}
+                fallback={<Text style={{ color: status === 'active' ? theme.primary : statusMeta.pillTextColor }}>i</Text>}
               />
               <Text
                 style={[
@@ -352,7 +398,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                 name="clock.fill"
                 size={15}
                 tintColor={theme.textSub}
-                fallback={<Text style={{ color: theme.textSub }}>時</Text>}
+                fallback={<Text style={{ color: theme.textSub }}>T</Text>}
               />
               <Text style={[styles.courseInfoText, { color: theme.textSub }]}>
                 {formatCourseTimeRange(course)}
@@ -364,10 +410,10 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                 name="location.fill"
                 size={15}
                 tintColor={theme.textSub}
-                fallback={<Text style={{ color: theme.textSub }}>地</Text>}
+                fallback={<Text style={{ color: theme.textSub }}>L</Text>}
               />
               <Text style={[styles.courseInfoText, { color: theme.textSub }]}>
-                {course.location || '教室待確認'}
+                {course.location || '\u672a\u8a2d\u5b9a\u5730\u9ede'}
               </Text>
             </View>
 
@@ -377,7 +423,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                   name="person.fill"
                   size={15}
                   tintColor={theme.textSub}
-                  fallback={<Text style={{ color: theme.textSub }}>師</Text>}
+                  fallback={<Text style={{ color: theme.textSub }}>P</Text>}
                 />
                 <Text style={[styles.courseInfoText, { color: theme.textSub }]}>{course.teacher}</Text>
               </View>
@@ -387,7 +433,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
           {status === 'active' && courseWindow ? (
             <View style={[styles.activeFooter, { backgroundColor: theme.syncBtnBg }]}>
               <Text style={[styles.activeFooterText, { color: theme.primary }]}>
-                正在上課中
+                {'\u6b63\u5728\u4e0a\u8ab2\u4e2d'}
               </Text>
               <Text style={[styles.activeFooterMeta, { color: theme.textSub }]}>
                 {courseWindow.start.getHours().toString().padStart(2, '0')}:
@@ -425,70 +471,90 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
               <Text style={[styles.headerDate, { color: theme.textSub }]}>{selectedDateText}</Text>
             </View>
 
-            <Pressable
-              onPress={() => setSelectedDayOfWeek(todayDayOfWeek)}
-              style={({ pressed }) => [
-                styles.calendarButton,
-                {
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
-                  opacity: pressed ? 0.82 : 1,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="回到今天"
-            >
-              <AppSymbol
-                name="calendar"
-                size={18}
-                tintColor={theme.text}
-                fallback={<Text style={{ color: theme.text }}>今</Text>}
-              />
-            </Pressable>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.dateStripContent}
-          >
-            {dateChips.map((chip) => (
+          <View style={styles.dateStripWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dateStripContent}
+            >
+              {dateChips.map((chip) => (
+                <Pressable
+                  key={`${chip.dayOfWeek}-${chip.dayNumber}`}
+                  onPress={() => {
+                    setScheduleAnchorDate(chip.date);
+                    setSelectedDayOfWeek(chip.dayOfWeek);
+                  }}
+                  style={({ pressed }) => [
+                    styles.dateChip,
+                    {
+                      backgroundColor: chip.isSelected ? theme.primary : theme.card,
+                      borderColor: chip.isSelected ? theme.primary : theme.border,
+                      opacity: pressed ? 0.85 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dateChipWeekday,
+                      { color: chip.isSelected ? '#FFFFFF' : theme.textSub },
+                    ]}
+                  >
+                    {chip.weekdayLabel}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.dateChipDay,
+                      { color: chip.isSelected ? '#FFFFFF' : theme.text },
+                    ]}
+                  >
+                    {chip.dayNumber}
+                  </Text>
+                </Pressable>
+              ))}
               <Pressable
-                key={`${chip.dayOfWeek}-${chip.dayNumber}`}
-                onPress={() => setSelectedDayOfWeek(chip.dayOfWeek)}
+                onPress={openCalendar}
                 style={({ pressed }) => [
-                  styles.dateChip,
+                  styles.moreDateChip,
                   {
-                    backgroundColor: chip.isSelected ? theme.primary : theme.card,
-                    borderColor: chip.isSelected ? theme.primary : theme.border,
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
                     opacity: pressed ? 0.85 : 1,
                   },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel="\u66f4\u591a\u65e5\u671f"
               >
-                <Text
-                  style={[
-                    styles.dateChipWeekday,
-                    { color: chip.isSelected ? '#FFFFFF' : theme.textSub },
-                  ]}
-                >
-                  {chip.weekdayLabel}
-                </Text>
-                <Text
-                  style={[
-                    styles.dateChipDay,
-                    { color: chip.isSelected ? '#FFFFFF' : theme.text },
-                  ]}
-                >
-                  {chip.dayNumber}
-                </Text>
+                <AppSymbol
+                  name="ellipsis"
+                  size={20}
+                  tintColor={theme.text}
+                  fallback={<Text style={[styles.moreDateChipText, { color: theme.text }]}>...</Text>}
+                />
+                <Text style={[styles.moreDateChipText, { color: theme.textSub }]}>{'\u66f4\u591a'}</Text>
               </Pressable>
-            ))}
-          </ScrollView>
+            </ScrollView>
+            <LinearGradient
+              pointerEvents="none"
+              colors={[theme.bg, `${theme.bg}00`]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.dateStripFade, styles.dateStripFadeLeft]}
+            />
+            <LinearGradient
+              pointerEvents="none"
+              colors={[`${theme.bg}00`, theme.bg]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.dateStripFade, styles.dateStripFadeRight]}
+            />
+          </View>
         </View>
 
         {developerDebugEnabled ? (
           <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 狀態</Text>
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug</Text>
             <Text style={[styles.debugText, { color: theme.textSub }]}>
               Status: {syncStatus} | Error: {error ?? '-'}
             </Text>
@@ -523,13 +589,13 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
         {isLoading ? (
           <View style={[styles.statusCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <ActivityIndicator size="small" color={theme.primary} />
-            <Text style={[styles.statusText, { color: theme.textSub }]}>正在讀取課表資料...</Text>
+            <Text style={[styles.statusText, { color: theme.textSub }]}>{'\u8ab2\u8868\u8f09\u5165\u4e2d...'}</Text>
           </View>
         ) : null}
 
         {!isLoading && error ? (
           <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.noticeTitle, { color: theme.text }]}>同步失敗</Text>
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>{'\u540c\u6b65\u5931\u6557'}</Text>
             <Text style={[styles.noticeText, { color: theme.textSub }]}>{error}</Text>
           </View>
         ) : null}
@@ -540,13 +606,13 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
               name="calendar"
               size={30}
               tintColor={theme.textSub}
-              fallback={<Text style={{ color: theme.textSub }}>休</Text>}
+              fallback={<Text style={{ color: theme.textSub }}>Cal</Text>}
             />
             <Text style={[styles.emptyTitle, { color: theme.text }]}>
-              {isViewingToday ? '今天沒有課程' : '這天沒有課程'}
+              {isViewingToday ? '\u4eca\u5929\u6c92\u6709\u8ab2' : '\u7576\u5929\u6c92\u6709\u8ab2'}
             </Text>
             <Text style={[styles.emptyText, { color: theme.textSub }]}>
-              可下拉重新同步，或切換其他日期查看課表。
+              {'\u53ef\u4ee5\u5207\u63db\u4e0a\u65b9\u65e5\u671f\u67e5\u770b\u5176\u4ed6\u8ab2\u8868\u3002'}
             </Text>
           </View>
         ) : null}
@@ -564,13 +630,128 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
               style={[styles.syncBadge, { backgroundColor: theme.card, borderColor: theme.border }]}
             >
               <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={[styles.syncBadgeText, { color: theme.primary }]}>同步中</Text>
+              <Text style={[styles.syncBadgeText, { color: theme.primary }]}>{'\u66f4\u65b0\u4e2d'}</Text>
             </Pressable>
           ) : null}
         </View>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <Modal
+        visible={calendarVisible}
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+        onRequestClose={() => setCalendarVisible(false)}
+      >
+        <View style={[styles.calendarNativePage, { backgroundColor: theme.bg }]}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentInsetAdjustmentBehavior="automatic"
+            contentContainerStyle={styles.calendarNativeContent}
+          >
+            <View style={styles.calendarHeader}>
+              <View style={styles.calendarTitleBlock}>
+                <Text style={[styles.calendarTitle, { color: theme.text }]}>{'\u884c\u4e8b\u66c6'}</Text>
+                <Text style={[styles.calendarSubtitle, { color: theme.textSub }]}>
+                  {'\u9078\u64c7\u8981\u67e5\u770b\u7684\u65e5\u671f'}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setCalendarVisible(false)}
+                style={({ pressed }) => [
+                  styles.calendarCloseButton,
+                  { backgroundColor: theme.syncBtnBg, opacity: pressed ? 0.72 : 1 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="\u95dc\u9589"
+              >
+                <AppSymbol
+                  name="xmark"
+                  size={16}
+                  tintColor={theme.primary}
+                  fallback={<Text style={[styles.calendarCloseText, { color: theme.primary }]}>X</Text>}
+                />
+              </Pressable>
+            </View>
+
+            <View style={[styles.calendarMonthCard, { backgroundColor: theme.syncBtnBg, borderColor: '#FFFFFF' }]}>
+              <Pressable
+                onPress={() => moveCalendarMonth(-1)}
+                style={({ pressed }) => [styles.calendarMonthButton, { opacity: pressed ? 0.55 : 1 }]}
+                accessibilityRole="button"
+                accessibilityLabel="\u4e0a\u4e00\u500b\u6708"
+              >
+                <AppSymbol name="chevron.left" size={21} tintColor={theme.text} fallback="<" />
+              </Pressable>
+              <Text style={[styles.calendarMonthTitle, { color: theme.text }]}>
+                {formatCalendarMonthTitle(calendarMonthDate)}
+              </Text>
+              <Pressable
+                onPress={() => moveCalendarMonth(1)}
+                style={({ pressed }) => [styles.calendarMonthButton, { opacity: pressed ? 0.55 : 1 }]}
+                accessibilityRole="button"
+                accessibilityLabel="\u4e0b\u4e00\u500b\u6708"
+              >
+                <AppSymbol name="chevron.right" size={21} tintColor={theme.text} fallback=">" />
+              </Pressable>
+            </View>
+
+            <View style={[styles.calendarGridCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.calendarWeekdayRow}>
+                {CALENDAR_WEEKDAYS.map((weekday) => (
+                  <Text key={weekday} style={[styles.calendarWeekdayText, { color: theme.textSub }]}>
+                    {weekday}
+                  </Text>
+                ))}
+              </View>
+              <View style={styles.calendarMonthGrid}>
+                {calendarMonthCells.map((date, index) => {
+                  if (!date) return <View key={`blank-${index}`} style={styles.calendarDayCell} />;
+
+                  const dateKey = getDateKey(date);
+                  const isSelected = dateKey === selectedDateKey;
+                  const isToday = dateKey === todayDateKey;
+                  const dayCourseCount = getCoursesForScheduleDay(courses, toJsDay(date.getDay())).length;
+
+                  return (
+                    <Pressable
+                      key={dateKey}
+                      onPress={() => selectCalendarDate(date)}
+                      style={({ pressed }) => [
+                        styles.calendarDayCell,
+                        {
+                          backgroundColor: isSelected ? theme.primary : isToday ? theme.syncBtnBg : 'transparent',
+                          opacity: pressed ? 0.72 : 1,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={dateKey}
+                    >
+                      <Text
+                        style={[
+                          styles.calendarDayText,
+                          { color: isSelected ? '#FFFFFF' : isToday ? theme.primary : theme.text },
+                        ]}
+                      >
+                        {date.getDate()}
+                      </Text>
+                      {dayCourseCount > 0 ? (
+                        <View
+                          style={[
+                            styles.calendarDayDot,
+                            { backgroundColor: isSelected ? '#FFFFFF' : theme.primary },
+                          ]}
+                        />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
 
       {developerDebugEnabled ? <DebugStamp label="DBG-SCHEDULE-TIMELINE" /> : null}
     </>
@@ -579,25 +760,21 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 12 },
-  headerBlock: { marginBottom: 18 },
+  content: { paddingHorizontal: 20, paddingTop: 0 },
+  headerBlock: { marginTop: -8, marginBottom: 18 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  headerTextBlock: { flex: 1, paddingRight: 12 },
+  headerTextBlock: { flex: 1, paddingRight: 0 },
   headerDate: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
-  calendarButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
+  dateStripWrap: { position: 'relative' },
   dateStripContent: { paddingRight: 6, gap: 10 },
+  dateStripFade: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 18,
+  },
+  dateStripFadeLeft: { left: 0 },
+  dateStripFadeRight: { right: 0 },
   dateChip: {
     width: 56,
     height: 62,
@@ -608,6 +785,16 @@ const styles = StyleSheet.create({
   },
   dateChipWeekday: { fontSize: 13, fontWeight: '700', lineHeight: 16 },
   dateChipDay: { marginTop: 6, fontSize: 20, fontWeight: '800', lineHeight: 24 },
+  moreDateChip: {
+    width: 56,
+    height: 62,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  moreDateChipText: { fontSize: 12, fontWeight: '800', lineHeight: 14 },
   statusCard: {
     borderRadius: 24,
     borderWidth: 1,
@@ -724,7 +911,7 @@ const styles = StyleSheet.create({
   typePill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   typePillText: { fontSize: 12, fontWeight: '800', lineHeight: 14 },
   courseTitle: { fontSize: 23, fontWeight: '800', lineHeight: 30 },
-  courseInfoStack: { marginTop: 14, gap: 10 },
+  courseInfoStack: { marginTop: 0, gap: 10 },
   courseInfoRow: { flexDirection: 'row', alignItems: 'center' },
   courseInfoText: { marginLeft: 10, fontSize: 15, fontWeight: '600', lineHeight: 20 },
   activeFooter: {
@@ -755,5 +942,79 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   syncBadgeText: { fontSize: 13, fontWeight: '700' },
+  calendarNativePage: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  calendarNativeContent: {
+    paddingTop: 18,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  calendarTitleBlock: { flex: 1, minWidth: 0, paddingRight: 14 },
+  calendarTitle: { fontSize: 28, lineHeight: 34, fontWeight: '900' },
+  calendarSubtitle: { marginTop: 3, fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  calendarCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarCloseText: { fontSize: 16, lineHeight: 20, fontWeight: '900' },
+  calendarMonthCard: {
+    minHeight: 58,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  calendarMonthButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarMonthTitle: { fontSize: 21, lineHeight: 28, fontWeight: '900' },
+  calendarGridCard: {
+    borderRadius: 26,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  calendarWeekdayRow: { flexDirection: 'row', marginBottom: 8 },
+  calendarWeekdayText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '900',
+  },
+  calendarMonthGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarDayCell: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDayText: { fontSize: 16, lineHeight: 22, fontWeight: '900' },
+  calendarDayDot: {
+    position: 'absolute',
+    bottom: 7,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
   bottomSpacer: { height: Platform.OS === 'ios' ? 92 : 84 },
 });
+

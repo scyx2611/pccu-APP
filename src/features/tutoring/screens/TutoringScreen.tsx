@@ -10,39 +10,45 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 
-import AppSymbol from '../../../shared/components/AppSymbol';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { useTutoringStore } from '../store/useTutoringStore';
 import { useTutoringSync } from '../hooks/useTutoringSync';
 import TutoringCourseCard from '../components/TutoringCourseCard';
-import TutoringPendingBadge from '../components/TutoringPendingBadge';
 import { buildUpdatedAtText } from '../../../utils/updatedAt';
+import { buildTutoringCourseCards } from '../utils/tutoringCourseCards';
+
+const TUTORING_FRESH_MS = 5 * 60 * 1000;
+
+function isTutoringDataFresh(lastSyncedAt: Date | null) {
+  return !!lastSyncedAt && Date.now() - lastSyncedAt.getTime() < TUTORING_FRESH_MS;
+}
 
 export default function TutoringScreen() {
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const { theme } = useTheme();
 
-  // Zustand store
   const courses = useTutoringStore((s) => s.courses);
+  const courseDetails = useTutoringStore((s) => s.courseDetails);
   const pendingAssignments = useTutoringStore((s) => s.pendingAssignments);
-  const semester = useTutoringStore((s) => s.semester);
-  const welcomeText = useTutoringStore((s) => s.welcomeText);
   const lastSyncedAt = useTutoringStore((s) => s.lastSyncedAt);
   const syncStatus = useTutoringStore((s) => s.syncStatus);
   const syncPhase = useTutoringStore((s) => s.syncPhase);
   const error = useTutoringStore((s) => s.error);
   const hydrate = useTutoringStore((s) => s.hydrate);
 
-  // Sync hook — thin PccuSyncEngine wrapper, no WebView
-  const { sync } = useTutoringSync();
+  const { sync, syncCourseDetail } = useTutoringSync();
 
-  // Derive statusText from store syncPhase + error
+  const courseCards = useMemo(
+    () => buildTutoringCourseCards(courses, courseDetails),
+    [courses, courseDetails],
+  );
+
   const statusText = useMemo(() => {
     switch (syncPhase) {
-      case 'logging_in': return '登入中...';
-      case 'fetching_courses': return '同步課程列表中...';
-      case 'fetching_details': return '同步作業狀態中...';
-      case 'complete': return '課業資料同步完成';
+      case 'logging_in': return '登入課輔中';
+      case 'fetching_courses': return '同步課程中';
+      case 'fetching_details': return '預載課程內容中';
+      case 'complete': return '同步完成';
       case 'error': return error ?? '同步失敗';
       default: return '';
     }
@@ -53,24 +59,23 @@ export default function TutoringScreen() {
 
   const updatedAtLineText = buildUpdatedAtText({
     updatedAt: lastSyncedAt?.getTime() ?? null,
-    isUpdating: pullRefreshing || loading,
-    updatingLabel: '正在更新課業資料...',
-    emptyLabel: '尚未同步課業資料',
+    isUpdating: pullRefreshing || isSyncing,
+    updatingLabel: '同步課輔資料中...',
+    emptyLabel: '尚未同步課輔資料',
   });
+  const syncLineText = statusText || updatedAtLineText;
 
-  // Hydrate store from cache on mount
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
 
-  // Auto-sync on focus
   useFocusEffect(
     useCallback(() => {
       let active = true;
 
       const syncOnFocus = async () => {
         if (!active) return;
-        // Silent sync if we have cached data
+        if (courses.length > 0 && isTutoringDataFresh(lastSyncedAt)) return;
         await sync({ silent: courses.length > 0 });
       };
 
@@ -79,198 +84,173 @@ export default function TutoringScreen() {
       return () => {
         active = false;
       };
-    }, [sync, courses.length]),
+    }, [sync, courses.length, lastSyncedAt]),
   );
 
   const handlePullRefresh = useCallback(() => {
     setPullRefreshing(true);
-    void sync({ silent: false }).finally(() => {
+    const refreshAll = async () => {
+      await sync({ silent: false, force: true, priority: 5 });
+      const refreshedCourses = useTutoringStore.getState().courses;
+
+      for (const course of refreshedCourses) {
+        const courseCode = String(course.courseCode || '').trim();
+        if (!courseCode) continue;
+        await syncCourseDetail(courseCode, { silent: true, force: true, priority: 6 });
+      }
+    };
+
+    void refreshAll().finally(() => {
       setPullRefreshing(false);
     });
-  }, [sync]);
+  }, [sync, syncCourseDetail]);
 
   const handleCoursePress = useCallback((courseCode: string) => {
     router.push(`/tutoring/${courseCode}`);
   }, []);
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.bg }]}
-      contentContainerStyle={styles.content}
-      contentInsetAdjustmentBehavior="automatic"
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={pullRefreshing}
-          onRefresh={handlePullRefresh}
-          tintColor={theme.primary}
-          colors={[theme.primary]}
-        />
-      }
-    >
-      <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-        <View style={styles.heroHeader}>
-          <AppSymbol name="book.fill" size={28} tintColor={theme.primary} fallback={<Text>📚</Text>} />
-          <Text style={[styles.heroTitle, { color: theme.text }]}>課業輔導</Text>
-        </View>
-        <Text style={[styles.heroSubtitle, { color: theme.textSub }]}>
-          {semester ? `${semester}學期` : '查看課程公告、教材與作業'}
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={pullRefreshing}
+            onRefresh={handlePullRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }
+      >
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: theme.text }]}>課輔專區</Text>
+        <Text style={[styles.subtitle, { color: theme.textSub }]}>
+          你還有{pendingAssignments.length}項作業未繳交
         </Text>
-        {welcomeText ? (
-          <Text style={[styles.welcomeText, { color: theme.textSub, marginTop: 4 }]}>
-            {welcomeText}
-          </Text>
-        ) : null}
       </View>
 
-      {pendingAssignments.length > 0 && (
-        <View style={[styles.pendingCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-          <View style={styles.pendingHeader}>
-            <Text style={[styles.pendingTitle, { color: theme.text }]}>待辦作業</Text>
-            <TutoringPendingBadge count={pendingAssignments.length} size="medium" />
-          </View>
-          {pendingAssignments.slice(0, 3).map((assignment, index) => (
-            <View key={`${assignment.courseCode}-${assignment.homeSn}-${index}`} style={styles.pendingItem}>
-              <Text style={[styles.pendingCourseName, { color: theme.textSub }]} numberOfLines={1}>
-                {assignment.courseName}
-              </Text>
-              <Text style={[styles.pendingAssignmentTitle, { color: theme.text }]} numberOfLines={1}>
-                {assignment.title}
-              </Text>
-              <Text style={[styles.pendingDueDate, { color: theme.danger || '#FF3B30' }]}>
-                截止：{assignment.endAt || '未定'}
-              </Text>
-            </View>
-          ))}
-          {pendingAssignments.length > 3 && (
-            <Text style={[styles.pendingMore, { color: theme.textSub }]}>
-              還有 {pendingAssignments.length - 3} 項待辦作業...
+      <View style={styles.cardsContainer}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>所有課程</Text>
+        </View>
+
+        {loading ? (
+          <View style={[styles.statusCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+            <ActivityIndicator size="small" color={theme.primary} />
+            <Text style={[styles.statusCardText, { color: theme.textSub }]}>
+              {statusText || '正在整理課輔課程...'}
             </Text>
-          )}
-        </View>
-      )}
+          </View>
+        ) : null}
 
-      {loading ? (
-        <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-          <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={[styles.statusText, { color: theme.textSub, marginTop: 10 }]}>
-            {statusText || '正在讀取課業資料...'}
-          </Text>
-        </View>
-      ) : null}
+        {!loading && courseCards.length === 0 ? (
+          <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>目前沒有課程資料</Text>
+            <Text style={[styles.emptyText, { color: theme.textSub }]}>
+              下拉刷新或等待背景同步完成後，課程會顯示在這裡。
+            </Text>
+          </View>
+        ) : null}
 
-      {!loading && statusText && (statusText.includes('失敗') || statusText.includes('請先登入')) ? (
-        <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
-          <Text style={[styles.noticeTitle, { color: theme.text }]}>同步狀態</Text>
-          <Text style={[styles.noticeText, { color: theme.textSub }]}>{statusText}</Text>
-        </View>
-      ) : null}
+        {courseCards.map(({ course, latestMessage }) => (
+          <TutoringCourseCard
+            key={course.courseCode}
+            course={course}
+            latestMessage={latestMessage}
+            onPress={handleCoursePress}
+          />
+        ))}
 
-      {courses.length === 0 && !loading && !statusText && syncPhase === 'idle' ? (
-        <View style={styles.emptyState}>
-          <AppSymbol name="book.closed.fill" size={60} tintColor={theme.textSub} fallback={<Text>📚</Text>} />
-          <Text style={[styles.emptyText, { color: theme.textSub }]}>目前沒有課程資料</Text>
-        </View>
-      ) : null}
+        <Text style={[styles.syncLine, { color: syncPhase === 'error' ? theme.danger || '#FF3B30' : theme.textSub }]}>
+          {syncLineText}
+        </Text>
 
-      {courses.length > 0 && (
-        <View style={styles.courseList}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>我的課程</Text>
-          {courses.map((course) => {
-            const pendingCount = pendingAssignments.filter(a => a.courseCode === course.courseCode).length;
-            return (
-              <TutoringCourseCard
-                key={course.courseCode}
-                course={course}
-                pendingCount={pendingCount}
-                onPress={handleCoursePress}
-              />
-            );
-          })}
-        </View>
-      )}
-
-      <Text style={[styles.updatedText, { color: theme.textSub }]}>{updatedAtLineText}</Text>
-
-      <View style={styles.bottomSpacer} />
-    </ScrollView>
+        <View style={styles.bottomSpacer} />
+      </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 16 },
-  heroCard: {
-    borderRadius: 28,
-    padding: 22,
-    marginBottom: 16,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 4,
+  content: {},
+  header: {
+    marginTop: -44,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
   },
-  heroHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  heroTitle: { fontSize: 22, fontWeight: '700', marginLeft: 8 },
-  heroSubtitle: { fontSize: 14 },
-  welcomeText: { fontSize: 13 },
-  pendingCard: {
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+  title: {
+    fontSize: 36,
+    lineHeight: 42,
+    fontWeight: '900',
+    marginBottom: 8,
+    letterSpacing: -0.8,
   },
-  pendingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+  subtitle: {
+    fontSize: 18,
+    lineHeight: 29,
+    fontWeight: '600',
   },
-  pendingTitle: { fontSize: 18, fontWeight: '700' },
-  pendingItem: {
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.08)',
+  sectionHeader: {
+    marginBottom: 14,
+    paddingHorizontal: 8,
   },
-  pendingCourseName: { fontSize: 12, marginBottom: 2 },
-  pendingAssignmentTitle: { fontSize: 15, fontWeight: '600', marginBottom: 4 },
-  pendingDueDate: { fontSize: 12, fontWeight: '500' },
-  pendingMore: {
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.08)',
+  sectionTitle: {
+    fontSize: 24,
+    lineHeight: 32,
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
   statusCard: {
-    borderRadius: 24,
-    padding: 18,
+    borderRadius: 34,
+    padding: 25,
     marginBottom: 16,
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.10,
+    shadowRadius: 26,
+    elevation: 12,
   },
-  statusText: { fontSize: 14 },
-  noticeCard: {
-    borderRadius: 24,
-    padding: 18,
+  statusCardText: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  emptyCard: {
+    borderRadius: 34,
+    padding: 25,
     marginBottom: 16,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.10,
+    shadowRadius: 26,
+    elevation: 12,
   },
-  noticeTitle: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
-  noticeText: { fontSize: 14, lineHeight: 21 },
-  emptyState: { alignItems: 'center', marginTop: 40, marginBottom: 40 },
-  emptyText: { marginTop: 16, fontSize: 14 },
-  courseList: { marginTop: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 14, marginLeft: 4 },
-  updatedText: { marginTop: 16, marginBottom: 8, fontSize: 13, textAlign: 'center' },
+  emptyTitle: {
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: '600',
+  },
+  syncLine: {
+    marginTop: 8,
+    marginBottom: 8,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
+  cardsContainer: { paddingHorizontal: 16 },
   bottomSpacer: { height: 80 },
 });

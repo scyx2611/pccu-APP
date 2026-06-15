@@ -104,13 +104,15 @@ export default function TutoringMaterialItem({ material, onDownload }: TutoringM
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(150,150,150,0.1)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   headerRow: {
     flexDirection: 'row',
@@ -125,9 +127,10 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   title: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginLeft: 8,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+    marginLeft: 12,
     flex: 1,
   },
   downloadBtn: {
@@ -161,7 +164,8 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    marginBottom: 2,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   noteText: {
     fontSize: 12,

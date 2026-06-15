@@ -1,10 +1,18 @@
 import { AppState, type AppStateStatus } from 'react-native';
+import { createLogger } from '../../../shared/utils/logger';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SyncType = 'grade' | 'schedule' | 'traffic' | 'tutoring' | 'tutoring-detail';
+export type SyncType =
+  | 'grade'
+  | 'schedule'
+  | 'traffic'
+  | 'tutoring'
+  | 'tutoring-detail'
+  | 'tutoring-download'
+  | 'tutoring-upload';
 
 export interface SyncRequest {
   id: string;
@@ -115,6 +123,7 @@ const TASK_TIMEOUT_MS = 30_000; // 30 seconds per task
 const PROCESSING_DELAY_MS = 300; // small delay between queued tasks
 const EXECUTOR_READY_TIMEOUT_MS = 8_000;
 const EXECUTOR_READY_POLL_MS = 50;
+const logger = createLogger('PccuSyncEngine');
 
 let instance: PccuSyncEngine | null = null;
 
@@ -245,7 +254,7 @@ export class PccuSyncEngine {
     };
 
       this.queue.enqueue(request);
-      console.log(`[PccuSyncEngine] Enqueued ${type} (id=${request.id}, priority=${priority ?? 5}, queue=${this.queue.size})`);
+      logger.debug(`Enqueued ${type} (id=${request.id}, priority=${priority ?? 5}, queue=${this.queue.size})`);
 
       this.processQueue();
     });
@@ -260,7 +269,7 @@ export class PccuSyncEngine {
     this._pausedReason = reason ?? 'app_background';
     this.clearActiveTimeout();
     this.clearProcessingTimer();
-    console.log(`[PccuSyncEngine] Paused — reason: ${this._pausedReason}`);
+    logger.debug(`Paused - reason: ${this._pausedReason}`);
   }
 
   /**
@@ -269,7 +278,7 @@ export class PccuSyncEngine {
   resume(): void {
     if (this.state !== 'paused') return;
     this._pausedReason = null;
-    console.log('[PccuSyncEngine] Resumed');
+    logger.debug('Resumed');
 
     if (this.activeRequest) {
       this.state = 'processing';
@@ -301,7 +310,7 @@ export class PccuSyncEngine {
   clearQueue(): void {
     const count = this.queue.size;
     this.queue.clear();
-    console.log(`[PccuSyncEngine] Cleared ${count} pending requests`);
+    logger.debug(`Cleared ${count} pending requests`);
   }
 
   /**
@@ -369,7 +378,7 @@ export class PccuSyncEngine {
           }
           request.abortHandler = null;
           request.resolve(data);
-          console.log(`[PccuSyncEngine] Completed ${request.id}`);
+          logger.debug(`Completed ${request.id}`);
           this.scheduleNext();
         })
         .catch((error) => {
@@ -380,7 +389,7 @@ export class PccuSyncEngine {
           }
           request.abortHandler = null;
           request.reject(error instanceof Error ? error : new Error(String(error)));
-          console.error(`[PccuSyncEngine] Error — ${request.id}:`, error);
+          logger.debug(`Error - ${request.id}:`, error);
           this.scheduleNext();
         });
     } catch (error) {
@@ -404,7 +413,7 @@ export class PccuSyncEngine {
       const error = new Error(`Sync task ${request.id} (${request.type}) timed out after ${TASK_TIMEOUT_MS / 1000}s`);
       request.abortHandler?.('timeout', error);
       request.reject(error);
-      console.warn(`[PccuSyncEngine] Timeout — ${request.id}`);
+      logger.debug(`Timeout - ${request.id}`);
       this.scheduleNext();
     }, TASK_TIMEOUT_MS);
   }

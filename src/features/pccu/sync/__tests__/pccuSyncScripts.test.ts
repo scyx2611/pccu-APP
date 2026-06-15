@@ -43,7 +43,8 @@ describe('buildAdaptiveSchedulePageScript', () => {
     expect(script).toContain('resolveFormAction');
     expect(script).toContain('submitQueryForm');
     expect(script).toContain("var searchFlag = form.querySelector('[name=\"hidChkSearch\"]');");
-    expect(script).toContain("searchFlag.value = 'searchByStudent';");
+    expect(script).toContain("var searchAction = 'searchByStudent';");
+    expect(script).toContain('searchFlag.value = searchAction;');
     expect(script).toContain('Schedule query requires relogin');
     expect(script).toContain('Schedule query timed out');
     expect(script).not.toContain('gfOpenLink');
@@ -91,7 +92,9 @@ describe('buildAdaptiveSchedulePageScript', () => {
 
     expect(script).not.toContain('/pubTdItem_Period|pubContent/.test(markup)');
     expect(script).toContain('function hasScheduleResultMarker(html) {');
-    expect(script).toContain('/pubTdItem_Period|PrintTitle/.test(html || \'\')');
+    expect(script).toContain('var markup = String(html || \'\');');
+    expect(script).toContain('/pubTdItem_Period|PrintTitle/.test(markup)');
+    expect(script).not.toContain('/pubContent/.test(markup)');
   });
 
   it('falls back to direct student schedule navigation from queryByCourse/index pages', () => {
@@ -145,6 +148,14 @@ describe('buildServiceOpenScript', () => {
     expect(script).toContain('index_score|scoreListAll|StudentScore|studentscore');
     expect(script).not.toContain('PrjNo=1220|index_score|scoreListAll|StudentScore|studentscore');
     expect(script).not.toContain('PrjNo=1208|queryByStudent');
+  });
+
+  it('uses tutoring-specific target detection and ICAS fallback for code 1202', () => {
+    const script = buildServiceOpenScript('1202');
+
+    expect(script).toContain('TransUrl\\\\.aspx\\\\?PrjNo=1202|icas\\\\.pccu\\\\.edu\\\\.tw');
+    expect(script).toContain('https://icas.pccu.edu.tw/cfp/');
+    expect(script).not.toContain('https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse');
   });
 });
 

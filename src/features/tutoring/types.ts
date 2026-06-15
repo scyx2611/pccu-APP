@@ -13,6 +13,17 @@ export type TutoringCourse = {
   postCount: number;
 };
 
+export type TutoringCourseInfo = {
+  teacherName: string;
+  academicYearTerm: string;
+  departmentClass: string;
+  requiredType: string;
+  creditText: string;
+  englishLevel: string;
+  scheduleText: string;
+  expectedEnrollment: string;
+};
+
 export type TutoringAnnouncement = {
   serialNo: number | null;
   courseCode: string;
@@ -23,6 +34,15 @@ export type TutoringAnnouncement = {
   isRead: boolean;
   contentHtml: string;
   contentText: string;
+  attachments?: TutoringFileAttachment[];
+};
+
+export type TutoringFileAttachment = {
+  serialNo: number | null;
+  targetNo: number | null;
+  title: string;
+  fileName: string;
+  downloadUrl?: string;
 };
 
 export type TutoringMaterial = {
@@ -38,6 +58,7 @@ export type TutoringMaterial = {
   updatedAt: string;
   isNew: boolean;
   downable: boolean;
+  downloadUrl?: string;
 };
 
 export type TutoringAssignment = {
@@ -57,10 +78,23 @@ export type TutoringAssignment = {
   remainingSubmissionCount: number | null;
   maxSubmissionCount: number | null;
   reviewText: string;
-  attachments: Array<{
-    serialNo: number | null;
-    title: string;
-  }>;
+  attachments?: TutoringFileAttachment[];
+  submittedFiles?: TutoringFileAttachment[];
+  uploadable?: boolean;
+};
+
+export type TutoringProgressItem = {
+  id: string;
+  title: string;
+  value: string;
+  percent: number | null;
+};
+
+export type TutoringClassmate = {
+  id: string;
+  name: string;
+  departmentClass: string;
+  email: string;
 };
 
 export type TutoringSnapshot = {
@@ -89,6 +123,9 @@ export interface CourseDetail {
   announcements: TutoringAnnouncement[];
   materials: TutoringMaterial[];
   assignments: TutoringAssignment[];
+  progress?: TutoringProgressItem[];
+  classmates?: TutoringClassmate[];
+  courseInfo?: TutoringCourseInfo;
 }
 
 export interface TutoringStoreState {

@@ -4,11 +4,22 @@ import { useTutoringStore } from '../store/useTutoringStore';
 
 interface UseTutoringSyncReturn {
   /** Trigger a full tutoring sync (courses + assignments + pending). */
-  sync: (options?: { priority?: number; silent?: boolean }) => Promise<void>;
+  sync: (options?: { priority?: number; silent?: boolean; force?: boolean }) => Promise<void>;
   /** Trigger a single-course detail sync. */
-  syncCourseDetail: (courseCode: string, options?: { priority?: number }) => Promise<void>;
+  syncCourseDetail: (courseCode: string, options?: { priority?: number; force?: boolean; silent?: boolean }) => Promise<void>;
   /** Whether a sync is currently in progress. */
   syncInProgress: boolean;
+}
+
+let overviewSyncPromise: Promise<void> | null = null;
+const detailSyncPromises = new Map<string, Promise<void>>();
+
+function hasLoadedSupplementalDetail(detail: { progress?: unknown; classmates?: unknown } | undefined) {
+  if (!detail) return false;
+  return (
+    Object.prototype.hasOwnProperty.call(detail, 'progress') &&
+    Object.prototype.hasOwnProperty.call(detail, 'classmates')
+  );
 }
 
 /**
@@ -21,61 +32,109 @@ interface UseTutoringSyncReturn {
  */
 export function useTutoringSync(): UseTutoringSyncReturn {
   const setSyncStatus = useTutoringStore((s) => s.setSyncStatus);
+  const setSyncPhase = useTutoringStore((s) => s.setSyncPhase);
   const setLastSyncedAt = useTutoringStore((s) => s.setLastSyncedAt);
   const setError = useTutoringStore((s) => s.setError);
   const syncInProgressRef = useRef(false);
 
   const sync = useCallback(
-    async (options?: { priority?: number; silent?: boolean }) => {
-      if (syncInProgressRef.current) return;
+    async (options?: { priority?: number; silent?: boolean; force?: boolean }) => {
+      if (overviewSyncPromise && !options?.force) return;
       const { priority = 5, silent = false } = options ?? {};
 
-      try {
+      const runSync = async () => {
         syncInProgressRef.current = true;
-        if (!silent) setSyncStatus('syncing');
+        if (!silent) {
+          setSyncStatus('syncing');
+          setSyncPhase('fetching_courses');
+        }
 
         const engine = PccuSyncEngine.getInstance();
         await engine.waitForExecutorReady();
-        const result = await engine.requestSync('tutoring', priority);
+        const result = silent
+          ? await engine.requestSync('tutoring', priority, { silent: true })
+          : await engine.requestSync('tutoring', priority);
 
         if (result?.success) {
           setLastSyncedAt(Date.now());
-          if (!silent) setSyncStatus('idle');
-        } else {
-          setError(result?.message ?? '課業同步失敗');
+          if (!silent) {
+            setSyncStatus('idle');
+            setSyncPhase('complete');
+          }
+        } else if (!silent) {
+          setError(result?.message ?? 'Tutoring sync failed');
         }
-      } catch (error) {
-        setError(error instanceof Error ? error.message : '課業同步失敗');
-      } finally {
-        syncInProgressRef.current = false;
-      }
+      };
+
+      overviewSyncPromise = runSync()
+        .catch((error) => {
+          if (!silent) {
+            setError(error instanceof Error ? error.message : 'Tutoring sync failed');
+          }
+        })
+        .finally(() => {
+          syncInProgressRef.current = false;
+          overviewSyncPromise = null;
+        });
+
+      await overviewSyncPromise;
     },
-    [setSyncStatus, setLastSyncedAt, setError],
+    [setSyncStatus, setSyncPhase, setLastSyncedAt, setError],
   );
 
   const syncCourseDetail = useCallback(
-    async (courseCode: string, options?: { priority?: number }) => {
-      if (syncInProgressRef.current) return;
-      const { priority = 5 } = options ?? {};
+    async (courseCode: string, options?: { priority?: number; force?: boolean; silent?: boolean }) => {
+      const normalizedCourseCode = String(courseCode || '').trim();
+      if (!normalizedCourseCode) return;
 
-      try {
+      const { priority = 5, force = false, silent = false } = options ?? {};
+      const existingDetail = useTutoringStore.getState().courseDetails.get(normalizedCourseCode);
+
+      if (existingDetail?.courseInfo && hasLoadedSupplementalDetail(existingDetail) && !force) return;
+      if (detailSyncPromises.has(normalizedCourseCode) && !force) return;
+
+      const runSync = async () => {
         syncInProgressRef.current = true;
-        setSyncStatus('syncing');
+        if (!silent) {
+          setSyncStatus('syncing');
+          setSyncPhase('fetching_details');
+        }
 
         const engine = PccuSyncEngine.getInstance();
         await engine.waitForExecutorReady();
-        const result = await engine.requestSync('tutoring-detail', priority, { courseCode });
+        const result = await engine.requestSync(
+          'tutoring-detail',
+          priority,
+          silent
+            ? { courseCode: normalizedCourseCode, silent: true }
+            : { courseCode: normalizedCourseCode },
+        );
 
-        if (!result?.success) {
-          setError(result?.message ?? '課程資料同步失敗');
+        if (result?.success) {
+          if (!silent) {
+            setSyncStatus('idle');
+            setSyncPhase('complete');
+          }
+        } else if (!silent) {
+          setError(result?.message ?? 'Tutoring course detail sync failed');
         }
-      } catch (error) {
-        setError(error instanceof Error ? error.message : '課程資料同步失敗');
-      } finally {
-        syncInProgressRef.current = false;
-      }
+      };
+
+      const promise = runSync()
+        .catch((error) => {
+          if (!silent) {
+            setError(error instanceof Error ? error.message : 'Tutoring course detail sync failed');
+          }
+        })
+        .finally(() => {
+          syncInProgressRef.current = false;
+          detailSyncPromises.delete(normalizedCourseCode);
+        });
+
+      detailSyncPromises.set(normalizedCourseCode, promise);
+      await promise;
     },
-    [setSyncStatus, setError],
+    [setSyncStatus, setSyncPhase, setError],
   );
 
   return { sync, syncCourseDetail, syncInProgress: syncInProgressRef.current };

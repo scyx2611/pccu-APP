@@ -3,6 +3,7 @@ import {
   getCourses,
   getPendingAssignments,
   getCourseDetail,
+  getCourseInfo,
   hasCache,
   getTutoringData as getStorageData,
 } from '../storage/tutoringStorage';
@@ -12,6 +13,9 @@ import {
   TutoringAnnouncement,
   TutoringMaterial,
   TutoringSnapshot,
+  TutoringCourseInfo,
+  TutoringProgressItem,
+  TutoringClassmate,
 } from '../types';
 
 /**
@@ -65,6 +69,9 @@ export function useCourseDetail(courseCode: string) {
   const [announcements, setAnnouncements] = useState<TutoringAnnouncement[]>([]);
   const [materials, setMaterials] = useState<TutoringMaterial[]>([]);
   const [assignments, setAssignments] = useState<TutoringAssignment[]>([]);
+  const [progress, setProgress] = useState<TutoringProgressItem[]>([]);
+  const [classmates, setClassmates] = useState<TutoringClassmate[]>([]);
+  const [courseInfo, setCourseInfo] = useState<TutoringCourseInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,15 +80,21 @@ export function useCourseDetail(courseCode: string) {
     setIsLoading(true);
     setError(null);
     try {
-      const [annoData, matData, assignData] = await Promise.all([
+      const [annoData, matData, assignData, progressData, classmatesData, infoData] = await Promise.all([
         getCourseDetail(courseCode, 'announcements'),
         getCourseDetail(courseCode, 'materials'),
         getCourseDetail(courseCode, 'assignments'),
+        getCourseDetail(courseCode, 'progress'),
+        getCourseDetail(courseCode, 'classmates'),
+        getCourseInfo(courseCode),
       ]);
 
       setAnnouncements((annoData as TutoringAnnouncement[]) || []);
       setMaterials((matData as TutoringMaterial[]) || []);
       setAssignments((assignData as TutoringAssignment[]) || []);
+      setProgress((progressData as TutoringProgressItem[]) || []);
+      setClassmates((classmatesData as TutoringClassmate[]) || []);
+      setCourseInfo(infoData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load course detail');
     } finally {
@@ -97,6 +110,9 @@ export function useCourseDetail(courseCode: string) {
     announcements,
     materials,
     assignments,
+    progress,
+    classmates,
+    courseInfo,
     isLoading,
     error,
     refetch,

@@ -5,6 +5,7 @@ import {
   TutoringSnapshot,
   TutoringAnnouncement,
   TutoringMaterial,
+  TutoringCourseInfo,
 } from '../types';
 
 const STORAGE_KEY = 'cached_tutoring';
@@ -15,6 +16,7 @@ let cachedSnapshot: TutoringSnapshot | null = null;
 let cachedCourses: TutoringCourse[] | null = null;
 let cachedPendingAssignments: TutoringAssignment[] | null = null;
 let cachedCourseDetails: Record<string, Record<string, any[]>> = {};
+let cachedCourseInfo: Record<string, TutoringCourseInfo> = {};
 
 export async function setTutoringData(snapshot: TutoringSnapshot): Promise<void> {
   cachedSnapshot = snapshot;
@@ -137,7 +139,7 @@ export async function getPendingAssignments(): Promise<TutoringAssignment[] | nu
 
 export async function setCourseDetail(
   courseCode: string,
-  type: 'announcements' | 'materials' | 'assignments',
+  type: 'announcements' | 'materials' | 'assignments' | 'progress' | 'classmates',
   items: any[]
 ): Promise<void> {
   if (!cachedCourseDetails[courseCode]) {
@@ -155,7 +157,7 @@ export async function setCourseDetail(
 
 export async function getCourseDetail(
   courseCode: string,
-  type: 'announcements' | 'materials' | 'assignments'
+  type: 'announcements' | 'materials' | 'assignments' | 'progress' | 'classmates'
 ): Promise<any[] | null> {
   if (cachedCourseDetails[courseCode]?.[type]) {
     return cachedCourseDetails[courseCode][type];
@@ -178,6 +180,40 @@ export async function getCourseDetail(
   return null;
 }
 
+export async function setCourseInfo(
+  courseCode: string,
+  info: TutoringCourseInfo
+): Promise<void> {
+  cachedCourseInfo[courseCode] = info;
+
+  try {
+    const key = `cached_tutoring_course_info_${courseCode}`;
+    await AsyncStorage.setItem(key, JSON.stringify(info));
+  } catch (error) {
+    console.log('Save course info failed:', error);
+  }
+}
+
+export async function getCourseInfo(courseCode: string): Promise<TutoringCourseInfo | null> {
+  if (cachedCourseInfo[courseCode]) {
+    return cachedCourseInfo[courseCode];
+  }
+
+  try {
+    const key = `cached_tutoring_course_info_${courseCode}`;
+    const stored = await AsyncStorage.getItem(key);
+    if (stored) {
+      const info = JSON.parse(stored) as TutoringCourseInfo;
+      cachedCourseInfo[courseCode] = info;
+      return info;
+    }
+  } catch (error) {
+    console.log('Load course info failed:', error);
+  }
+
+  return null;
+}
+
 export function hasCache(): boolean {
   return cachedSnapshot !== null || (cachedCourses !== null && cachedCourses.length > 0);
 }
@@ -187,6 +223,7 @@ export async function clearAll(): Promise<void> {
   cachedCourses = null;
   cachedPendingAssignments = null;
   cachedCourseDetails = {};
+  cachedCourseInfo = {};
 
   try {
     const keys = await AsyncStorage.getAllKeys();

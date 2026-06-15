@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { TutoringAnnouncement } from '../types';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
 import AppSymbol from '../../../shared/components/AppSymbol';
@@ -13,6 +13,7 @@ interface TutoringAnnouncementItemProps {
 export default function TutoringAnnouncementItem({ announcement, isExpanded: controlledExpanded, onToggle }: TutoringAnnouncementItemProps) {
   const { theme } = useTheme();
   const [internalExpanded, setInternalExpanded] = useState(false);
+  const pressAnim = React.useRef(new Animated.Value(0)).current;
   const isExpanded = controlledExpanded ?? internalExpanded;
 
   const handleToggle = () => {
@@ -22,6 +23,12 @@ export default function TutoringAnnouncementItem({ announcement, isExpanded: con
       setInternalExpanded(!internalExpanded);
     }
   };
+
+  const pressStyle: any = {
+    transform: [{ scale: pressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.98] }) }],
+  };
+
+  const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
@@ -39,10 +46,11 @@ export default function TutoringAnnouncementItem({ announcement, isExpanded: con
     : contentPreview;
 
   return (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: theme.card, shadowColor: theme.text }]}
+    <AnimatedPressable
+      style={[styles.card, { backgroundColor: theme.card, shadowColor: theme.text }, pressStyle]}
       onPress={handleToggle}
-      activeOpacity={0.7}
+      onPressIn={() => Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true }).start()}
+      onPressOut={() => Animated.spring(pressAnim, { toValue: 0, useNativeDriver: true }).start()}
     >
       <View style={styles.headerRow}>
         {announcement.isRead ? null : (
@@ -51,7 +59,7 @@ export default function TutoringAnnouncementItem({ announcement, isExpanded: con
         <Text
           style={[
             styles.title,
-            { color: theme.text, fontWeight: announcement.isRead ? '500' : '600' },
+            { color: theme.text, fontWeight: announcement.isRead ? '600' : '800' },
           ]}
           numberOfLines={2}
         >
@@ -91,19 +99,21 @@ export default function TutoringAnnouncementItem({ announcement, isExpanded: con
           {isExpanded ? '收合' : '展開公告'}
         </Text>
       </View>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(150,150,150,0.1)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   headerRow: {
     flexDirection: 'row',
@@ -119,16 +129,18 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   title: {
-    fontSize: 15,
+    fontSize: 16,
+    lineHeight: 22,
     flex: 1,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '600',
   },
   previewText: {
     fontSize: 13,

@@ -19,7 +19,17 @@ export default function TutoringLayout() {
         contentStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Stack.Screen name="index" options={{ title: '課輔' }} />
+      <Stack.Screen
+        name="index"
+        options={{
+          title: '',
+          headerLargeTitle: true,
+          headerTransparent: true,
+          headerShadowVisible: false,
+          headerTitleStyle: { color: 'transparent' },
+          headerLargeTitleStyle: { color: 'transparent' },
+        }}
+      />
     </Stack>
   );
 }

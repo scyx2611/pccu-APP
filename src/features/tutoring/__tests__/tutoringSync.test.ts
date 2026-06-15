@@ -157,6 +157,28 @@ describe('Tutoring migration integration', () => {
     expect(webViewImportPattern.test(detailScreen)).toBe(false);
   });
 
+  it('persists single-course details after scraper sync', () => {
+    const engineFile = fs.readFileSync(
+      path.resolve(__dirname, '../../pccu/engine/GlobalScraperWebView.tsx'),
+      'utf8',
+    );
+
+    expect(engineFile).toContain("data.t === 'single_course'");
+    expect(engineFile).toContain("persistCourseDetail(courseCode, 'announcements'");
+    expect(engineFile).toContain("persistCourseDetail(courseCode, 'materials'");
+    expect(engineFile).toContain("persistCourseDetail(courseCode, 'assignments'");
+  });
+
+  it('does not re-run tutoring overview on focus when cache is fresh', () => {
+    const tutoringScreen = fs.readFileSync(
+      path.resolve(__dirname, '../screens/TutoringScreen.tsx'),
+      'utf8',
+    );
+
+    expect(tutoringScreen).toContain('isTutoringDataFresh');
+    expect(tutoringScreen).toContain('if (courses.length > 0 && isTutoringDataFresh(lastSyncedAt)) return;');
+  });
+
   // 8. SyncPhase states
   it('SyncPhase type covers all expected phases', () => {
     const validPhases: SyncPhase[] = [

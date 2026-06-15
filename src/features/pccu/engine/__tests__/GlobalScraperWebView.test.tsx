@@ -74,17 +74,21 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 jest.mock('../../../tutoring/sync/tutoringScripts', () => ({
-  buildTutoringOverviewScript: jest.fn(() => 'true;'),
-  buildTutoringAllAssignmentsScript: jest.fn(() => 'true;'),
-  buildTutoringPendingAssignmentsScript: jest.fn(() => 'true;'),
-  buildTutoringSingleCourseScript: jest.fn(() => 'true;'),
-  buildWaitForCourseFpScript: jest.fn(() => 'true;'),
+  buildTutoringOverviewScript: jest.fn(() => 'overview-script;'),
+  buildTutoringAllAssignmentsScript: jest.fn(() => 'all-assignments-script;'),
+  buildTutoringPendingAssignmentsScript: jest.fn(() => 'pending-assignments-script;'),
+  buildTutoringSingleCourseScript: jest.fn((courseCode: string) => `single-course-script:${courseCode};`),
+  buildTutoringFileDownloadScript: jest.fn(() => 'file-download-script;'),
+  buildTutoringFileUploadScript: jest.fn(() => 'file-upload-script;'),
+  buildWaitForCourseFpScript: jest.fn((script: string) => `wait-for-coursefp:${script}`),
 }));
 
 jest.mock('../../../tutoring/storage/tutoringStorage', () => ({
   setCourses: jest.fn(),
   setPendingAssignments: jest.fn(),
   setAllAssignments: jest.fn(),
+  setCourseInfo: jest.fn(),
+  setCourseDetail: jest.fn(),
 }));
 
 jest.mock('../../../tutoring/store/useTutoringStore', () => ({
@@ -112,9 +116,15 @@ import { PccuSyncEngine } from '../PccuSyncEngine';
 import { pccuBrowserSessionGate } from '../pccuBrowserSessionGate';
 import {
   buildAdaptiveSchedulePageScript,
+  buildLoginScript,
   buildRobustGradePageScript,
   buildServiceOpenScript,
 } from '../../sync/pccuSyncScripts';
+import {
+  buildTutoringOverviewScript,
+  buildTutoringSingleCourseScript,
+  buildWaitForCourseFpScript,
+} from '../../../tutoring/sync/tutoringScripts';
 import { setDeveloperDebugEnabled } from '../../../settings/storage/developerSettings';
 import {
   clearScraperDebugPreviewFrame,
@@ -132,8 +142,12 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     mockInjectJavaScript.mockClear();
     mockReload.mockClear();
     (buildAdaptiveSchedulePageScript as jest.Mock).mockClear();
+    (buildLoginScript as jest.Mock).mockClear();
     (buildRobustGradePageScript as jest.Mock).mockClear();
     (buildServiceOpenScript as jest.Mock).mockClear();
+    (buildTutoringOverviewScript as jest.Mock).mockClear();
+    (buildTutoringSingleCourseScript as jest.Mock).mockClear();
+    (buildWaitForCourseFpScript as jest.Mock).mockClear();
     webViewPropsRef.current = null;
   });
 
@@ -157,6 +171,8 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     const handledRequestPromise = requestPromise.catch((error) => error);
 
     await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -243,9 +259,10 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     await act(async () => {
-      webViewPropsRef.current?.onNavigationStateChange?.({
-        loading: false,
-        url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+        },
       });
       await Promise.resolve();
     });
@@ -260,6 +277,188 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     expect(buildServiceOpenScript).not.toHaveBeenCalled();
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('keeps tutoring login alive when navigation reaches inside.aspx before login_ok', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('tutoring').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(buildLoginScript).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(600);
+      await Promise.resolve();
+    });
+
+    expect(buildLoginScript).toHaveBeenCalledTimes(2);
+    expect(buildServiceOpenScript).not.toHaveBeenCalled();
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('opens the 1202 tutoring service after login is verified', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('tutoring').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      jest.advanceTimersByTime(1_200);
+      await Promise.resolve();
+    });
+
+    expect(buildServiceOpenScript).toHaveBeenCalledWith('1202');
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith('service-open-script;');
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('injects the tutoring overview script after icas CourseFP page loads', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('tutoring').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://icas.pccu.edu.tw/cfp/',
+      });
+      jest.advanceTimersByTime(3_000);
+      await Promise.resolve();
+    });
+
+    expect(buildTutoringOverviewScript).toHaveBeenCalledTimes(1);
+    expect(buildWaitForCourseFpScript).toHaveBeenCalledWith('overview-script;');
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith('wait-for-coursefp:overview-script;');
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('falls back from a stuck 1202 TransUrl handoff to the ICAS tutoring home', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('tutoring').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1202&Area=service&MainMenuIndex=0&SubMenuIndex=00',
+      });
+      jest.advanceTimersByTime(2_500);
+      await Promise.resolve();
+    });
+
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
+      'window.location.href="https://icas.pccu.edu.tw/cfp/";true;'
+    );
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('keeps tutoring overview retries behind the CourseFP readiness guard', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    const requestPromise = engine.requestSync('tutoring').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'login_ok' }) },
+      });
+      webViewPropsRef.current?.onNavigationStateChange?.({
+        loading: false,
+        url: 'https://icas.pccu.edu.tw/cfp/',
+      });
+      jest.advanceTimersByTime(3_000);
+      await Promise.resolve();
+    });
+
+    mockInjectJavaScript.mockClear();
+    (buildTutoringOverviewScript as jest.Mock).mockClear();
+    (buildWaitForCourseFpScript as jest.Mock).mockClear();
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ t: 'err', m: 'CourseFP not ready' }) },
+      });
+      await Promise.resolve();
+    });
+
+    expect(buildTutoringOverviewScript).toHaveBeenCalledTimes(1);
+    expect(buildWaitForCourseFpScript).toHaveBeenCalledWith('overview-script;');
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith('wait-for-coursefp:overview-script;');
 
     rendered.unmount();
     const error = await requestPromise;

@@ -1,6 +1,6 @@
 import 'expo-dev-client';
 import React, { useMemo } from 'react';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -10,6 +10,7 @@ import {
   ThemeProvider as NavigationThemeProvider,
 } from '@react-navigation/native';
 import GlobalScraperWebView from '../src/features/pccu/engine/GlobalScraperWebView';
+import TutoringBackgroundWarmup from '../src/features/tutoring/components/TutoringBackgroundWarmup';
 import { ThemeProvider, useTheme } from '../src/providers/theme/ThemeProvider';
 
 Notifications.setNotificationHandler({
@@ -40,25 +41,12 @@ function RootLayoutNav() {
       },
     };
   }, [isDark, theme]);
-  const iosVersion = typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10);
-  const iosCloseHeaderItem = Platform.OS === 'ios'
-    ? () => [
-        {
-          type: 'button' as const,
-          label: '關閉',
-          icon: { type: 'sfSymbol' as const, name: 'xmark' as const },
-          variant: (iosVersion >= 26 ? 'prominent' : 'plain') as 'prominent' | 'plain',
-          onPress: () => router.back(),
-          accessibilityLabel: '關閉',
-        },
-      ]
-    : undefined;
-
   return (
     <NavigationThemeProvider value={navigationTheme}>
       <>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <GlobalScraperWebView />
+        <TutoringBackgroundWarmup />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -94,7 +82,15 @@ function RootLayoutNav() {
             name="tutoring/[courseCode]"
             options={{
               presentation: 'card',
-              headerShown: false,
+              title: '隤脩?閰單?',
+              headerShown: true,
+              headerTransparent: true,
+              headerShadowVisible: false,
+              headerBackVisible: true,
+              headerBackTitle: '隤脰?',
+              headerBackButtonDisplayMode: 'minimal',
+              headerTintColor: theme.text,
+              headerTitleStyle: { color: theme.text },
               contentStyle: { backgroundColor: theme.bg },
             }}
           />
