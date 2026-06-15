@@ -2,6 +2,8 @@
 
 MyCCU 是以 Expo / React Native 建置的校園行動 App，整合課表、成績、課輔、交通與個人設定。專案核心同步流程透過共用 WebView 登入 PCCU / eCampus，再注入腳本擷取校務系統資料。
 
+![PCCU App 展示圖](docs/assets/app-demo.png)
+
 ## 技術棧
 
 - Expo SDK 54
