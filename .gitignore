@@ -47,6 +47,7 @@ expo-*.log
 # Agent tooling
 .codex/
 .sisyphus/
+.worktrees/
 
 # Stray analysis/test scripts
 super_analysis.js
