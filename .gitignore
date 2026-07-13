@@ -52,3 +52,12 @@ expo-*.log
 # Stray analysis/test scripts
 super_analysis.js
 test js/
+
+# Quality and verification output
+coverage/
+.superpowers/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/
