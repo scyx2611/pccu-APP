@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Pin npm
+        run: npm install --global npm@10.8.2
+      - name: Show toolchain
+        run: node --version && npm --version
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Validate Expo dependency compatibility
+        run: npx expo install --check
+      - name: Lint
+        run: npm run lint
+      - name: Enforce module boundaries
+        run: npm run lint:boundaries
+      - name: Check formatting
+        run: npm run format:check
+      - name: Strict typecheck
+        run: npm run typecheck
+      - name: Test with coverage ratchet
+        run: npm run coverage:ci
+      - name: Export iOS bundle
+        run: npm run export:smoke
