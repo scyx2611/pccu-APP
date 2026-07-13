@@ -1,6 +1,11 @@
 {
   "name": "pccu-app",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=20.19.4 <21",
+    "npm": ">=10.8.2 <11"
+  },
+  "packageManager": "npm@10.8.2",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -23,9 +28,9 @@
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-masked-view/masked-view": "0.3.2",
-    "@react-navigation/bottom-tabs": "^7.15.5",
-    "@react-navigation/native": "^7.1.33",
-    "@react-navigation/native-stack": "^7.14.5",
+    "@react-navigation/bottom-tabs": "^7.4.0",
+    "@react-navigation/native": "^7.1.8",
+    "@react-navigation/native-stack": "^7.3.16",
     "axios": "^1.13.6",
     "buffer": "^6.0.3",
     "cheerio": "^1.0.0-rc.12",
@@ -33,6 +38,7 @@
     "expo-asset": "~12.0.12",
     "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.13",
+    "expo-crypto": "~15.0.8",
     "expo-dev-client": "~6.0.20",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.22",
@@ -47,6 +53,7 @@
     "expo-symbols": "~1.0.8",
     "iconv-lite": "^0.7.2",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
