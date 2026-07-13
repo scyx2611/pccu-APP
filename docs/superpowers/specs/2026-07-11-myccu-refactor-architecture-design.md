@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-11
 
-**Status:** Validated design; pending written-spec review
+**Status:** Approved for implementation planning
 
 **Primary target:** Production-quality mobile app architecture
 **Development constraint:** Every migration stage must remain testable in Expo Go
@@ -120,8 +120,9 @@ The composition root is the only place allowed to know both the sync core and co
 app/                              Expo Router files; params, headers, re-exports
 src/
   composition/
-    AppCompositionRoot.tsx        Providers and concrete workflow registration
-    workflowRegistry.ts           Concrete feature workflow list
+    AppCompositionRoot.tsx        Providers and the single application runtime
+    sync.ts                       Compatibility exports for the composed sync runtime
+    createAppRuntime.ts           Concrete workflows, repositories, committers, and ports
   core/
     sync/
       contracts.ts                Typed command, result, error, and lifecycle types
