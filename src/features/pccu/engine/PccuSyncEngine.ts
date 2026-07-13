@@ -19,13 +19,30 @@ export interface SyncRequest {
   refreshTimeout?: () => void;
 }
 
-export type SyncAbortReason = 'timeout' | 'executor_unavailable' | 'engine_destroyed';
+export type SyncAbortReason =
+  | 'timeout'
+  | 'executor_unavailable'
+  | 'engine_destroyed'
+  | 'session_transition';
 
 export type SyncAbortHandler = (reason: SyncAbortReason, error: Error) => void;
 
 export type SyncExecutor = (request: SyncRequest) => Promise<any>;
 
 export type EngineState = 'idle' | 'paused' | 'processing';
+export type SessionTransitionReason = 'logout' | 'account_switch';
+
+export class SessionTransitionError extends Error {
+  readonly reason: SessionTransitionReason;
+
+  constructor(reason: SessionTransitionReason) {
+    super(`sync_blocked_${reason}`);
+    this.name = 'SessionTransitionError';
+    this.reason = reason;
+  }
+}
+
+type SessionTransitionState = 'open' | 'blocked' | 'reset';
 
 type ExecutorRecord = {
   id: number;
@@ -75,6 +92,16 @@ class PriorityQueue {
 
   clear(): void {
     this.heap = [];
+  }
+
+  drain(): InternalSyncRequest[] {
+    const requests: InternalSyncRequest[] = [];
+    let request = this.dequeue();
+    while (request) {
+      requests.push(request);
+      request = this.dequeue();
+    }
+    return requests;
   }
 
   private bubbleUp(index: number): void {
@@ -130,6 +157,8 @@ export class PccuSyncEngine {
   private executorSequence = 0;
   private activeRequest: InternalSyncRequest | null = null;
   private activeExecutorId: number | null = null;
+  private transitionState: SessionTransitionState = 'open';
+  private transitionReason: SessionTransitionReason | null = null;
 
   // -----------------------------------------------------------------------
   // Singleton
@@ -231,6 +260,10 @@ export class PccuSyncEngine {
    * the request is processed.
    */
   requestSync(type: SyncType, priority?: number, options?: Record<string, unknown>): Promise<any> {
+    if (this.transitionState !== 'open') {
+      return Promise.reject(new SessionTransitionError(this.transitionReason ?? 'logout'));
+    }
+
     return new Promise((resolve, reject) => {
       const request: InternalSyncRequest = {
         id: this.generateId(type),
@@ -310,6 +343,47 @@ export class PccuSyncEngine {
     logger.debug(`Cleared ${count} pending requests`);
   }
 
+  blockNewRequests(reason: SessionTransitionReason): void {
+    this.transitionState = 'blocked';
+    this.transitionReason = reason;
+    this.clearProcessingTimer();
+  }
+
+  abortActiveAndRejectQueue(reason: SessionTransitionReason): void {
+    this.blockNewRequests(reason);
+    this.clearActiveTimeout();
+    this.clearProcessingTimer();
+
+    const activeRequest = this.activeRequest;
+    this.activeRequest = null;
+    this.activeExecutorId = null;
+    if (this.state === 'processing') this.state = 'idle';
+
+    const queuedRequests = this.queue.drain();
+    if (activeRequest) {
+      const error = new SessionTransitionError(reason);
+      activeRequest.abortHandler?.('session_transition', error);
+      activeRequest.abortHandler = null;
+      activeRequest.reject(error);
+    }
+    for (const request of queuedRequests) {
+      request.abortHandler = null;
+      request.reject(new SessionTransitionError(reason));
+    }
+  }
+
+  resetAfterSessionChange(): void {
+    if (this.transitionState !== 'blocked') return;
+    this.transitionState = 'reset';
+  }
+
+  allowNewRequests(): void {
+    if (this.transitionState !== 'reset') return;
+    this.transitionState = 'open';
+    this.transitionReason = null;
+    this.processQueue();
+  }
+
   /**
    * Tear down the engine (remove listeners, clear timers).
    */
@@ -329,6 +403,8 @@ export class PccuSyncEngine {
     this.executorRecord = null;
     this.activeRequest = null;
     this.activeExecutorId = null;
+    this.transitionState = 'open';
+    this.transitionReason = null;
   }
 
   // -----------------------------------------------------------------------
@@ -336,6 +412,7 @@ export class PccuSyncEngine {
   // -----------------------------------------------------------------------
 
   private processQueue(): void {
+    if (this.transitionState !== 'open') return;
     if (this.state === 'paused') return;
     if (this.state === 'processing') return;
     if (this.queue.isEmpty) {
@@ -368,6 +445,7 @@ export class PccuSyncEngine {
 
       Promise.resolve(result)
         .then((data) => {
+          if (this.activeRequest?.id !== request.id) return;
           this.clearActiveTimeout();
           if (this.activeRequest?.id === request.id) {
             this.activeRequest = null;
@@ -379,6 +457,7 @@ export class PccuSyncEngine {
           this.scheduleNext();
         })
         .catch((error) => {
+          if (this.activeRequest?.id !== request.id) return;
           this.clearActiveTimeout();
           if (this.activeRequest?.id === request.id) {
             this.activeRequest = null;
@@ -426,6 +505,7 @@ export class PccuSyncEngine {
   }
 
   private scheduleNext(): void {
+    if (this.transitionState !== 'open') return;
     if (this.state === 'paused') return;
 
     if (this.queue.isEmpty) {

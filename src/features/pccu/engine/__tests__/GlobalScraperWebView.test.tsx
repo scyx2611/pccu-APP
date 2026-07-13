@@ -7,6 +7,8 @@ const mockInjectJavaScript = jest.fn();
 const mockRawInjectJavaScript = jest.fn();
 const mockReload = jest.fn();
 const mockStopLoading = jest.fn();
+const mockClearCache = jest.fn();
+const mockClearHistory = jest.fn();
 const webViewPropsRef: { current: any | null } = { current: null };
 const mockProtocolIdentityRef: { current: Record<string, unknown> | null } = { current: null };
 const mockCurrentUrlRef = { current: '' };
@@ -76,6 +78,8 @@ jest.mock('react-native-webview', () => {
         injectJavaScript: mockRecordInjectedJavaScript,
         reload: mockReload,
         stopLoading: mockStopLoading,
+        clearCache: mockClearCache,
+        clearHistory: mockClearHistory,
       }));
 
       return null;
@@ -193,6 +197,7 @@ import {
 } from '../../../tutoring/sync/tutoringScripts';
 import { setDeveloperDebugEnabled } from '../../../settings/storage/developerSettings';
 import { clearScraperDebugPreviewFrame, setScraperDebugPreviewFrame } from '../scraperDebugPreview';
+import { clearRegisteredWebViewSession } from '../../../../core/sync/webview/webViewSessionControl';
 
 describe('GlobalScraperWebView PCCU session gate', () => {
   beforeEach(async () => {
@@ -207,6 +212,8 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     mockRawInjectJavaScript.mockClear();
     mockReload.mockClear();
     mockStopLoading.mockClear();
+    mockClearCache.mockClear();
+    mockClearHistory.mockClear();
     (buildAdaptiveSchedulePageScript as jest.Mock).mockClear();
     (buildLoginScript as jest.Mock).mockClear();
     (buildRobustGradePageScript as jest.Mock).mockClear();
@@ -477,6 +484,48 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     rendered.unmount();
     const error = await requestPromise;
     expect(error).toBeInstanceOf(Error);
+  });
+
+  it('clears and remounts the isolated WebView session before resolving', async () => {
+    const rendered = render(<GlobalScraperWebView />);
+    let completed = false;
+    let clearPromise!: Promise<void>;
+    let repeatedClearPromise!: Promise<void>;
+
+    await act(async () => {
+      clearPromise = clearRegisteredWebViewSession('logout');
+      repeatedClearPromise = clearRegisteredWebViewSession('logout');
+      void clearPromise.then(() => {
+        completed = true;
+      });
+      await Promise.resolve();
+    });
+
+    expect(completed).toBe(false);
+    expect(repeatedClearPromise).toBe(clearPromise);
+    expect(webViewPropsRef.current?.incognito).toBe(true);
+    expect(webViewPropsRef.current?.cacheEnabled).toBe(false);
+    expect(webViewPropsRef.current?.source?.uri).toBe('about:blank');
+    expect(mockStopLoading).toHaveBeenCalledTimes(1);
+    expect(mockClearCache).toHaveBeenCalledWith(true);
+    expect(mockClearHistory).toHaveBeenCalledTimes(1);
+    expect(mockRawInjectJavaScript).toHaveBeenCalledWith(
+      expect.stringContaining('localStorage.clear()'),
+    );
+    expect(mockRawInjectJavaScript).toHaveBeenCalledWith(
+      expect.stringContaining('sessionStorage.clear()'),
+    );
+
+    await act(async () => {
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: { url: 'about:blank' },
+      });
+      await Promise.all([clearPromise, repeatedClearPromise]);
+    });
+
+    expect(completed).toBe(true);
+    rendered.unmount();
+    await expect(clearRegisteredWebViewSession('logout')).resolves.toBeUndefined();
   });
 
   it('renders the live scraper preview only inside a registered debug slot', async () => {

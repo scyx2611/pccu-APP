@@ -4,7 +4,7 @@ jest.mock('react-native', () => ({
   },
 }));
 
-import { PccuSyncEngine } from '../PccuSyncEngine';
+import { PccuSyncEngine, SessionTransitionError } from '../PccuSyncEngine';
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -147,5 +147,65 @@ describe('PccuSyncEngine executor lifecycle', () => {
 
     await expect(gradePromise).resolves.toEqual({ success: true, type: 'grade' });
     await expect(schedulePromise).resolves.toEqual({ success: true, type: 'schedule' });
+  });
+
+  it('rejects new work immediately while a logout transition is blocked', async () => {
+    const engine = PccuSyncEngine.getInstance();
+
+    engine.blockNewRequests('logout');
+
+    await expect(engine.requestSync('schedule')).rejects.toMatchObject({
+      name: 'SessionTransitionError',
+      reason: 'logout',
+    });
+    expect(engine.getQueueSize()).toBe(0);
+  });
+
+  it('rejects the active caller and drains every queued caller exactly once', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const executor = createDeferred<unknown>();
+    const abortHandler = jest.fn();
+    engine.setExecutor((request) => {
+      request.setAbortHandler?.(abortHandler);
+      return executor.promise;
+    });
+
+    const activeResult = engine.requestSync('grade').catch((error) => error);
+    await Promise.resolve();
+    const queuedResults = [
+      engine.requestSync('schedule').catch((error) => error),
+      engine.requestSync('traffic').catch((error) => error),
+    ];
+
+    engine.blockNewRequests('account_switch');
+    engine.abortActiveAndRejectQueue('account_switch');
+
+    await expect(activeResult).resolves.toBeInstanceOf(SessionTransitionError);
+    for (const queuedResult of queuedResults) {
+      await expect(queuedResult).resolves.toMatchObject({
+        name: 'SessionTransitionError',
+        reason: 'account_switch',
+      });
+    }
+    expect(abortHandler).toHaveBeenCalledTimes(1);
+    expect(engine.getQueueSize()).toBe(0);
+
+    executor.resolve({ success: true });
+    await Promise.resolve();
+    expect(abortHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('cannot reopen requests until session reset completes', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    engine.setExecutor(async () => ({ success: true }));
+
+    engine.blockNewRequests('logout');
+    engine.allowNewRequests();
+    await expect(engine.requestSync('grade')).rejects.toBeInstanceOf(SessionTransitionError);
+
+    engine.resetAfterSessionChange();
+    engine.allowNewRequests();
+
+    await expect(engine.requestSync('grade')).resolves.toEqual({ success: true });
   });
 });

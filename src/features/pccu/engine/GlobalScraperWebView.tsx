@@ -12,6 +12,10 @@ import {
   decodeWebViewEnvelope,
   type WebViewProtocolIdentity,
 } from '../../../core/sync/webview/protocol';
+import {
+  registerWebViewSessionControl,
+  type WebViewSessionClearReason,
+} from '../../../core/sync/webview/webViewSessionControl';
 import { PccuSyncEngine, type SyncRequest, type SyncType } from '../../pccu/engine/PccuSyncEngine';
 import { pccuBrowserSessionGate, type PccuBrowserSessionLease } from './pccuBrowserSessionGate';
 import { getSavedPCCUCredentials } from '../../auth/services/authService';
@@ -81,10 +85,12 @@ const TUTORING_HOME_URL = 'https://icas.pccu.edu.tw/cfp/';
 
 const TRAFFIC_DOWNHILL_URL = 'https://ebus.gov.taipei/Route/StopsOfRoute?routeid=0111000505';
 const TRAFFIC_UPHILL_URL = 'https://ebus.gov.taipei/Route/StopsOfRoute?routeid=0111000503';
+const SESSION_RESET_TIMEOUT_MS = 8_000;
 
 const withTimestamp = (url: string) => `${url}${url.includes('?') ? '&' : '?'}ts=${Date.now()}`;
 
 const isTutoringTransUrl = (url: string) => /TransUrl\.aspx\?PrjNo=1202/i.test(url || '');
+const isInternalBlankPage = (url: string) => url.startsWith('about:blank');
 const logger = createLogger('global-scraper');
 
 const USER_AGENT =
@@ -136,6 +142,13 @@ type TrafficPartial = {
   uphill: ReturnType<typeof normalizeTrafficArrival>[];
 };
 
+type PendingSessionReset = {
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
 // ---------------------------------------------------------------------------
 // URL helpers
 // ---------------------------------------------------------------------------
@@ -171,6 +184,7 @@ export default function GlobalScraperWebView() {
   const credRef = useRef<PCCUCredentials | null>(null);
   const pendingRef = useRef<PendingRequest | null>(null);
   const protocolGenerationRef = useRef(0);
+  const sessionResetRef = useRef<PendingSessionReset | null>(null);
   const trafficPartialRef = useRef<TrafficPartial>({ downhill: [], uphill: [] });
   const activeModeRef = useRef<ActiveMode>('none');
   const pccuPhaseRef = useRef<PccuPhase>('idle');
@@ -179,6 +193,7 @@ export default function GlobalScraperWebView() {
   const tutoringCourseCodeRef = useRef<string | null>(null);
   const pccuSessionLeaseRef = useRef<PccuBrowserSessionLease | null>(null);
   const unmountedRef = useRef(false);
+  const [sessionEpoch, setSessionEpoch] = useState(0);
   const [trafficUrl, setTrafficUrl] = useState(withTimestamp(TRAFFIC_DOWNHILL_URL));
   const [sourceUri, setSourceUri] = useState(PCCU_DEFAULT_URL);
   const [debugVisible, setDebugVisible] = useState(false);
@@ -192,6 +207,82 @@ export default function GlobalScraperWebView() {
     pccuSessionLeaseRef.current?.release();
     pccuSessionLeaseRef.current = null;
   }, []);
+
+  const clearWebViewSession = useCallback(
+    (reason: WebViewSessionClearReason): Promise<void> => {
+      if (sessionResetRef.current) return sessionResetRef.current.promise;
+
+      let resolve!: () => void;
+      let reject!: (error: Error) => void;
+      const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+      });
+      const timeout = setTimeout(() => {
+        if (sessionResetRef.current?.promise !== promise) return;
+        sessionResetRef.current = null;
+        reject(new Error('webview_session_reset_timeout'));
+      }, SESSION_RESET_TIMEOUT_MS);
+      sessionResetRef.current = { promise, resolve, reject, timeout };
+
+      webViewRef.current?.stopLoading();
+      const pending = pendingRef.current;
+      if (pending && !pending.completed) {
+        pending.completed = true;
+        pending.request.setAbortHandler?.(null);
+        pending.request.reject(new Error(`webview_session_cleared_${reason}`));
+      }
+
+      releasePccuSessionLease();
+      pendingRef.current = null;
+      credRef.current = null;
+      activeModeRef.current = 'none';
+      pccuPhaseRef.current = 'idle';
+      trafficPhaseRef.current = 'idle';
+      tutoringPhaseRef.current = 'idle';
+      tutoringCourseCodeRef.current = null;
+      trafficPartialRef.current = { downhill: [], uphill: [] };
+
+      webViewRef.current?.injectJavaScript(`
+(function() {
+  try { localStorage.clear(); } catch (error) {}
+  try { sessionStorage.clear(); } catch (error) {}
+  true;
+})();
+`);
+      webViewRef.current?.clearCache?.(true);
+      webViewRef.current?.clearHistory?.();
+      setSourceUri('about:blank');
+      setDebugUrl('about:blank');
+      setSessionEpoch((current) => current + 1);
+
+      return promise;
+    },
+    [releasePccuSessionLease],
+  );
+
+  const completeWebViewSessionReset = useCallback((url: string): boolean => {
+    const reset = sessionResetRef.current;
+    if (!reset || !url.startsWith('about:blank')) return false;
+
+    clearTimeout(reset.timeout);
+    sessionResetRef.current = null;
+    reset.resolve();
+    return true;
+  }, []);
+
+  useEffect(() => {
+    const unregister = registerWebViewSessionControl({ clearSession: clearWebViewSession });
+    return () => {
+      unregister();
+      const reset = sessionResetRef.current;
+      if (reset) {
+        clearTimeout(reset.timeout);
+        sessionResetRef.current = null;
+        reset.reject(new Error('webview_session_control_unmounted'));
+      }
+    };
+  }, [clearWebViewSession]);
 
   const updateDebugMessage = useCallback((message: string) => {
     setDebugMessage(message);
@@ -620,6 +711,7 @@ export default function GlobalScraperWebView() {
 
   const handleShouldStartLoadWithRequest = useCallback(
     (request: WebViewNavigation): boolean => {
+      if (isInternalBlankPage(request.url || '') && !pendingRef.current) return true;
       if (isAllowedWebViewUrl(request.url || '')) return true;
       rejectActiveWebViewRequest();
       return false;
@@ -648,6 +740,10 @@ export default function GlobalScraperWebView() {
     (nav: WebViewNavigation) => {
       if (nav.loading) return;
       const url = nav.url || '';
+      if (isInternalBlankPage(url) && !pendingRef.current) {
+        setDebugUrl('about:blank');
+        return;
+      }
       if (!isAllowedWebViewUrl(url)) {
         rejectActiveWebViewRequest();
         return;
@@ -1301,6 +1397,10 @@ export default function GlobalScraperWebView() {
   const handleLoadEnd = useCallback(
     (event: any) => {
       const currentUrl = event.nativeEvent.url || '';
+      if (completeWebViewSessionReset(currentUrl)) {
+        setDebugUrl('about:blank');
+        return;
+      }
       if (!isAllowedWebViewUrl(currentUrl)) {
         rejectActiveWebViewRequest();
         return;
@@ -1361,7 +1461,14 @@ export default function GlobalScraperWebView() {
         }
       }
     },
-    [runLogin, injectPccuScript, openPccuTarget, rejectActiveWebViewRequest, updateDebugMessage],
+    [
+      runLogin,
+      completeWebViewSessionReset,
+      injectPccuScript,
+      openPccuTarget,
+      rejectActiveWebViewRequest,
+      updateDebugMessage,
+    ],
   );
 
   const handleOpenWindow = useCallback(
@@ -1522,6 +1629,7 @@ export default function GlobalScraperWebView() {
   // -----------------------------------------------------------------------
 
   const activeUri = useMemo(() => {
+    if (isInternalBlankPage(sourceUri)) return 'about:blank';
     const candidate = activeModeRef.current === 'traffic' ? trafficUrl : sourceUri;
     return isAllowedWebViewUrl(candidate) ? candidate : PCCU_DEFAULT_URL;
   }, [trafficUrl, sourceUri]);
@@ -1579,12 +1687,14 @@ export default function GlobalScraperWebView() {
         </View>
       ) : null}
       <WebView
+        key={`scraper-session-${sessionEpoch}`}
         ref={webViewRef}
         style={debugPreviewStyle}
         pointerEvents={showDebugPreview ? 'auto' : 'none'}
         source={{ uri: activeUri }}
         containerStyle={showDebugPreview ? styles.debugWebViewContainer : styles.hiddenInner}
         originWhitelist={ALLOWED_WEBVIEW_ORIGINS}
+        incognito
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         domStorageEnabled
