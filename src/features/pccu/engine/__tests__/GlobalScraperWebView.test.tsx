@@ -77,7 +77,9 @@ jest.mock('../../../tutoring/sync/tutoringScripts', () => ({
   buildTutoringOverviewScript: jest.fn(() => 'overview-script;'),
   buildTutoringAllAssignmentsScript: jest.fn(() => 'all-assignments-script;'),
   buildTutoringPendingAssignmentsScript: jest.fn(() => 'pending-assignments-script;'),
-  buildTutoringSingleCourseScript: jest.fn((courseCode: string) => `single-course-script:${courseCode};`),
+  buildTutoringSingleCourseScript: jest.fn(
+    (courseCode: string) => `single-course-script:${courseCode};`,
+  ),
   buildTutoringFileDownloadScript: jest.fn(() => 'file-download-script;'),
   buildTutoringFileUploadScript: jest.fn(() => 'file-upload-script;'),
   buildWaitForCourseFpScript: jest.fn((script: string) => `wait-for-coursefp:${script}`),
@@ -126,10 +128,7 @@ import {
   buildWaitForCourseFpScript,
 } from '../../../tutoring/sync/tutoringScripts';
 import { setDeveloperDebugEnabled } from '../../../settings/storage/developerSettings';
-import {
-  clearScraperDebugPreviewFrame,
-  setScraperDebugPreviewFrame,
-} from '../scraperDebugPreview';
+import { clearScraperDebugPreviewFrame, setScraperDebugPreviewFrame } from '../scraperDebugPreview';
 
 describe('GlobalScraperWebView PCCU session gate', () => {
   beforeEach(async () => {
@@ -191,7 +190,7 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     const error = await handledRequestPromise;
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe(
-      'Sync executor became unavailable. Shared scraper was unmounted.'
+      'Sync executor became unavailable. Shared scraper was unmounted.',
     );
   });
 
@@ -413,7 +412,7 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
-      'window.location.href="https://icas.pccu.edu.tw/cfp/";true;'
+      'window.location.href="https://icas.pccu.edu.tw/cfp/";true;',
     );
 
     rendered.unmount();
@@ -670,10 +669,10 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
-      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1208&Area=service";true;'
+      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1208&Area=service";true;',
     );
     expect(mockInjectJavaScript).not.toHaveBeenCalledWith(
-      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/queryCourse/queryByStudent.asp?QuerySource=queryCourse";true;'
+      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/queryCourse/queryByStudent.asp?QuerySource=queryCourse";true;',
     );
 
     rendered.unmount();
@@ -739,7 +738,9 @@ describe('GlobalScraperWebView PCCU session gate', () => {
 
     expect(buildServiceOpenScript).toHaveBeenCalledTimes(1);
     expect(buildAdaptiveSchedulePageScript).toHaveBeenCalledTimes(1);
-    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(expect.stringContaining('schedule-script;'));
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
+      expect.stringContaining('schedule-script;'),
+    );
 
     rendered.unmount();
     const error = await requestPromise;
@@ -803,7 +804,9 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     expect(buildAdaptiveSchedulePageScript).toHaveBeenCalledTimes(1);
-    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(expect.stringContaining('schedule-script;'));
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
+      expect.stringContaining('schedule-script;'),
+    );
 
     rendered.unmount();
     const error = await requestPromise;
@@ -847,14 +850,15 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     await act(async () => {
       webViewPropsRef.current?.onOpenWindow?.({
         nativeEvent: {
-          targetUrl: 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+          targetUrl:
+            'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
         },
       });
       await Promise.resolve();
     });
 
     expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
-      'window.location.href="https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse";true;'
+      'window.location.href="https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse";true;',
     );
 
     await act(async () => {
@@ -872,7 +876,9 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     expect(buildAdaptiveSchedulePageScript).toHaveBeenCalledTimes(1);
-    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(expect.stringContaining('schedule-script;'));
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
+      expect.stringContaining('schedule-script;'),
+    );
 
     rendered.unmount();
     const error = await requestPromise;
@@ -940,12 +946,14 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
-      expect.stringContaining("window.__PCCU_ADAPTIVE_SCHEDULE_SYNC__.active = false;")
+      expect.stringContaining('window.__PCCU_ADAPTIVE_SCHEDULE_SYNC__.active = false;'),
     );
     expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
-      expect.stringContaining("sessionStorage.removeItem('__PCCU_SCHEDULE_SEARCH_TS__');")
+      expect.stringContaining("sessionStorage.removeItem('__PCCU_SCHEDULE_SEARCH_TS__');"),
     );
-    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(expect.stringContaining('schedule-script;'));
+    expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
+      expect.stringContaining('schedule-script;'),
+    );
 
     rendered.unmount();
     const error = await requestPromise;
@@ -1006,10 +1014,10 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     expect(mockInjectJavaScript).toHaveBeenLastCalledWith(
-      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1220&Area=service";true;'
+      'window.location.href="https://ecampus.pccu.edu.tw/eCampus/TransUrl.aspx?PrjNo=1220&Area=service";true;',
     );
     expect(mockInjectJavaScript).not.toHaveBeenCalledWith(
-      'window.location.href="https://ap2.pccu.edu.tw/studentscore/student/index.asp";true;'
+      'window.location.href="https://ap2.pccu.edu.tw/studentscore/student/index.asp";true;',
     );
 
     await act(async () => {
@@ -1076,7 +1084,7 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     const error = await trackedPromise;
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe(
-      'Sync executor became unavailable. Shared scraper was unmounted.'
+      'Sync executor became unavailable. Shared scraper was unmounted.',
     );
   });
 

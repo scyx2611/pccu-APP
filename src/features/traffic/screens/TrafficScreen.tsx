@@ -38,15 +38,17 @@ export default function TrafficScreen() {
   const isFocused = useIsFocused();
   const traffic = useTrafficData({ active: isFocused });
   const [developerDebugEnabled, setDeveloperDebugEnabled] = useState(false);
-  const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() => getScraperDebugRuntimeState());
+  const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() =>
+    getScraperDebugRuntimeState(),
+  );
 
   const downhill = useMemo(
     () => sortTrafficArrivals('downhill', traffic.snapshot?.downhill || []),
-    [traffic.snapshot]
+    [traffic.snapshot],
   );
   const uphill = useMemo(
     () => sortTrafficArrivals('uphill', traffic.snapshot?.uphill || []),
-    [traffic.snapshot]
+    [traffic.snapshot],
   );
 
   const updatedAtText = buildUpdatedAtText({
@@ -83,21 +85,33 @@ export default function TrafficScreen() {
 
   useEffect(() => subscribeScraperDebugRuntimeState(setDebugRuntime), []);
 
-  const renderSection = (title: string, direction: TrafficDirection, items: TrafficStopArrival[]) => (
-    <View style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]} key={direction}>
+  const renderSection = (
+    title: string,
+    direction: TrafficDirection,
+    items: TrafficStopArrival[],
+  ) => (
+    <View
+      style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+      key={direction}
+    >
       <Text style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
       {items.length === 0 ? (
         <Text style={[styles.sectionEmpty, { color: theme.textSub }]}>暫無即時資料</Text>
       ) : (
         items.map((arrival) => (
-          <View style={styles.arrivalRow} key={`${direction}-${arrival.stopName}-${arrival.branchLabel}`}>
+          <View
+            style={styles.arrivalRow}
+            key={`${direction}-${arrival.stopName}-${arrival.branchLabel}`}
+          >
             <View style={styles.arrivalTextBlock}>
               <Text style={[styles.arrivalStop, { color: theme.text }]}>{arrival.stopName}</Text>
               <Text style={[styles.arrivalMeta, { color: theme.textSub }]} numberOfLines={1}>
                 {renderArrivalMeta(arrival)}
               </Text>
             </View>
-            <Text style={[styles.arrivalEta, { color: arrival.isDue ? theme.warning : theme.primary }]}>
+            <Text
+              style={[styles.arrivalEta, { color: arrival.isDue ? theme.warning : theme.primary }]}
+            >
               {arrival.etaText}
             </Text>
           </View>
@@ -113,38 +127,58 @@ export default function TrafficScreen() {
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
-        refreshControl={(
+        refreshControl={
           <RefreshControl
             refreshing={traffic.pullRefreshing}
             onRefresh={() => traffic.refresh('manual')}
             tintColor={theme.primary}
             colors={[theme.primary]}
           />
-        )}
+        }
       >
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <View style={styles.heroHeader}>
-            <AppSymbol name="bus.fill" size={28} tintColor={theme.warning} fallback={<Text>Bus</Text>} />
+            <AppSymbol
+              name="bus.fill"
+              size={28}
+              tintColor={theme.warning}
+              fallback={<Text>Bus</Text>}
+            />
             <Text style={[styles.heroTitle, { color: theme.text }]}>交通動態</Text>
           </View>
           <Text style={[styles.heroText, { color: theme.textSub }]}>
             以大臺北公車紅 5 經文大路線為主，整理上下山校園站點的即時到站資訊。
           </Text>
           <View style={styles.actionRow}>
-            <Pressable style={[styles.actionButton, { backgroundColor: theme.syncBtnBg }]} onPress={openSource}>
-              <AppSymbol name="doc.text.magnifyingglass" size={16} tintColor={theme.text} fallback={<Text>i</Text>} />
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: theme.syncBtnBg }]}
+              onPress={openSource}
+            >
+              <AppSymbol
+                name="doc.text.magnifyingglass"
+                size={16}
+                tintColor={theme.text}
+                fallback={<Text>i</Text>}
+              />
               <Text style={[styles.actionText, { color: theme.text }]}>官方來源</Text>
             </Pressable>
           </View>
         </View>
 
         {developerDebugEnabled ? (
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <View
+            style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+          >
             <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 資訊</Text>
             <Text style={[styles.debugText, { color: theme.textSub }]}>
               Loading: {String(traffic.loading)} | Error: {traffic.error ?? '-'}
             </Text>
-            <View style={[styles.debugPreviewSlot, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+            <View
+              style={[
+                styles.debugPreviewSlot,
+                { backgroundColor: theme.bg, borderColor: theme.border },
+              ]}
+            >
               <View style={styles.debugRuntimeStack}>
                 <View style={styles.debugRuntimeRow}>
                   <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>Mode</Text>
@@ -173,14 +207,20 @@ export default function TrafficScreen() {
         ) : null}
 
         {traffic.loading && !traffic.snapshot ? (
-          <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <View
+            style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+          >
             <ActivityIndicator size="small" color={theme.primary} />
-            <Text style={[styles.statusText, { color: theme.textSub }]}>正在載入紅 5 即時資訊...</Text>
+            <Text style={[styles.statusText, { color: theme.textSub }]}>
+              正在載入紅 5 即時資訊...
+            </Text>
           </View>
         ) : null}
 
         {traffic.error ? (
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <View
+            style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+          >
             <Text style={[styles.noticeTitle, { color: theme.text }]}>同步狀態</Text>
             <Text style={[styles.noticeText, { color: theme.textSub }]}>{traffic.error}</Text>
           </View>

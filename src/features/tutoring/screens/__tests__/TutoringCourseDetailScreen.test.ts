@@ -67,7 +67,7 @@ describe('TutoringCourseDetailScreen bottom-tab-style tabs', () => {
 
     expect(source).toContain('progressRefreshAttemptRef');
     expect(source).toContain("activeTab === 'progress'");
-    expect(source).toContain("syncCourseDetail(courseCode, { force: true })");
+    expect(source).toContain('syncCourseDetail(courseCode, { force: true })');
   });
 
   it('forces one progress refresh when old cache contains unrelated course-list rows', () => {
@@ -99,7 +99,9 @@ describe('TutoringCourseDetailScreen bottom-tab-style tabs', () => {
     );
 
     expect(source).toContain("import { normalizeTutoringText } from '../utils/text'");
-    expect(source).toContain('const resolvedCourseName = cleanText(courseName || course?.courseName || courseCode)');
+    expect(source).toMatch(
+      /const resolvedCourseName\s*=\s*cleanText\(courseName \|\| course\?\.courseName \|\| courseCode\)/,
+    );
     expect(source).toContain('cleanText(item.title)');
     expect(source).toContain('cleanText(classmate.name)');
   });

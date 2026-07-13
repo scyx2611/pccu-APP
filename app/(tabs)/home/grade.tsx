@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -60,7 +60,7 @@ export default function HomeGradeScreen() {
           if (buttonIndex >= 0 && buttonIndex < menuActions.length) {
             menuActions[buttonIndex]?.onPress();
           }
-        }
+        },
       );
       return;
     }
@@ -77,7 +77,7 @@ export default function HomeGradeScreen() {
       ],
       {
         userInterfaceStyle,
-      }
+      },
     );
   };
 
@@ -189,7 +189,7 @@ export default function HomeGradeScreen() {
     useCallback(() => {
       void verifyGradeAccess();
       return undefined;
-    }, [verifyGradeAccess])
+    }, [verifyGradeAccess]),
   );
 
   const retryAuthentication = useCallback(() => {
@@ -259,7 +259,9 @@ export default function HomeGradeScreen() {
             </View>
 
             <View style={[styles.lockStatusPill, { backgroundColor: `${lockStatusTone}18` }]}>
-              <Text style={[styles.lockStatusText, { color: lockStatusTone }]}>{lockStatusLabel}</Text>
+              <Text style={[styles.lockStatusText, { color: lockStatusTone }]}>
+                {lockStatusLabel}
+              </Text>
             </View>
 
             <Text style={[styles.lockTitle, { color: theme.text }]}>{lockTitle}</Text>

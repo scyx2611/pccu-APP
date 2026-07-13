@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
@@ -38,7 +38,10 @@ export default function AboutScreen() {
       <View style={styles.sectionBlock}>
         <Text style={[styles.sectionTitle, { color: theme.textSub }]}>說明</Text>
         <View style={[styles.noteCard, { backgroundColor: theme.card }]}>
-          <Text style={[styles.noteText, { color: theme.textSub }]}>這個 App 用來整合 PCCU 校園常用資訊，提供課表、成績、交通與設定等功能，並持續朝更貼近 iOS 體驗的方向優化。</Text>
+          <Text style={[styles.noteText, { color: theme.textSub }]}>
+            這個 App 用來整合 PCCU 校園常用資訊，提供課表、成績、交通與設定等功能，並持續朝更貼近
+            iOS 體驗的方向優化。
+          </Text>
         </View>
       </View>
 
@@ -46,7 +49,8 @@ export default function AboutScreen() {
         <Text style={[styles.sectionTitle, { color: theme.textSub }]}>免責聲明</Text>
         <View style={[styles.noteCard, { backgroundColor: theme.card }]}>
           <Text style={[styles.noteText, { color: theme.textSub }]}>
-            本 App 僅供學習、研究與個人使用參考，並非中國文化大學官方服務。頁面資料可能因同步時間、系統狀態或來源變動而有所落差，實際資訊仍應以校方系統、公告與正式通知為準。
+            本 App
+            僅供學習、研究與個人使用參考，並非中國文化大學官方服務。頁面資料可能因同步時間、系統狀態或來源變動而有所落差，實際資訊仍應以校方系統、公告與正式通知為準。
           </Text>
         </View>
       </View>

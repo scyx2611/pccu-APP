@@ -10,7 +10,7 @@ let cachedUpdatedAt: number | null = null;
 export async function setGrades(
   grades: SemesterGrade[],
   preAdmission: SemesterGrade[] = [],
-  updatedAt: number = Date.now()
+  updatedAt: number = Date.now(),
 ): Promise<void> {
   cachedGrades = grades;
   cachedPre = preAdmission;
@@ -22,7 +22,11 @@ export async function setGrades(
   }
 }
 
-export async function getGrades(): Promise<{ grades: SemesterGrade[] | null; preAdmission: SemesterGrade[] | null; updatedAt: number | null }> {
+export async function getGrades(): Promise<{
+  grades: SemesterGrade[] | null;
+  preAdmission: SemesterGrade[] | null;
+  updatedAt: number | null;
+}> {
   if (cachedGrades) {
     return { grades: cachedGrades, preAdmission: cachedPre, updatedAt: cachedUpdatedAt };
   }

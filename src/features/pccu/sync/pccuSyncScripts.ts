@@ -1,4 +1,4 @@
-﻿export type PCCUCredentials = {
+export type PCCUCredentials = {
   account: string;
   password: string;
 };
@@ -746,22 +746,22 @@ export function buildGradePageScript(): string {
 export function buildServiceOpenScript(code: '1208' | '1220' | '1202'): string {
   const textPatterns =
     code === '1208'
-    ? "'\\u8ab2\\u8868', '\\u8ab2\\u7a0b', '\\u67e5\\u8a62\\u8ab2\\u8868'"
-    : code === '1202'
-    ? "'\\u8ab2\\u696d\\u8f14\\u5c0e', '\\u8ab2\\u696d\\u8f14\\u5c0e\\u7cfb\\u7d71'"
-    : "'\\u6210\\u7e3e', '\\u6b77\\u5e74\\u6210\\u7e3e', '\\u6210\\u7e3e\\u67e5\\u8a62'";
+      ? "'\\u8ab2\\u8868', '\\u8ab2\\u7a0b', '\\u67e5\\u8a62\\u8ab2\\u8868'"
+      : code === '1202'
+        ? "'\\u8ab2\\u696d\\u8f14\\u5c0e', '\\u8ab2\\u696d\\u8f14\\u5c0e\\u7cfb\\u7d71'"
+        : "'\\u6210\\u7e3e', '\\u6b77\\u5e74\\u6210\\u7e3e', '\\u6210\\u7e3e\\u67e5\\u8a62'";
   const fallbackTargetUrl =
     code === '1208'
       ? 'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse'
       : code === '1202'
-      ? 'https://icas.pccu.edu.tw/cfp/'
-      : '';
+        ? 'https://icas.pccu.edu.tw/cfp/'
+        : '';
   const targetReadyPattern =
     code === '1208'
       ? 'TransUrl\\.aspx\\?PrjNo=1208|queryByStudent'
       : code === '1202'
-      ? 'TransUrl\\.aspx\\?PrjNo=1202|icas\\.pccu\\.edu\\.tw'
-      : 'index_score|scoreListAll|StudentScore|studentscore';
+        ? 'TransUrl\\.aspx\\?PrjNo=1202|icas\\.pccu\\.edu\\.tw'
+        : 'index_score|scoreListAll|StudentScore|studentscore';
 
   return `
     (function() {

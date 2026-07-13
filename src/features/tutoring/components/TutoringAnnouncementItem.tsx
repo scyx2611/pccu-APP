@@ -10,7 +10,11 @@ interface TutoringAnnouncementItemProps {
   onToggle?: () => void;
 }
 
-export default function TutoringAnnouncementItem({ announcement, isExpanded: controlledExpanded, onToggle }: TutoringAnnouncementItemProps) {
+export default function TutoringAnnouncementItem({
+  announcement,
+  isExpanded: controlledExpanded,
+  onToggle,
+}: TutoringAnnouncementItemProps) {
   const { theme } = useTheme();
   const [internalExpanded, setInternalExpanded] = useState(false);
   const pressAnim = React.useRef(new Animated.Value(0)).current;
@@ -41,9 +45,8 @@ export default function TutoringAnnouncementItem({ announcement, isExpanded: con
   };
 
   const contentPreview = announcement.contentText || announcement.title;
-  const truncatedPreview = contentPreview.length > 60
-    ? contentPreview.slice(0, 60) + '...'
-    : contentPreview;
+  const truncatedPreview =
+    contentPreview.length > 60 ? contentPreview.slice(0, 60) + '...' : contentPreview;
 
   return (
     <AnimatedPressable

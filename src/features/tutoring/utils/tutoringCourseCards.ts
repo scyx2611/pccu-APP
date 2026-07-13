@@ -14,14 +14,16 @@ function parseTimestamp(value?: string | null): number {
 }
 
 function cleanText(value?: string | null): string {
-  return String(value || '').replace(/\s+/g, ' ').trim();
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function buildLatestCourseMessage(detail?: CourseDetail): {
   message: string;
   timestamp: number;
 } {
-  const candidates: Array<{ type: string; title: string; timestamp: number }> = [];
+  const candidates: { type: string; title: string; timestamp: number }[] = [];
 
   for (const assignment of detail?.assignments ?? []) {
     candidates.push({

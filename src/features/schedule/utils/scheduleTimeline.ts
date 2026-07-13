@@ -14,7 +14,7 @@ export type ScheduleDateChip = {
 
 export const WEEKDAY_LABELS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'] as const;
 
-export const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = [
+export const PERIOD_TIMES: { start: [number, number]; end: [number, number] }[] = [
   { start: [8, 10], end: [9, 0] },
   { start: [9, 10], end: [10, 0] },
   { start: [10, 10], end: [11, 0] },
@@ -66,7 +66,7 @@ const getVisibleDayOrder = (courses: CourseData[]) => {
 export const buildScheduleDateChips = (
   courses: CourseData[],
   anchorDate: Date,
-  selectedDayOfWeek = toJsDay(anchorDate.getDay())
+  selectedDayOfWeek = toJsDay(anchorDate.getDay()),
 ): ScheduleDateChip[] =>
   getVisibleDayOrder(courses).map((dayOfWeek) => {
     const date = getDateForDayOfWeek(anchorDate, dayOfWeek);
@@ -99,7 +99,11 @@ export const buildCourseWindowForDate = (course: CourseData, anchorDate: Date) =
   return { start, end };
 };
 
-export const getTimelineCourseStatus = (course: CourseData, anchorDate: Date, now: Date): TimelineCourseStatus => {
+export const getTimelineCourseStatus = (
+  course: CourseData,
+  anchorDate: Date,
+  now: Date,
+): TimelineCourseStatus => {
   const window = buildCourseWindowForDate(course, anchorDate);
   if (!window) return 'upcoming';
   if (now > window.end) return 'completed';

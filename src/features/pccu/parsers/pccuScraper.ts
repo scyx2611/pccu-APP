@@ -1,4 +1,4 @@
-﻿import * as cheerio from 'cheerio';
+import * as cheerio from 'cheerio';
 
 export interface CourseData {
   name: string;
@@ -33,24 +33,29 @@ export interface SemesterGrade {
 }
 
 const normalize = (value: string) =>
-  value.replace(/\u3000/g, ' ').replace(/\s+/g, ' ').trim();
+  value
+    .replace(/\u3000/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-const stripGarbledChars = (value: string) =>
-  value.replace(/[\uE000-\uF8FF\uFFFD]/g, '');
+const stripGarbledChars = (value: string) => value.replace(/[\uE000-\uF8FF\uFFFD]/g, '');
 
 const stripEnrollmentCount = (value: string) =>
-  value
-    .replace(/\s*[（(]\d+\s*人[）)]/g, ' ')
-    .replace(/\s*[（(]\d+\s*[）)]\s*$/g, ' ');
+  value.replace(/\s*[（(]\d+\s*人[）)]/g, ' ').replace(/\s*[（(]\d+\s*[）)]\s*$/g, ' ');
 
 const cleanDisplayText = (value: string) =>
   normalize(stripEnrollmentCount(stripGarbledChars(value || '')));
 
 const cleanCourseNameText = (value: string) =>
-  cleanDisplayText(value).replace(/\s*[（(]\d+\s*[）)]\s*$/g, '').trim();
+  cleanDisplayText(value)
+    .replace(/\s*[（(]\d+\s*[）)]\s*$/g, '')
+    .trim();
 
 const splitCourseDescriptor = (value: string) => {
-  const cleaned = cleanCourseNameText(value).replace(/^(?:\((?:\u5fc5|\u9078)\)|\u5fc5\u4fee|\u9078\u4fee)\s*/, '');
+  const cleaned = cleanCourseNameText(value).replace(
+    /^(?:\((?:\u5fc5|\u9078)\)|\u5fc5\u4fee|\u9078\u4fee)\s*/,
+    '',
+  );
   const match = cleaned.match(/^(.{1,12}?)\s+([A-Z0-9]{3,8})\s+(.+)$/);
   if (!match) {
     return { type: '', name: cleaned };
@@ -70,7 +75,9 @@ const isNumeric = (value: string) => /^-?\d+(?:\.\d+)?$/.test(value);
 const looksLikeCourseCode = (value: string) => /^[A-Z0-9-]{4,}$/.test(value);
 
 const isScoreText = (value: string) =>
-  /^(?:\u901a\u904e|\u53ca\u683c|\u514d\u4fee|\u62b5\u514d|\u64a4\u9078|\u9000\u9078|\u4e0d\u53ca\u683c|\u7f3a\u8003|\u4e0d\u901a\u904e|\u5408\u683c|\u4e0d\u5408\u683c|P|F)$/i.test(value);
+  /^(?:\u901a\u904e|\u53ca\u683c|\u514d\u4fee|\u62b5\u514d|\u64a4\u9078|\u9000\u9078|\u4e0d\u53ca\u683c|\u7f3a\u8003|\u4e0d\u901a\u904e|\u5408\u683c|\u4e0d\u5408\u683c|P|F)$/i.test(
+    value,
+  );
 
 const guessCredits = (value: string) => {
   if (!isNumeric(value)) return false;
@@ -137,7 +144,8 @@ const findGradeNameHeaderIndex = (headers: string[]) => {
   if (specificIndex >= 0) return specificIndex;
 
   return headers.findIndex(
-    (header) => (header.includes('科目') || header.includes('課程')) && !/(?:代號|課號|編號)/.test(header)
+    (header) =>
+      (header.includes('科目') || header.includes('課程')) && !/(?:代號|課號|編號)/.test(header),
   );
 };
 
@@ -166,13 +174,19 @@ export function parseGradesFromHtml(html: string): SemesterGrade[] {
     if (cells.length === 0) return;
 
     const rowText = cells.join(' ');
-    const semTitle = cells.map((cell) => extractSemesterTitle(cell)).find(Boolean) || extractSemesterTitle(rowText);
+    const semTitle =
+      cells.map((cell) => extractSemesterTitle(cell)).find(Boolean) ||
+      extractSemesterTitle(rowText);
     if (semTitle) {
       current = ensureSemester(semTitle);
       return;
     }
 
-    if (/(?:\u8ab2\u7a0b|\u79d1\u76ee|\u4ee3\u78bc|\u8ab2\u865f|\u5b78\u5206|\u6210\u7e3e|\u5206\u6578)/.test(rowText)) {
+    if (
+      /(?:\u8ab2\u7a0b|\u79d1\u76ee|\u4ee3\u78bc|\u8ab2\u865f|\u5b78\u5206|\u6210\u7e3e|\u5206\u6578)/.test(
+        rowText,
+      )
+    ) {
       if (!cells.some((c) => /^[A-Z0-9-]{4,}$/.test(c))) return;
     }
 
@@ -260,7 +274,9 @@ export function parseGradesFromHtml(html: string): SemesterGrade[] {
         if (cells.length === 0) return;
 
         const rowText = cells.join(' ');
-        const semTitle = cells.map((cell) => extractSemesterTitle(cell)).find(Boolean) || extractSemesterTitle(rowText);
+        const semTitle =
+          cells.map((cell) => extractSemesterTitle(cell)).find(Boolean) ||
+          extractSemesterTitle(rowText);
         if (semTitle && cells.length <= 2) {
           currentFromHeader = ensureSemester(semTitle);
           return;
@@ -282,7 +298,8 @@ export function parseGradesFromHtml(html: string): SemesterGrade[] {
 
         if (!headerMap) return;
 
-        const pick = (index: number) => (index >= 0 && index < cells.length ? normalize(cells[index]) : '');
+        const pick = (index: number) =>
+          index >= 0 && index < cells.length ? normalize(cells[index]) : '';
         const rawName = pick(headerMap.name);
         const shouldShiftAfterSubject =
           headerMap.code < 0 &&
@@ -302,7 +319,9 @@ export function parseGradesFromHtml(html: string): SemesterGrade[] {
         const code = shouldShiftAfterSubject ? rawName : pick(headerMap.code);
         const type = pick(headerMap.type);
 
-        if (!targetSemester.courses.some((course) => course.code === code && course.name === name)) {
+        if (
+          !targetSemester.courses.some((course) => course.code === code && course.name === name)
+        ) {
           targetSemester.courses.push({ type, code, name, credits, score });
         }
       });
@@ -346,7 +365,9 @@ const scheduleDayMap: Record<string, number> = {
 };
 
 const hasScheduleMarker = (value: string) =>
-  /(?:\(\u5fc5\)|\(\u9078\)|\u5fc5\u4fee|\u9078\u4fee|(?:\u661f\u671f|\u9031)[\u4e00-\u4e94\u516d\u65e5\u5929])/.test(value);
+  /(?:\(\u5fc5\)|\(\u9078\)|\u5fc5\u4fee|\u9078\u4fee|(?:\u661f\u671f|\u9031)[\u4e00-\u4e94\u516d\u65e5\u5929])/.test(
+    value,
+  );
 
 const isRequirementOnly = (value: string) =>
   /^(?:\(\u5fc5\)|\(\u9078\)|\u5fc5\u4fee|\u9078\u4fee|\u5fc5|\u9078)$/.test(normalize(value));
@@ -356,15 +377,21 @@ const hasDayToken = (value: string) =>
 
 const hasPeriodToken = (value: string) =>
   /(?:\u7b2c\s*\d{1,2}(?:\s*[-~\uff5e\u5230\u81f3]\s*\d{1,2})?\s*\u7bc0?|\d{1,2}\s*(?:[-~\uff5e\u5230\u81f3]\s*\d{1,2}\s*)?\u7bc0)/.test(
-    value
+    value,
   );
 
-const parseDayPeriod = (value: string): { dayOfWeek: number; startPeriod: number; endPeriod: number } | null => {
+const parseDayPeriod = (
+  value: string,
+): { dayOfWeek: number; startPeriod: number; endPeriod: number } | null => {
   const compact = value.replace(/\s+/g, '');
   const dayMatch =
     compact.match(/(?:\u661f\u671f|\u9031)([\u65e5\u5929\u4e00\u4e8c\u4e09\u56db\u4e94\u516d])/) ||
-    compact.match(/([\u65e5\u5929\u4e00\u4e8c\u4e09\u56db\u4e94\u516d])(?:\u66dc|\u9031|\u661f\u671f)/);
-  const periodMatch = compact.match(/\u7b2c?(\d{1,2})(?:\s*[-~\uff5e\u5230\u81f3]\s*(\d{1,2}))?\u7bc0?/);
+    compact.match(
+      /([\u65e5\u5929\u4e00\u4e8c\u4e09\u56db\u4e94\u516d])(?:\u66dc|\u9031|\u661f\u671f)/,
+    );
+  const periodMatch = compact.match(
+    /\u7b2c?(\d{1,2})(?:\s*[-~\uff5e\u5230\u81f3]\s*(\d{1,2}))?\u7bc0?/,
+  );
   if (!dayMatch || !periodMatch) return null;
 
   const dayOfWeek = scheduleDayMap[dayMatch[1]];
@@ -384,15 +411,15 @@ const looksLikeTeacher = (value: string) =>
 
 const looksLikeLocation = (value: string) =>
   !!value &&
-  (/(?:[A-Za-z]?\d{2,4}[A-Za-z]?|\d{2,4}-?\d*|\u9928|\u6a13|\u5ba4|\u6559\u5ba4|\u6821\u5340|\u83ef\u5ca1|\u5927[\u6069\u7fa9\u5b5d\u8ce2\u5178\u5fd7])/.test(
-    value
-  ));
+  /(?:[A-Za-z]?\d{2,4}[A-Za-z]?|\d{2,4}-?\d*|\u9928|\u6a13|\u5ba4|\u6559\u5ba4|\u6821\u5340|\u83ef\u5ca1|\u5927[\u6069\u7fa9\u5b5d\u8ce2\u5178\u5fd7])/.test(
+    value,
+  );
 
 const splitTeacherLocation = (value: string) => {
   const cleaned = normalize(
     value
       .replace(/^(?:\u6559\u5e2b|\u8001\u5e2b|\u6388\u8ab2\u6559\u5e2b)[:\uff1a]?\s*/, '')
-      .replace(/^(?:\u5730\u9ede|\u6559\u5ba4)[:\uff1a]?\s*/, '')
+      .replace(/^(?:\u5730\u9ede|\u6559\u5ba4)[:\uff1a]?\s*/, ''),
   );
 
   if (!cleaned) return { teacher: '', location: '' };
@@ -400,7 +427,10 @@ const splitTeacherLocation = (value: string) => {
   const separators = ['\u00b7', '|', '\uff5c', '/', '\uff0f'];
   for (const separator of separators) {
     if (!cleaned.includes(separator)) continue;
-    const parts = cleaned.split(separator).map((part) => normalize(part)).filter(Boolean);
+    const parts = cleaned
+      .split(separator)
+      .map((part) => normalize(part))
+      .filter(Boolean);
     if (parts.length < 2) continue;
     const teacher = parts.find(looksLikeTeacher) || parts[0];
     const location = parts.find((part) => part !== teacher) || parts[parts.length - 1];
@@ -558,8 +588,10 @@ const parseScheduleFromTable = ($: cheerio.CheerioAPI) => {
     const maybeScheduleTable =
       tableHtml.includes('pubContent') ||
       tableHtml.includes('pubTdItem_Period') ||
-      (/\u7bc0/.test(tableText) && /(?:\u661f\u671f|\u9031)[\u4e00-\u4e94\u516d\u65e5\u5929]/.test(tableText)) ||
-      (/(?:\(\u5fc5\)|\(\u9078\)|\u5fc5\u4fee|\u9078\u4fee)/.test(tableText) && /\u661f\u671f|\u9031/.test(tableText));
+      (/\u7bc0/.test(tableText) &&
+        /(?:\u661f\u671f|\u9031)[\u4e00-\u4e94\u516d\u65e5\u5929]/.test(tableText)) ||
+      (/(?:\(\u5fc5\)|\(\u9078\)|\u5fc5\u4fee|\u9078\u4fee)/.test(tableText) &&
+        /\u661f\u671f|\u9031/.test(tableText));
 
     if (!maybeScheduleTable) continue;
 
@@ -596,7 +628,7 @@ const parseScheduleFromTable = ($: cheerio.CheerioAPI) => {
               .filter((line) => !prefix || line !== prefix)
               .filter((line) => !isRequirementOnly(line))
               .filter((line) => !hasDayToken(line) && !hasPeriodToken(line))
-              .join(' ')
+              .join(' '),
           );
           const dayOfWeek = dayIndex + 1;
           const key = `${parsedTitle.name}-${dayOfWeek}`;
@@ -634,7 +666,8 @@ const parseScheduleFromCards = ($: cheerio.CheerioAPI) => {
   $('div, li, article, section, tr').each((_, element) => {
     const text = normalize($(element).text());
     if (!text || text.length < 8 || text.length > 240) return;
-    if (!/(?:\u661f\u671f|\u9031)[\u65e5\u5929\u4e00\u4e8c\u4e09\u56db\u4e94\u516d]/.test(text)) return;
+    if (!/(?:\u661f\u671f|\u9031)[\u65e5\u5929\u4e00\u4e8c\u4e09\u56db\u4e94\u516d]/.test(text))
+      return;
     if (!/\u7b2c?\s*\d{1,2}(?:\s*[-~\uff5e\u5230\u81f3]\s*\d{1,2})?\u7bc0?/.test(text)) return;
 
     const signature = text.replace(/\s+/g, '');
@@ -653,12 +686,11 @@ const parseScheduleFromCards = ($: cheerio.CheerioAPI) => {
     const parsedSlot = parseDayPeriod(lines[scheduleIndex]);
     if (!parsedTitle.name || !parsedSlot) return;
 
-    const infoLine =
-      lines
-        .filter((line, index) => line !== titleInfo.titleLine && index !== scheduleIndex)
-        .filter((line) => !titleInfo.prefix || line !== titleInfo.prefix)
-        .filter((line) => !isRequirementOnly(line))
-        .join(' ');
+    const infoLine = lines
+      .filter((line, index) => line !== titleInfo.titleLine && index !== scheduleIndex)
+      .filter((line) => !titleInfo.prefix || line !== titleInfo.prefix)
+      .filter((line) => !isRequirementOnly(line))
+      .join(' ');
     const info = splitTeacherLocation(infoLine);
 
     courses.push({
@@ -675,7 +707,12 @@ const parseScheduleFromCards = ($: cheerio.CheerioAPI) => {
   });
 
   const deduped = Array.from(
-    new Map(courses.map((course) => [`${course.name}-${course.dayOfWeek}-${course.startPeriod}-${course.endPeriod}`, course])).values()
+    new Map(
+      courses.map((course) => [
+        `${course.name}-${course.dayOfWeek}-${course.startPeriod}-${course.endPeriod}`,
+        course,
+      ]),
+    ).values(),
   );
   return finalizeCourses(deduped);
 };

@@ -12,7 +12,7 @@ type Deferred<T> = {
   reject: (reason?: unknown) => void;
 };
 
-const createDeferred = <T,>(): Deferred<T> => {
+const createDeferred = <T>(): Deferred<T> => {
   let resolve!: Deferred<T>['resolve'];
   let reject!: Deferred<T>['reject'];
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
@@ -38,7 +38,7 @@ describe('PccuSyncEngine executor lifecycle', () => {
     const engine = PccuSyncEngine.getInstance();
 
     await expect(engine.requestSync('schedule')).rejects.toThrow(
-      'Sync executor not ready. Shared scraper is not mounted yet.'
+      'Sync executor not ready. Shared scraper is not mounted yet.',
     );
   });
 
@@ -54,7 +54,7 @@ describe('PccuSyncEngine executor lifecycle', () => {
     engine.clearExecutor(executorId!);
 
     await expect(requestPromise).rejects.toThrow(
-      'Sync executor became unavailable. Shared scraper was unmounted.'
+      'Sync executor became unavailable. Shared scraper was unmounted.',
     );
 
     executor.resolve({ success: true });
@@ -68,7 +68,7 @@ describe('PccuSyncEngine executor lifecycle', () => {
     await Promise.resolve();
     engine.clearExecutor(firstExecutorId!);
     await expect(staleRequest).rejects.toThrow(
-      'Sync executor became unavailable. Shared scraper was unmounted.'
+      'Sync executor became unavailable. Shared scraper was unmounted.',
     );
 
     engine.setExecutor(async () => ({ success: true, updatedAt: 123 }));
@@ -98,7 +98,7 @@ describe('PccuSyncEngine executor lifecycle', () => {
         new Promise((resolve) => {
           setTimeout(() => request.refreshTimeout?.(), 25_000);
           setTimeout(() => resolve({ success: true }), 45_000);
-        })
+        }),
     );
 
     const requestPromise = engine.requestSync('schedule');

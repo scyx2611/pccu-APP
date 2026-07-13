@@ -10,7 +10,11 @@ describe('normalizeTutoringText', () => {
   });
 
   it('repairs UTF-8 text that was interpreted as Latin-1', () => {
-    expect(normalizeTutoringText('\u00e8\u00aa\u00b2\u00e7\u00a8\u008b\u00e9\u0080\u00b2\u00e5\u00ba\u00a6')).toBe('課程進度');
+    expect(
+      normalizeTutoringText(
+        '\u00e8\u00aa\u00b2\u00e7\u00a8\u008b\u00e9\u0080\u00b2\u00e5\u00ba\u00a6',
+      ),
+    ).toBe('課程進度');
   });
 
   it('keeps already-readable Chinese text unchanged', () => {

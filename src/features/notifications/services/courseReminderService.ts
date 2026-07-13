@@ -1,4 +1,4 @@
-﻿import { Platform } from 'react-native';
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { CourseData } from '../../pccu/parsers/pccuScraper';
 import { getCourses } from '../../schedule/storage/scheduleStorage';
@@ -16,7 +16,7 @@ const COURSE_REMINDER_KIND = 'course-reminder';
 const REMINDER_LOOKAHEAD_DAYS = 7;
 const REMINDER_MINUTES_BEFORE = 10;
 
-const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = [
+const PERIOD_TIMES: { start: [number, number]; end: [number, number] }[] = [
   { start: [8, 10], end: [9, 0] },
   { start: [9, 10], end: [10, 0] },
   { start: [10, 10], end: [11, 0] },
@@ -69,7 +69,11 @@ async function ensureNotificationChannel() {
   });
 }
 
-function buildOccurrence(course: CourseData, now: Date, dayOffset: number): ReminderOccurrence | null {
+function buildOccurrence(
+  course: CourseData,
+  now: Date,
+  dayOffset: number,
+): ReminderOccurrence | null {
   const startSlot = PERIOD_TIMES[course.startPeriod - 1];
   const endSlot = PERIOD_TIMES[course.endPeriod - 1] || startSlot;
   if (!startSlot || !endSlot) return null;
@@ -115,23 +119,28 @@ async function cancelExistingCourseReminderNotifications() {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   const targets = scheduled.filter((item) => item.content.data?.kind === COURSE_REMINDER_KIND);
 
-  await Promise.all(targets.map((item) => Notifications.cancelScheduledNotificationAsync(item.identifier)));
+  await Promise.all(
+    targets.map((item) => Notifications.cancelScheduledNotificationAsync(item.identifier)),
+  );
 }
 
 function buildReminderContent(
   occurrence: ReminderOccurrence,
-  presentationMode: CourseReminderPresentationMode
+  presentationMode: CourseReminderPresentationMode,
 ): Notifications.NotificationContentInput {
   const location = getCourseLocation(occurrence.course);
   const weekday = WEEKDAY_LABELS[occurrence.start.getDay()];
   const timeRange = `${formatTime(occurrence.start.getHours(), occurrence.start.getMinutes())}-${formatTime(
     occurrence.end.getHours(),
-    occurrence.end.getMinutes()
+    occurrence.end.getMinutes(),
   )}`;
 
   return {
     title: presentationMode === 'dynamic-island' ? occurrence.course.name : '下節課即將開始',
-    body: presentationMode === 'dynamic-island' ? `${timeRange} · ${location}` : `${occurrence.course.name} · ${location}`,
+    body:
+      presentationMode === 'dynamic-island'
+        ? `${timeRange} · ${location}`
+        : `${occurrence.course.name} · ${location}`,
     subtitle: `${weekday} ${timeRange}`,
     sound: 'default',
     data: {
@@ -166,8 +175,8 @@ async function scheduleCourseReminderNotifications(courses: CourseData[]) {
           date: new Date(occurrence.start.getTime() - REMINDER_MINUTES_BEFORE * 60 * 1000),
           channelId: Platform.OS === 'android' ? COURSE_REMINDER_CHANNEL_ID : undefined,
         },
-      })
-    )
+      }),
+    ),
   );
 }
 

@@ -4,7 +4,9 @@ import { Platform } from 'react-native';
 export type CourseReminderPresentationMode = 'dynamic-island' | 'notification';
 
 export function canUseBuildOnlyIOSFeatures() {
-  return Platform.OS === 'ios' && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
+  return (
+    Platform.OS === 'ios' && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient
+  );
 }
 
 export function getCourseReminderPresentationMode(): CourseReminderPresentationMode {

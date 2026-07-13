@@ -46,7 +46,7 @@ export default function ScheduleRouteScreen() {
           if (buttonIndex >= 0 && buttonIndex < menuActions.length) {
             menuActions[buttonIndex]?.onPress();
           }
-        }
+        },
       );
       return;
     }
@@ -63,7 +63,7 @@ export default function ScheduleRouteScreen() {
       ],
       {
         userInterfaceStyle,
-      }
+      },
     );
   };
 

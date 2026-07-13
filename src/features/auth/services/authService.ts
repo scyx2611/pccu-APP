@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { clearCourses } from '../../schedule/storage/scheduleStorage';
 import { clearGrades } from '../../grade/storage/gradeStorage';
@@ -109,7 +109,7 @@ const readSavedCredentialsFromStore = async (): Promise<SavedCredentials | null>
 export const loginPCCU = async (
   account: string,
   password: string,
-  options: LoginOptions = {}
+  options: LoginOptions = {},
 ): Promise<{ success: boolean; message?: string }> => {
   try {
     const normalizedAccount = normalizeCredential(account);
@@ -199,9 +199,10 @@ export const clearSavedPCCUCredentials = async () => {
 };
 
 export const ensurePCCUSession = async (
-  credentials?: SavedCredentials | null
+  credentials?: SavedCredentials | null,
 ): Promise<{ success: boolean; message?: string }> => {
-  const resolvedCredentials = credentials || sessionCredentialsCache || (await getSavedPCCUCredentials());
+  const resolvedCredentials =
+    credentials || sessionCredentialsCache || (await getSavedPCCUCredentials());
   if (!resolvedCredentials) {
     return { success: false, message: '找不到可用的登入憑證。' };
   }
@@ -228,7 +229,10 @@ export const ensurePCCUSession = async (
   return sessionWarmPromise;
 };
 
-export const getSavedPCCUCredentials = async (): Promise<{ account: string; password: string } | null> => {
+export const getSavedPCCUCredentials = async (): Promise<{
+  account: string;
+  password: string;
+} | null> => {
   if (sessionCredentialsCache) {
     return sessionCredentialsCache;
   }

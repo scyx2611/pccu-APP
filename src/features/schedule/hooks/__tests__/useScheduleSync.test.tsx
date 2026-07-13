@@ -27,7 +27,10 @@ jest.mock('../../storage/scheduleStorage', () => ({
   getCourses: () => mockGetCourses(),
 }));
 
-const mockRequestSync = jest.fn(async (_type?: string, _priority?: number) => ({ success: true, updatedAt: 123 }));
+const mockRequestSync = jest.fn(async (_type?: string, _priority?: number) => ({
+  success: true,
+  updatedAt: 123,
+}));
 const mockWaitForExecutorReady = jest.fn(async () => {});
 
 jest.mock('../../../pccu/engine/PccuSyncEngine', () => ({

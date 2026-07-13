@@ -13,35 +13,32 @@ import * as trafficStorage from '../storage/trafficStorage';
 export function useTrafficSync() {
   const syncInProgressRef = useRef(false);
 
-  const sync = useCallback(
-    async (options: { priority?: number; silent?: boolean } = {}) => {
-      if (syncInProgressRef.current) return null;
+  const sync = useCallback(async (options: { priority?: number; silent?: boolean } = {}) => {
+    if (syncInProgressRef.current) return null;
 
-      const { priority = 5 } = options;
+    const { priority = 5 } = options;
 
-      try {
-        syncInProgressRef.current = true;
+    try {
+      syncInProgressRef.current = true;
 
-        const engine = PccuSyncEngine.getInstance();
-        await engine.waitForExecutorReady();
-        const result = await engine.requestSync('traffic', priority);
+      const engine = PccuSyncEngine.getInstance();
+      await engine.waitForExecutorReady();
+      const result = await engine.requestSync('traffic', priority);
 
-        if (result?.success) {
-          // Re-hydrate snapshot from storage (GlobalScraperWebView already persisted it)
-          const snapshot = await trafficStorage.getTrafficSnapshot();
-          return { success: true as const, snapshot, updatedAt: result.updatedAt ?? Date.now() };
-        }
-
-        return { success: false as const, message: result?.message ?? '交通同步失敗' };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '交通同步失敗';
-        return { success: false as const, message };
-      } finally {
-        syncInProgressRef.current = false;
+      if (result?.success) {
+        // Re-hydrate snapshot from storage (GlobalScraperWebView already persisted it)
+        const snapshot = await trafficStorage.getTrafficSnapshot();
+        return { success: true as const, snapshot, updatedAt: result.updatedAt ?? Date.now() };
       }
-    },
-    []
-  );
+
+      return { success: false as const, message: result?.message ?? '交通同步失敗' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '交通同步失敗';
+      return { success: false as const, message };
+    } finally {
+      syncInProgressRef.current = false;
+    }
+  }, []);
 
   return { sync, syncInProgress: syncInProgressRef.current };
 }

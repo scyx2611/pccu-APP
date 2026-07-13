@@ -1,5 +1,9 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CourseData, hasSuspiciousCourseNames, sanitizeCourseList } from '../../pccu/parsers/pccuScraper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  CourseData,
+  hasSuspiciousCourseNames,
+  sanitizeCourseList,
+} from '../../pccu/parsers/pccuScraper';
 
 const STORAGE_KEY = 'cached_schedule';
 const LAST_STORAGE_KEY = 'cached_schedule_last';
@@ -11,7 +15,7 @@ let isMockData = false;
 export async function setCourses(
   courses: CourseData[],
   mock: boolean = false,
-  updatedAt: number = Date.now()
+  updatedAt: number = Date.now(),
 ): Promise<void> {
   const normalizedCourses = sanitizeCourseList(courses);
   cachedCourses = normalizedCourses;
@@ -27,7 +31,11 @@ export async function setCourses(
   }
 }
 
-export async function getCourses(): Promise<{ courses: CourseData[] | null; mock: boolean; updatedAt: number | null }> {
+export async function getCourses(): Promise<{
+  courses: CourseData[] | null;
+  mock: boolean;
+  updatedAt: number | null;
+}> {
   if (cachedCourses) {
     return { courses: cachedCourses, mock: isMockData, updatedAt: cachedUpdatedAt };
   }

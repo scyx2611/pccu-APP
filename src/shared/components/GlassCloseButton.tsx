@@ -29,11 +29,7 @@ export default function GlassCloseButton({ onPress }: GlassCloseButtonProps) {
   };
 
   return (
-    <Pressable
-      onPress={handlePress}
-      hitSlop={8}
-      style={[styles.root, { top: insets.top + 10 }]}
-    >
+    <Pressable onPress={handlePress} hitSlop={8} style={[styles.root, { top: insets.top + 10 }]}>
       <BlurView
         intensity={44}
         tint={theme.glassTint}

@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,10 @@ import {
 import { getBootstrapCacheSnapshot } from '../services/bootstrapCache';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
-import { getBiometricLoginEnabled, getRememberCredentialsEnabled } from '../../settings/storage/securitySettings';
+import {
+  getBiometricLoginEnabled,
+  getRememberCredentialsEnabled,
+} from '../../settings/storage/securitySettings';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 export default function LoginScreen() {
@@ -55,7 +58,7 @@ export default function LoginScreen() {
         Platform.OS === 'ios' ? '無法使用 Face ID 登入' : '無法使用生物辨識登入',
         Platform.OS === 'ios'
           ? '這台裝置尚未設定 Face ID，或目前執行環境不支援。'
-          : '這台裝置尚未設定生物辨識，或目前執行環境不支援。'
+          : '這台裝置尚未設定生物辨識，或目前執行環境不支援。',
       );
       return false;
     }
@@ -152,7 +155,7 @@ export default function LoginScreen() {
               })();
             },
           },
-        ]
+        ],
       );
     } catch (error) {
       setIsLoading(false);
@@ -200,7 +203,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.formContainer}>
-          <View style={[styles.insetGroup, { backgroundColor: theme.card }]}> 
+          <View style={[styles.insetGroup, { backgroundColor: theme.card }]}>
             <View style={styles.inputRow}>
               <Text style={[styles.inputLabel, { color: theme.text }]}>學號</Text>
               <TextInput
@@ -240,7 +243,11 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.loginButton, { backgroundColor: theme.primary }, busy && styles.loginButtonDisabled]}
+            style={[
+              styles.loginButton,
+              { backgroundColor: theme.primary },
+              busy && styles.loginButtonDisabled,
+            ]}
             onPress={handleLogin}
             disabled={busy}
           >

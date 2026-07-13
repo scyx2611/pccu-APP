@@ -10,7 +10,15 @@ const TEST_CREDENTIALS = {
 };
 
 function loadSyncScriptsModule() {
-  const filePath = path.join(__dirname, '..', 'src', 'features', 'pccu', 'sync', 'pccuSyncScripts.ts');
+  const filePath = path.join(
+    __dirname,
+    '..',
+    'src',
+    'features',
+    'pccu',
+    'sync',
+    'pccuSyncScripts.ts',
+  );
   const source = fs.readFileSync(filePath, 'utf8');
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: {
@@ -51,7 +59,7 @@ async function main() {
     if (!text.startsWith('__RNWV__')) return;
     try {
       rnMessages.push(JSON.parse(text.slice('__RNWV__'.length)));
-    } catch (error) {
+    } catch {
       rnMessages.push({ t: 'raw', m: text.slice('__RNWV__'.length) });
     }
   });
@@ -113,7 +121,7 @@ async function main() {
       hasLoginTrigger: triggers.length > 0,
       inputs,
       triggers,
-      bodyText: (document.body && (document.body.innerText || document.body.textContent) || '')
+      bodyText: ((document.body && (document.body.innerText || document.body.textContent)) || '')
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 300),
@@ -127,33 +135,37 @@ async function main() {
 
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) {
-    const done = rnMessages.some((message) => ['login_ok', 'login_fail', 'err'].includes(message.t));
-    const sentLoginRequest = requests.some((request) => /default\.aspx\/gfChkLogin/i.test(request.url));
+    const done = rnMessages.some((message) =>
+      ['login_ok', 'login_fail', 'err'].includes(message.t),
+    );
+    const sentLoginRequest = requests.some((request) =>
+      /default\.aspx\/gfChkLogin/i.test(request.url),
+    );
     if (done || sentLoginRequest) break;
     await page.waitForTimeout(250);
   }
 
-  const hasRegressionError = rnMessages.some((message) => (
-    message &&
-    message.t === 'err' &&
-    typeof message.m === 'string' &&
-    /Network request failed|Login request timed out|Login request aborted/i.test(message.m)
-  ));
+  const hasRegressionError = rnMessages.some(
+    (message) =>
+      message &&
+      message.t === 'err' &&
+      typeof message.m === 'string' &&
+      /Network request failed|Login request timed out|Login request aborted/i.test(message.m),
+  );
 
-  const hasSelectorCoverage = domSummary.hasAccountInput && domSummary.hasPasswordInput && domSummary.hasLoginTrigger;
-  const sentLoginRequest = requests.some((request) => (
-    request.method === 'POST' &&
-    /default\.aspx\/gfChkLogin/i.test(request.url)
-  ));
-  const hasObservableLoginFlow = rnMessages.some((message) => (
-    message &&
-    (
-      message.t === 'status' ||
-      message.t === 'login_fail' ||
-      message.t === 'login_ok' ||
-      message.t === 'err'
-    )
-  ));
+  const hasSelectorCoverage =
+    domSummary.hasAccountInput && domSummary.hasPasswordInput && domSummary.hasLoginTrigger;
+  const sentLoginRequest = requests.some(
+    (request) => request.method === 'POST' && /default\.aspx\/gfChkLogin/i.test(request.url),
+  );
+  const hasObservableLoginFlow = rnMessages.some(
+    (message) =>
+      message &&
+      (message.t === 'status' ||
+        message.t === 'login_fail' ||
+        message.t === 'login_ok' ||
+        message.t === 'err'),
+  );
 
   console.log('PCCU login verification');
   console.log('page title:', await page.title());
@@ -167,7 +179,9 @@ async function main() {
   }
 
   console.log('requests:');
-  for (const request of requests.filter((entry) => /gfChkLogin|default\.aspx|inside\.aspx/i.test(entry.url))) {
+  for (const request of requests.filter((entry) =>
+    /gfChkLogin|default\.aspx|inside\.aspx/i.test(entry.url),
+  )) {
     console.log(`- ${request.method} ${request.resourceType} ${request.url}`);
   }
 
@@ -192,7 +206,9 @@ async function main() {
   }
 
   if (!sentLoginRequest) {
-    console.error('Verification failed: injected login script did not send the live gfChkLogin request.');
+    console.error(
+      'Verification failed: injected login script did not send the live gfChkLogin request.',
+    );
     process.exitCode = 1;
     return;
   }
@@ -203,7 +219,9 @@ async function main() {
     return;
   }
 
-  console.log('Verification passed: login DOM matches the script and the previous network-request regression was not reproduced.');
+  console.log(
+    'Verification passed: login DOM matches the script and the previous network-request regression was not reproduced.',
+  );
 }
 
 main().catch((error) => {

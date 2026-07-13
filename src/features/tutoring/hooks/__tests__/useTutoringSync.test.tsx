@@ -16,7 +16,9 @@ const mockWaitForExecutorReady = jest.fn(async () => {});
 jest.mock('../../../pccu/engine/PccuSyncEngine', () => ({
   PccuSyncEngine: {
     getInstance: () => ({
-      requestSync: function() { return mockRequestSync.apply(null, arguments as any); },
+      requestSync: function () {
+        return mockRequestSync.apply(null, arguments as any);
+      },
       waitForExecutorReady: () => mockWaitForExecutorReady(),
     }),
   },
@@ -108,9 +110,10 @@ describe('useTutoringSync (PccuSyncEngine wrapper)', () => {
   it('skips sync if already in progress', async () => {
     let resolveRequest!: (value: { success: boolean }) => void;
     mockRequestSync.mockImplementation(
-      () => new Promise((resolve) => {
-        resolveRequest = resolve;
-      }),
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
     );
 
     const { result } = renderHook(() => useTutoringSync());
@@ -150,9 +153,10 @@ describe('useTutoringSync (PccuSyncEngine wrapper)', () => {
   it('deduplicates overview sync across hook instances', async () => {
     let resolveRequest!: (value: { success: boolean }) => void;
     mockRequestSync.mockImplementation(
-      () => new Promise((resolve) => {
-        resolveRequest = resolve;
-      }),
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
     );
 
     const first = renderHook(() => useTutoringSync());
@@ -180,9 +184,7 @@ describe('useTutoringSync (PccuSyncEngine wrapper)', () => {
 
   it('still syncs cached course detail when courseInfo is missing', async () => {
     useTutoringStore.setState({
-      courseDetails: new Map([
-        ['CS101', { announcements: [], materials: [], assignments: [] }],
-      ]),
+      courseDetails: new Map([['CS101', { announcements: [], materials: [], assignments: [] }]]),
     });
 
     const { result } = renderHook(() => useTutoringSync());
@@ -199,21 +201,24 @@ describe('useTutoringSync (PccuSyncEngine wrapper)', () => {
   it('still syncs cached course detail when progress and classmates have not been loaded yet', async () => {
     useTutoringStore.setState({
       courseDetails: new Map([
-        ['CS101', {
-          announcements: [],
-          materials: [],
-          assignments: [],
-          courseInfo: {
-            teacherName: 'teacher',
-            academicYearTerm: '1142',
-            departmentClass: 'class',
-            requiredType: 'required',
-            creditText: '2.0',
-            englishLevel: 'N',
-            scheduleText: 'schedule',
-            expectedEnrollment: '64',
+        [
+          'CS101',
+          {
+            announcements: [],
+            materials: [],
+            assignments: [],
+            courseInfo: {
+              teacherName: 'teacher',
+              academicYearTerm: '1142',
+              departmentClass: 'class',
+              requiredType: 'required',
+              creditText: '2.0',
+              englishLevel: 'N',
+              scheduleText: 'schedule',
+              expectedEnrollment: '64',
+            },
           },
-        }],
+        ],
       ]),
     });
 
@@ -231,23 +236,26 @@ describe('useTutoringSync (PccuSyncEngine wrapper)', () => {
   it('skips cached course detail with courseInfo unless force=true', async () => {
     useTutoringStore.setState({
       courseDetails: new Map([
-        ['CS101', {
-          announcements: [],
-          materials: [],
-          assignments: [],
-          progress: [],
-          classmates: [],
-          courseInfo: {
-            teacherName: '高荻華',
-            academicYearTerm: '1142',
-            departmentClass: 'U PCL 中文 1 (29)',
-            requiredType: '必修',
-            creditText: '2.0',
-            englishLevel: 'N',
-            scheduleText: '星期二, 02-03 大孝 0412',
-            expectedEnrollment: '64',
+        [
+          'CS101',
+          {
+            announcements: [],
+            materials: [],
+            assignments: [],
+            progress: [],
+            classmates: [],
+            courseInfo: {
+              teacherName: '高荻華',
+              academicYearTerm: '1142',
+              departmentClass: 'U PCL 中文 1 (29)',
+              requiredType: '必修',
+              creditText: '2.0',
+              englishLevel: 'N',
+              scheduleText: '星期二, 02-03 大孝 0412',
+              expectedEnrollment: '64',
+            },
           },
-        }],
+        ],
       ]),
     });
 

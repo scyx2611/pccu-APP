@@ -142,10 +142,7 @@ describe('Tutoring migration integration', () => {
   // 7. No embedded WebView
   it('TutoringScreen.tsx and TutoringCourseDetailScreen.tsx do not import WebView', () => {
     const screensDir = path.resolve(__dirname, '..', 'screens');
-    const tutoringScreen = fs.readFileSync(
-      path.join(screensDir, 'TutoringScreen.tsx'),
-      'utf8',
-    );
+    const tutoringScreen = fs.readFileSync(path.join(screensDir, 'TutoringScreen.tsx'), 'utf8');
     const detailScreen = fs.readFileSync(
       path.join(screensDir, 'TutoringCourseDetailScreen.tsx'),
       'utf8',
@@ -176,7 +173,9 @@ describe('Tutoring migration integration', () => {
     );
 
     expect(tutoringScreen).toContain('isTutoringDataFresh');
-    expect(tutoringScreen).toContain('if (courses.length > 0 && isTutoringDataFresh(lastSyncedAt)) return;');
+    expect(tutoringScreen).toContain(
+      'if (courses.length > 0 && isTutoringDataFresh(lastSyncedAt)) return;',
+    );
   });
 
   // 8. SyncPhase states

@@ -50,7 +50,13 @@ function textQualityScore(value: string): number {
   const replacementCount = value.match(/[\ufffd\u0080-\u009f]/g)?.length ?? 0;
   const mojibakeCount = value.match(/[\u00c0-\u00ff]/g)?.length ?? 0;
 
-  return hanCount * 8 + cleanPlainText(value).length - entityCount * 10 - replacementCount * 20 - mojibakeCount * 2;
+  return (
+    hanCount * 8 +
+    cleanPlainText(value).length -
+    entityCount * 10 -
+    replacementCount * 20 -
+    mojibakeCount * 2
+  );
 }
 
 export function normalizeTutoringText(value?: string | number | null): string {

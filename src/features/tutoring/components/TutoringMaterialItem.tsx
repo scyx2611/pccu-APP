@@ -12,33 +12,45 @@ interface TutoringMaterialItemProps {
 function getFileIcon(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   switch (ext) {
-    case 'pdf': return 'doc.fill';
+    case 'pdf':
+      return 'doc.fill';
     case 'doc':
-    case 'docx': return 'doc.text.fill';
+    case 'docx':
+      return 'doc.text.fill';
     case 'ppt':
-    case 'pptx': return 'presentation.fill';
+    case 'pptx':
+      return 'presentation.fill';
     case 'xls':
-    case 'xlsx': return 'tablecells.fill';
+    case 'xlsx':
+      return 'tablecells.fill';
     case 'zip':
     case 'rar':
-    case '7z': return 'archivebox.fill';
-    default: return 'doc.fill';
+    case '7z':
+      return 'archivebox.fill';
+    default:
+      return 'doc.fill';
   }
 }
 
 function getFileEmoji(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   switch (ext) {
-    case 'pdf': return '📕';
+    case 'pdf':
+      return '📕';
     case 'doc':
-    case 'docx': return '📘';
+    case 'docx':
+      return '📘';
     case 'ppt':
-    case 'pptx': return '📙';
+    case 'pptx':
+      return '📙';
     case 'xls':
-    case 'xlsx': return '📗';
+    case 'xlsx':
+      return '📗';
     case 'zip':
-    case 'rar': return '📦';
-    default: return '📄';
+    case 'rar':
+      return '📦';
+    default:
+      return '📄';
   }
 }
 
@@ -59,7 +71,12 @@ export default function TutoringMaterialItem({ material, onDownload }: TutoringM
     <View style={[styles.card, { backgroundColor: theme.card, shadowColor: theme.text }]}>
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
-          <AppSymbol name={getFileIcon(material.fileName)} size={20} tintColor={theme.primary} fallback={<Text>{getFileEmoji(material.fileName)}</Text>} />
+          <AppSymbol
+            name={getFileIcon(material.fileName)}
+            size={20}
+            tintColor={theme.primary}
+            fallback={<Text>{getFileEmoji(material.fileName)}</Text>}
+          />
           <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
             {material.title}
           </Text>
@@ -84,9 +101,7 @@ export default function TutoringMaterialItem({ material, onDownload }: TutoringM
       ) : null}
 
       <View style={styles.infoRow}>
-        <Text style={[styles.infoText, { color: theme.textSub }]}>
-          檔案：{material.fileName}
-        </Text>
+        <Text style={[styles.infoText, { color: theme.textSub }]}>檔案：{material.fileName}</Text>
       </View>
 
       <Text style={[styles.infoText, { color: theme.textSub }]}>
@@ -94,9 +109,7 @@ export default function TutoringMaterialItem({ material, onDownload }: TutoringM
       </Text>
 
       {material.memoText ? (
-        <Text style={[styles.noteText, { color: theme.textSub }]}>
-          備註：{material.memoText}
-        </Text>
+        <Text style={[styles.noteText, { color: theme.textSub }]}>備註：{material.memoText}</Text>
       ) : null}
     </View>
   );

@@ -17,21 +17,17 @@ export default function IndexScreen() {
 
     const requestRetryAfterBiometricFailure = () =>
       new Promise<boolean>((resolve) => {
-        Alert.alert(
-          '驗證失敗',
-          'Face ID / 生物辨識驗證未完成，是否要再試一次？',
-          [
-            {
-              text: '取消',
-              style: 'cancel',
-              onPress: () => resolve(false),
-            },
-            {
-              text: '重試',
-              onPress: () => resolve(true),
-            },
-          ]
-        );
+        Alert.alert('驗證失敗', 'Face ID / 生物辨識驗證未完成，是否要再試一次？', [
+          {
+            text: '取消',
+            style: 'cancel',
+            onPress: () => resolve(false),
+          },
+          {
+            text: '重試',
+            onPress: () => resolve(true),
+          },
+        ]);
       });
 
     const authenticateLoginAccess = async () => {
@@ -56,7 +52,7 @@ export default function IndexScreen() {
           Platform.OS === 'ios' ? '無法使用 Face ID 登入' : '無法使用生物辨識登入',
           Platform.OS === 'ios'
             ? '這台裝置尚未設定 Face ID，或目前執行環境不支援。'
-            : '這台裝置尚未設定生物辨識，或目前執行環境不支援。'
+            : '這台裝置尚未設定生物辨識，或目前執行環境不支援。',
         );
         return false;
       }

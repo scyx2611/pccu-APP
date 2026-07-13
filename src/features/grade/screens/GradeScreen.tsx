@@ -1,1 +1,1 @@
-﻿export { default } from './GradeScreenV2';
+export { default } from './GradeScreenV2';

@@ -1,7 +1,4 @@
-import {
-  buildLatestCourseMessage,
-  buildTutoringCourseCards,
-} from '../tutoringCourseCards';
+import { buildLatestCourseMessage, buildTutoringCourseCards } from '../tutoringCourseCards';
 import type { CourseDetail, TutoringCourse } from '../../types';
 
 const course = (courseCode: string, courseName: string): TutoringCourse => ({

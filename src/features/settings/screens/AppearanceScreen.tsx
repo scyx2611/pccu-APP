@@ -6,11 +6,11 @@ import AppSymbol from '../../../shared/components/AppSymbol';
 export default function AppearanceScreen() {
   const { mode, setMode, theme } = useTheme();
 
-  const options: Array<{
+  const options: {
     key: ThemeMode;
     title: string;
     subtitle: string;
-  }> = [
+  }[] = [
     {
       key: 'system',
       title: '系統',
@@ -42,7 +42,9 @@ export default function AppearanceScreen() {
             <TouchableOpacity style={styles.optionRow} onPress={() => setMode(option.key)}>
               <View style={styles.optionTextWrap}>
                 <Text style={[styles.optionTitle, { color: theme.text }]}>{option.title}</Text>
-                <Text style={[styles.optionSubtitle, { color: theme.textSub }]}>{option.subtitle}</Text>
+                <Text style={[styles.optionSubtitle, { color: theme.textSub }]}>
+                  {option.subtitle}
+                </Text>
               </View>
               <View style={styles.checkmarkWrap}>
                 {mode === option.key ? (

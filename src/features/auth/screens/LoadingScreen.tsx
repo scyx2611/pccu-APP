@@ -104,7 +104,15 @@ export default function LoadingScreen() {
     return () => {
       active = false;
     };
-  }, [scheduleHydrate, scheduleResetSync, syncSchedule, gradeHydrate, gradeResetSync, syncGrade, finishIfReady]);
+  }, [
+    scheduleHydrate,
+    scheduleResetSync,
+    syncSchedule,
+    gradeHydrate,
+    gradeResetSync,
+    syncGrade,
+    finishIfReady,
+  ]);
 
   const isSyncing = scheduleState === 'active' || gradeState === 'active';
 

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Platform, Pressable, StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '../../src/providers/theme/ThemeProvider';
@@ -6,18 +6,19 @@ import AppSymbol from '../../src/shared/components/AppSymbol';
 
 export default function ModalLayout() {
   const { theme } = useTheme();
-  const iosCloseHeaderItem = Platform.OS === 'ios'
-    ? () => [
-        {
-          type: 'button' as const,
-          label: '關閉',
-          icon: { type: 'sfSymbol' as const, name: 'xmark' as const },
-          variant: 'prominent' as const,
-          onPress: () => router.back(),
-          accessibilityLabel: '關閉',
-        },
-      ]
-    : undefined;
+  const iosCloseHeaderItem =
+    Platform.OS === 'ios'
+      ? () => [
+          {
+            type: 'button' as const,
+            label: '關閉',
+            icon: { type: 'sfSymbol' as const, name: 'xmark' as const },
+            variant: 'prominent' as const,
+            onPress: () => router.back(),
+            accessibilityLabel: '關閉',
+          },
+        ]
+      : undefined;
 
   const fallbackCloseButton = () => (
     <Pressable onPress={() => router.back()} style={styles.fallbackCloseButton}>

@@ -102,12 +102,14 @@ const getPassSummary = (semesters: SemesterGrade[]) => {
     semester.courses.map((course) => ({
       semesterTitle: semester.title,
       score: course.score || '',
-    }))
+    })),
   );
 
   if (!courses.length) return '--';
 
-  const passedCount = courses.filter((course) => isPassedScore(course.semesterTitle, course.score)).length;
+  const passedCount = courses.filter((course) =>
+    isPassedScore(course.semesterTitle, course.score),
+  ).length;
   return `${passedCount}/${courses.length}`;
 };
 
@@ -123,7 +125,9 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
 
   const [resolvedShowPreview, setResolvedShowPreview] = useState(showPreview ?? false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
-  const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() => getScraperDebugRuntimeState());
+  const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() =>
+    getScraperDebugRuntimeState(),
+  );
 
   const latestSemester = grades[0] || null;
   const isSyncing = syncStatus === 'syncing';
@@ -200,7 +204,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
       return () => {
         active = false;
       };
-    }, [showPreview])
+    }, [showPreview]),
   );
 
   useFocusEffect(
@@ -218,7 +222,7 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
       return () => {
         active = false;
       };
-    }, [hydrate, sync])
+    }, [hydrate, sync]),
   );
 
   const renderSummaryCard = () => {
@@ -230,7 +234,10 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
           {summaryItems.map((item) => (
             <View
               key={item.label}
-              style={[styles.summaryChip, { backgroundColor: theme.syncBtnBg, borderColor: theme.border }]}
+              style={[
+                styles.summaryChip,
+                { backgroundColor: theme.syncBtnBg, borderColor: theme.border },
+              ]}
             >
               <Text style={[styles.summaryChipLabel, { color: theme.textSub }]}>{item.label}</Text>
               <Text style={[styles.summaryChipValue, { color: theme.text }]}>{item.value}</Text>
@@ -248,14 +255,14 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
-        refreshControl={(
+        refreshControl={
           <RefreshControl
             refreshing={pullRefreshing}
             onRefresh={handlePullRefresh}
             tintColor={theme.primary}
             colors={[theme.primary]}
           />
-        )}
+        }
       >
         <View style={[styles.heroCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
           <View style={styles.heroHeader}>
@@ -266,12 +273,19 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
         </View>
 
         {showDebug ? (
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <View
+            style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+          >
             <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug 資訊</Text>
             <Text style={[styles.debugText, { color: theme.textSub }]}>
               Status: {syncStatus} | Error: {error ?? '-'}
             </Text>
-            <View style={[styles.debugPreviewSlot, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+            <View
+              style={[
+                styles.debugPreviewSlot,
+                { backgroundColor: theme.bg, borderColor: theme.border },
+              ]}
+            >
               <View style={styles.debugRuntimeStack}>
                 <View style={styles.debugRuntimeRow}>
                   <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>Mode</Text>
@@ -300,21 +314,27 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
         ) : null}
 
         {loading ? (
-          <View style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <View
+            style={[styles.statusCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+          >
             <ActivityIndicator size="small" color={theme.primary} />
             <Text style={[styles.statusText, { color: theme.textSub }]}>正在載入歷年成績...</Text>
           </View>
         ) : null}
 
         {shouldShowNotice ? (
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <View
+            style={[styles.noticeCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+          >
             <Text style={[styles.noticeTitle, { color: theme.text }]}>同步狀態</Text>
             <Text style={[styles.noticeText, { color: theme.textSub }]}>{statusText}</Text>
           </View>
         ) : null}
 
         {grades.length === 0 && !loading ? (
-          <View style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+          <View
+            style={[styles.sectionCard, { backgroundColor: theme.card, shadowColor: theme.text }]}
+          >
             <Text style={[styles.cardTitle, { color: theme.text }]}>尚無成績資料</Text>
             <Text style={[styles.emptyText, { color: theme.textSub }]}>
               目前還沒有可顯示的歷年成績，請下拉或稍後重新同步。
@@ -339,21 +359,30 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
                 { backgroundColor: theme.card, shadowColor: theme.text },
               ]}
             >
-              <View style={[styles.sectionHeader, isPreEnrollment ? styles.preEnrollmentHeader : null]}>
+              <View
+                style={[styles.sectionHeader, isPreEnrollment ? styles.preEnrollmentHeader : null]}
+              >
                 <View style={styles.sectionHeading}>
                   <Text style={[styles.cardTitle, { color: theme.text }]}>{semester.title}</Text>
                   <Text style={[styles.sectionMeta, { color: theme.textSub }]}>
-                    {isPreEnrollment ? `${semester.courses.length} 筆抵免` : `${semester.courses.length} 門課程`}
+                    {isPreEnrollment
+                      ? `${semester.courses.length} 筆抵免`
+                      : `${semester.courses.length} 門課程`}
                   </Text>
                 </View>
               </View>
 
               {metaItems.length > 0 ? (
-                <View style={[styles.metaRow, isPreEnrollment ? styles.preEnrollmentMetaRow : null]}>
+                <View
+                  style={[styles.metaRow, isPreEnrollment ? styles.preEnrollmentMetaRow : null]}
+                >
                   {metaItems.map((item) => (
                     <Text
                       key={`${semester.title}-${item}`}
-                      style={[styles.metaPill, { color: theme.textSub, backgroundColor: theme.syncBtnBg }]}
+                      style={[
+                        styles.metaPill,
+                        { color: theme.textSub, backgroundColor: theme.syncBtnBg },
+                      ]}
                     >
                       {item}
                     </Text>
@@ -361,7 +390,12 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
                 </View>
               ) : null}
 
-              <View style={[styles.courseStack, isPreEnrollment ? styles.preEnrollmentCourseStack : null]}>
+              <View
+                style={[
+                  styles.courseStack,
+                  isPreEnrollment ? styles.preEnrollmentCourseStack : null,
+                ]}
+              >
                 {semester.courses.map((course, courseIndex) => (
                   <View
                     key={`${semester.title}-${course.code}-${courseIndex}`}
@@ -373,19 +407,27 @@ export default function GradeScreenV2({ showPreview }: GradeScreenProps) {
                   >
                     <View style={styles.courseHeader}>
                       <View style={styles.courseMain}>
-                        <Text style={[styles.courseName, { color: theme.text }]}>{course.name}</Text>
+                        <Text style={[styles.courseName, { color: theme.text }]}>
+                          {course.name}
+                        </Text>
                         <Text style={[styles.courseMeta, { color: theme.textSub }]}>
                           {[
                             course.code || '',
                             course.type || '',
                             course.credits ? `${course.credits} 學分` : '',
-                          ].filter(Boolean).join(' · ') || '尚無完整課程資訊'}
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || '尚無完整課程資訊'}
                         </Text>
                       </View>
                       <Text
                         style={[
                           styles.courseScore,
-                          { color: shouldUseFailColor(semester.title, course.score) ? theme.danger : theme.text },
+                          {
+                            color: shouldUseFailColor(semester.title, course.score)
+                              ? theme.danger
+                              : theme.text,
+                          },
                         ]}
                       >
                         {formatCourseScore(semester.title, course.score)}
@@ -478,7 +520,12 @@ const styles = StyleSheet.create({
   noticeTitle: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
   noticeText: { fontSize: 14, lineHeight: 21 },
   cardTitle: { fontSize: 18, fontWeight: '700' },
-  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+  },
   summaryChip: {
     width: '48%',
     borderRadius: 18,
@@ -498,7 +545,12 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   preEnrollmentCard: { paddingTop: 18, paddingBottom: 18 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   preEnrollmentHeader: { marginBottom: 10 },
   sectionHeading: { flex: 1, paddingRight: 12 },
   sectionMeta: { marginTop: 6, fontSize: 13 },

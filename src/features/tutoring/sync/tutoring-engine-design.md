@@ -14,14 +14,14 @@ The current `SyncPhase` type is:
 
 ### Mapping to PccuSyncEngine Lifecycle
 
-| SyncPhase | PccuSyncEngine Phase | Description |
-|---|---|---|
-| `idle` | No request enqueued | No sync in progress |
-| `logging_in` | `executeRequest` → session gate acquired → `load_ecampus` → `logging_in` | WebView loads ecampus default.aspx, injects login script |
-| `fetching_courses` | `open_target` → navigate to icas.pccu.edu.tw → inject `buildTutoringOverviewScript()` | After login, open tutoring system, fetch course list |
-| `fetching_details` | `syncing` → inject `buildTutoringAllAssignmentsScript()` → inject `buildTutoringPendingAssignmentsScript()` | Fetch all assignments then filter pending |
-| `complete` | `done` → `finishPccu()` called | Sync finished, lease released |
-| `error` | `done` (with error) → `finishPccu({ success: false })` | Sync failed |
+| SyncPhase          | PccuSyncEngine Phase                                                                                        | Description                                              |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `idle`             | No request enqueued                                                                                         | No sync in progress                                      |
+| `logging_in`       | `executeRequest` → session gate acquired → `load_ecampus` → `logging_in`                                    | WebView loads ecampus default.aspx, injects login script |
+| `fetching_courses` | `open_target` → navigate to icas.pccu.edu.tw → inject `buildTutoringOverviewScript()`                       | After login, open tutoring system, fetch course list     |
+| `fetching_details` | `syncing` → inject `buildTutoringAllAssignmentsScript()` → inject `buildTutoringPendingAssignmentsScript()` | Fetch all assignments then filter pending                |
+| `complete`         | `done` → `finishPccu()` called                                                                              | Sync finished, lease released                            |
+| `error`            | `done` (with error) → `finishPccu({ success: false })`                                                      | Sync failed                                              |
 
 ### Progress Communication to UI
 
@@ -81,7 +81,7 @@ The `courseCode` is passed via `request.options.courseCode` — the new `options
 ```typescript
 const lease = await pccuBrowserSessionGate.acquire(`tutoring:${courseCode || 'all'}:${syncRunId}`);
 // ... sync work ...
-lease.release();  // called in finish()
+lease.release(); // called in finish()
 ```
 
 ### Engine architecture:
@@ -93,6 +93,7 @@ const lease = await pccuBrowserSessionGate.acquire(`shared-scraper:${type}:${req
 ```
 
 For tutoring types, the owner string will be:
+
 - `tutoring`: `shared-scraper:tutoring:{request.id}`
 - `tutoring-detail`: `shared-scraper:tutoring-detail:{request.id}`
 
@@ -109,23 +110,23 @@ The lease is released in `finishPccu()`. No changes needed to the gate itself.
 
 All message types emitted by tutoring scripts and how `GlobalScraperWebView` should handle each:
 
-| `data.t` | Source Script | Handler Action |
-|---|---|---|
-| `waiting` | `buildWaitForCourseFpScript` | Update store `syncPhase` progress (informational, no phase change) |
-| `coursefp_ready` | `buildWaitForCourseFpScript` | Log, no action (next message will be the data) |
-| `diagnostic` | `buildDiagnosticScript` | Log only |
-| `final_diagnostic` | `buildWaitForCourseFpScript` (timeout) | Log only — the script itself follows up with an `err` message, so no separate error handling needed |
-| `status` | Various scripts | Update store status text |
-| `user_name` | Login script | `SecureStore.setItemAsync('user_name', data.n)` |
-| `login_ok` | `buildLoginScript` | Navigate to `inside.aspx` (same as grade/schedule) |
-| `login_fail` | `buildLoginScript` | `finishPccu({ success: false, message: '登入失敗' })` |
-| `popup` | `buildServiceOpenScript` | Navigate WebView to `data.url` |
-| `courses` | `buildTutoringOverviewScript` | Persist courses → set phase `fetching_details` → inject `buildTutoringAllAssignmentsScript()` |
-| `all_assignments` | `buildTutoringAllAssignmentsScript` | Persist all assignments → inject `buildTutoringPendingAssignmentsScript()` |
-| `pending` | `buildTutoringPendingAssignmentsScript` | Persist pending → update `lastSyncedAt` → `finishPccu({ success: true })` |
-| `single_course` | `buildTutoringSingleCourseScript` | Update `courseDetails` in store → `finishPccu({ success: true })` |
-| `err` | Any script | If phase is `fetching_courses` or `fetching_details`, retry; otherwise fail |
-| `html` | Fallback | No-op (same as current) |
+| `data.t`           | Source Script                           | Handler Action                                                                                      |
+| ------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `waiting`          | `buildWaitForCourseFpScript`            | Update store `syncPhase` progress (informational, no phase change)                                  |
+| `coursefp_ready`   | `buildWaitForCourseFpScript`            | Log, no action (next message will be the data)                                                      |
+| `diagnostic`       | `buildDiagnosticScript`                 | Log only                                                                                            |
+| `final_diagnostic` | `buildWaitForCourseFpScript` (timeout)  | Log only — the script itself follows up with an `err` message, so no separate error handling needed |
+| `status`           | Various scripts                         | Update store status text                                                                            |
+| `user_name`        | Login script                            | `SecureStore.setItemAsync('user_name', data.n)`                                                     |
+| `login_ok`         | `buildLoginScript`                      | Navigate to `inside.aspx` (same as grade/schedule)                                                  |
+| `login_fail`       | `buildLoginScript`                      | `finishPccu({ success: false, message: '登入失敗' })`                                               |
+| `popup`            | `buildServiceOpenScript`                | Navigate WebView to `data.url`                                                                      |
+| `courses`          | `buildTutoringOverviewScript`           | Persist courses → set phase `fetching_details` → inject `buildTutoringAllAssignmentsScript()`       |
+| `all_assignments`  | `buildTutoringAllAssignmentsScript`     | Persist all assignments → inject `buildTutoringPendingAssignmentsScript()`                          |
+| `pending`          | `buildTutoringPendingAssignmentsScript` | Persist pending → update `lastSyncedAt` → `finishPccu({ success: true })`                           |
+| `single_course`    | `buildTutoringSingleCourseScript`       | Update `courseDetails` in store → `finishPccu({ success: true })`                                   |
+| `err`              | Any script                              | If phase is `fetching_courses` or `fetching_details`, retry; otherwise fail                         |
+| `html`             | Fallback                                | No-op (same as current)                                                                             |
 
 ### Key difference from grade/schedule:
 
@@ -145,13 +146,13 @@ ecampus/default.aspx  →  (login)  →  ecampus/inside.aspx  →  (gfOpenLink 1
 
 ### URL detection in `handleNavChange`:
 
-| URL Pattern | Action |
-|---|---|
-| `inside.aspx` | Inject `buildServiceOpenScript('1202')` to open the tutoring function |
-| `default.aspx` (during `logging_in`) | Inject `buildLoginScript(credentials)` |
-| `icas.pccu.edu.tw` | Tutoring system loaded — branch based on sync type: |
-| | - `tutoring`: inject `buildWaitForCourseFpScript(buildTutoringOverviewScript())` |
-| | - `tutoring-detail`: inject `buildWaitForCourseFpScript(buildTutoringSingleCourseScript(courseCode))` |
+| URL Pattern                          | Action                                                                                                |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `inside.aspx`                        | Inject `buildServiceOpenScript('1202')` to open the tutoring function                                 |
+| `default.aspx` (during `logging_in`) | Inject `buildLoginScript(credentials)`                                                                |
+| `icas.pccu.edu.tw`                   | Tutoring system loaded — branch based on sync type:                                                   |
+|                                      | - `tutoring`: inject `buildWaitForCourseFpScript(buildTutoringOverviewScript())`                      |
+|                                      | - `tutoring-detail`: inject `buildWaitForCourseFpScript(buildTutoringSingleCourseScript(courseCode))` |
 
 ### Differences from grade/schedule:
 
@@ -163,6 +164,7 @@ ecampus/default.aspx  →  (login)  →  ecampus/inside.aspx  →  (gfOpenLink 1
 ### 3-second delay:
 
 The current `useTutoringSync` uses a 3000ms `setTimeout` after `inside.aspx` loads and after `icas.pccu.edu.tw` loads. In the engine architecture, these delays should be preserved but may need adjustment:
+
 - `inside.aspx` → `buildServiceOpenScript('1202')`: 1200ms delay (matching grade/schedule pattern in `openPccuTarget`)
 - `icas.pccu.edu.tw` → `buildWaitForCourseFpScript(...)`: 3000ms delay (the CourseFP JS framework needs time to initialize)
 
@@ -181,12 +183,14 @@ The current `useTutoringSync` uses a 3000ms `setTimeout` after `inside.aspx` loa
 The engine already has a 30-second task timeout (`TASK_TIMEOUT_MS = 30_000`) that calls the abort handler. However, the tutoring flow needs **activity-based timeout refresh** (not a single 30s wall-clock timeout).
 
 **Solution**: Use `request.refreshTimeout()` — already available on `SyncRequest`. The tutoring handler in `GlobalScraperWebView` should call `pending.request.refreshTimeout?.()` on:
+
 - Every `handleNavChange` event (when `nav.loading === false`)
 - Every `handleMessage` event (for tutoring-relevant messages)
 
 This resets the engine's 30s timer, effectively creating an activity-based watchdog identical to the current behavior.
 
 **Timeout message**: When the engine timeout fires, the abort handler receives reason `'timeout'`. The handler should set an appropriate error message:
+
 - If `pccuPhaseRef.current === 'logging_in'`: "登入逾時"
 - Otherwise: "同步逾時"
 
@@ -228,27 +232,33 @@ This mirrors the existing `retryPccu()` pattern used for grade/schedule, but the
 
 Progress reporting shifts to the Zustand store:
 
-| Event | Store Update |
-|---|---|
-| Sync starts | `setSyncStatus('syncing')`, `setSyncPhase('logging_in')` |
-| Login success | `setSyncPhase('logging_in')` (already set) |
-| inside.aspx loaded | No phase change (still `logging_in`) |
+| Event                   | Store Update                                                             |
+| ----------------------- | ------------------------------------------------------------------------ |
+| Sync starts             | `setSyncStatus('syncing')`, `setSyncPhase('logging_in')`                 |
+| Login success           | `setSyncPhase('logging_in')` (already set)                               |
+| inside.aspx loaded      | No phase change (still `logging_in`)                                     |
 | icas.pccu.edu.tw loaded | `setSyncPhase('fetching_courses')` or `setSyncPhase('fetching_details')` |
-| courses received | `setSyncPhase('fetching_details')` |
-| Sync complete | `setSyncPhase('complete')`, `setSyncStatus('idle')` |
-| Sync failed | `setSyncPhase('error')`, `setSyncStatus('error')` |
+| courses received        | `setSyncPhase('fetching_details')`                                       |
+| Sync complete           | `setSyncPhase('complete')`, `setSyncStatus('idle')`                      |
+| Sync failed             | `setSyncPhase('error')`, `setSyncStatus('error')`                        |
 
 The new `useTutoringSync` hook (Task 9) will derive `statusText` from `syncPhase`:
 
 ```typescript
 const statusText = useMemo(() => {
   switch (syncPhase) {
-    case 'logging_in': return '登入中...';
-    case 'fetching_courses': return '同步課程列表中...';
-    case 'fetching_details': return '同步作業狀態中...';
-    case 'complete': return '課業資料同步完成';
-    case 'error': return error ?? '同步失敗';
-    default: return '';
+    case 'logging_in':
+      return '登入中...';
+    case 'fetching_courses':
+      return '同步課程列表中...';
+    case 'fetching_details':
+      return '同步作業狀態中...';
+    case 'complete':
+      return '課業資料同步完成';
+    case 'error':
+      return error ?? '同步失敗';
+    default:
+      return '';
   }
 }, [syncPhase, error]);
 ```
@@ -284,52 +294,58 @@ export function useTutoringSync() {
   const setError = useTutoringStore((s) => s.setError);
   const syncInProgressRef = useRef(false);
 
-  const sync = useCallback(async (options?: { priority?: number; silent?: boolean }) => {
-    if (syncInProgressRef.current) return;
-    const { priority = 5, silent = false } = options ?? {};
+  const sync = useCallback(
+    async (options?: { priority?: number; silent?: boolean }) => {
+      if (syncInProgressRef.current) return;
+      const { priority = 5, silent = false } = options ?? {};
 
-    try {
-      syncInProgressRef.current = true;
-      if (!silent) setSyncStatus('syncing');
+      try {
+        syncInProgressRef.current = true;
+        if (!silent) setSyncStatus('syncing');
 
-      const engine = PccuSyncEngine.getInstance();
-      await engine.waitForExecutorReady();
-      const result = await engine.requestSync('tutoring', priority);
+        const engine = PccuSyncEngine.getInstance();
+        await engine.waitForExecutorReady();
+        const result = await engine.requestSync('tutoring', priority);
 
-      if (result?.success) {
-        setLastSyncedAt(new Date());
-        if (!silent) setSyncStatus('idle');
-      } else {
-        setError(result?.message ?? '課業同步失敗');
+        if (result?.success) {
+          setLastSyncedAt(new Date());
+          if (!silent) setSyncStatus('idle');
+        } else {
+          setError(result?.message ?? '課業同步失敗');
+        }
+      } catch (error) {
+        setError(error instanceof Error ? error.message : '課業同步失敗');
+      } finally {
+        syncInProgressRef.current = false;
       }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '課業同步失敗');
-    } finally {
-      syncInProgressRef.current = false;
-    }
-  }, [setSyncStatus, setLastSyncedAt, setError]);
+    },
+    [setSyncStatus, setLastSyncedAt, setError],
+  );
 
-  const syncCourseDetail = useCallback(async (courseCode: string, options?: { priority?: number }) => {
-    if (syncInProgressRef.current) return;
-    const { priority = 5 } = options ?? {};
+  const syncCourseDetail = useCallback(
+    async (courseCode: string, options?: { priority?: number }) => {
+      if (syncInProgressRef.current) return;
+      const { priority = 5 } = options ?? {};
 
-    try {
-      syncInProgressRef.current = true;
-      setSyncStatus('syncing');
+      try {
+        syncInProgressRef.current = true;
+        setSyncStatus('syncing');
 
-      const engine = PccuSyncEngine.getInstance();
-      await engine.waitForExecutorReady();
-      const result = await engine.requestSync('tutoring-detail', priority, { courseCode });
+        const engine = PccuSyncEngine.getInstance();
+        await engine.waitForExecutorReady();
+        const result = await engine.requestSync('tutoring-detail', priority, { courseCode });
 
-      if (!result?.success) {
-        setError(result?.message ?? '課程資料同步失敗');
+        if (!result?.success) {
+          setError(result?.message ?? '課程資料同步失敗');
+        }
+      } catch (error) {
+        setError(error instanceof Error ? error.message : '課程資料同步失敗');
+      } finally {
+        syncInProgressRef.current = false;
       }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '課程資料同步失敗');
-    } finally {
-      syncInProgressRef.current = false;
-    }
-  }, [setSyncStatus, setError]);
+    },
+    [setSyncStatus, setError],
+  );
 
   return { sync, syncCourseDetail, syncInProgress: syncInProgressRef.current };
 }
@@ -376,6 +392,7 @@ Tutoring uses the same ecampus login flow as grade/schedule (PCCU mode), but div
 #### `executeRequest` additions:
 
 When `type === 'tutoring'` or `type === 'tutoring-detail'`:
+
 - Set `activeModeRef.current = 'pccu-tutoring'`
 - Extract `courseCode` from `request.options?.courseCode` (for `tutoring-detail`)
 - Store `courseCode` in a ref for use in nav/message handlers
@@ -402,14 +419,14 @@ if (url.includes('icas.pccu.edu.tw')) {
     tutoringPhaseRef.current = 'fetching_single_course';
     setTimeout(() => {
       webViewRef.current?.injectJavaScript(
-        buildWaitForCourseFpScript(buildTutoringSingleCourseScript(courseCode))
+        buildWaitForCourseFpScript(buildTutoringSingleCourseScript(courseCode)),
       );
     }, 3000);
   } else {
     tutoringPhaseRef.current = 'fetching_courses';
     setTimeout(() => {
       webViewRef.current?.injectJavaScript(
-        buildWaitForCourseFpScript(buildTutoringOverviewScript())
+        buildWaitForCourseFpScript(buildTutoringOverviewScript()),
       );
     }, 3000);
   }
@@ -528,11 +545,11 @@ The current `handleMessage` has a special case for schedule popups (`shouldForce
 
 ## Summary of Changes by Task
 
-| Task | File | Change |
-|---|---|---|
-| **T7 (this task)** | `PccuSyncEngine.ts` | Add `'tutoring'` and `'tutoring-detail'` to `SyncType`; add `options?` to `SyncRequest` and `requestSync` signature |
-| **T7 (this task)** | `tutoring-engine-design.md` | This design document |
-| **T9** | `GlobalScraperWebView.tsx` | Add `pccu-tutoring` mode, `TutoringPhase`, nav/message handlers, imports |
-| **T9** | `tutoring/hooks/useTutoringSync.ts` | Rewrite as thin `PccuSyncEngine` wrapper (remove WebView ownership) |
-| **T9** | `tutoring/screens/TutoringScreen.tsx` | Remove embedded `<WebView>`, use new hook API |
-| **T9** | `tutoring/screens/TutoringCourseDetailScreen.tsx` | Remove embedded `<WebView>`, use `syncCourseDetail()` |
+| Task               | File                                              | Change                                                                                                              |
+| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **T7 (this task)** | `PccuSyncEngine.ts`                               | Add `'tutoring'` and `'tutoring-detail'` to `SyncType`; add `options?` to `SyncRequest` and `requestSync` signature |
+| **T7 (this task)** | `tutoring-engine-design.md`                       | This design document                                                                                                |
+| **T9**             | `GlobalScraperWebView.tsx`                        | Add `pccu-tutoring` mode, `TutoringPhase`, nav/message handlers, imports                                            |
+| **T9**             | `tutoring/hooks/useTutoringSync.ts`               | Rewrite as thin `PccuSyncEngine` wrapper (remove WebView ownership)                                                 |
+| **T9**             | `tutoring/screens/TutoringScreen.tsx`             | Remove embedded `<WebView>`, use new hook API                                                                       |
+| **T9**             | `tutoring/screens/TutoringCourseDetailScreen.tsx` | Remove embedded `<WebView>`, use `syncCourseDetail()`                                                               |

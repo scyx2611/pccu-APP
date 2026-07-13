@@ -9,7 +9,11 @@ interface TutoringCourseCardProps {
   onPress: (courseCode: string) => void;
 }
 
-export default function TutoringCourseCard({ course, latestMessage, onPress }: TutoringCourseCardProps) {
+export default function TutoringCourseCard({
+  course,
+  latestMessage,
+  onPress,
+}: TutoringCourseCardProps) {
   const { theme } = useTheme();
   const pressAnim = React.useRef(new Animated.Value(0)).current;
   const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -20,7 +24,11 @@ export default function TutoringCourseCard({ course, latestMessage, onPress }: T
 
   return (
     <AnimatedPressable
-      style={[styles.card, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }, animatedStyle]}
+      style={[
+        styles.card,
+        { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+        animatedStyle,
+      ]}
       onPress={() => onPress(course.courseCode)}
       onPressIn={() => Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true }).start()}
       onPressOut={() => Animated.spring(pressAnim, { toValue: 0, useNativeDriver: true }).start()}
@@ -45,7 +53,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: StyleSheet.hairlineWidth,
     shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 26,
     elevation: 12,
   },

@@ -8,7 +8,9 @@ export default function ScheduleScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <Text style={[styles.title, { color: theme.text }]}>Schedule is not available on web.</Text>
-      <Text style={[styles.text, { color: theme.textSub }]}>Please use the iOS or Android app.</Text>
+      <Text style={[styles.text, { color: theme.textSub }]}>
+        Please use the iOS or Android app.
+      </Text>
     </View>
   );
 }

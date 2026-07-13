@@ -50,7 +50,9 @@ const UPHILL_STOP_ORDER = ['文化大學', '文化大學一'];
 
 const normalizeText = (value?: string | null) => (value || '').replace(/\s+/g, ' ').trim();
 
-export function normalizeTrafficEta(value?: string | null): Pick<TrafficStopArrival, 'etaText' | 'etaMinutes' | 'isDue'> {
+export function normalizeTrafficEta(
+  value?: string | null,
+): Pick<TrafficStopArrival, 'etaText' | 'etaMinutes' | 'isDue'> {
   const etaText = normalizeText(value);
 
   if (!etaText) {
@@ -91,7 +93,10 @@ export function normalizeTrafficArrival(draft: TrafficStopArrivalDraft): Traffic
   };
 }
 
-export function sortTrafficArrivals(direction: TrafficDirection, arrivals: TrafficStopArrival[]): TrafficStopArrival[] {
+export function sortTrafficArrivals(
+  direction: TrafficDirection,
+  arrivals: TrafficStopArrival[],
+): TrafficStopArrival[] {
   const stopOrder = direction === 'downhill' ? DOWNHILL_STOP_ORDER : UPHILL_STOP_ORDER;
 
   return [...arrivals].sort((left, right) => {
@@ -119,14 +124,16 @@ function getEtaRank(arrival: TrafficStopArrival) {
 export function pickBestTrafficArrival(arrivals: TrafficStopArrival[]): TrafficStopArrival | null {
   if (!arrivals.length) return null;
 
-  return [...arrivals].sort((left, right) => {
-    const etaDiff = getEtaRank(left) - getEtaRank(right);
-    if (etaDiff !== 0) return etaDiff;
+  return (
+    [...arrivals].sort((left, right) => {
+      const etaDiff = getEtaRank(left) - getEtaRank(right);
+      if (etaDiff !== 0) return etaDiff;
 
-    const leftSequence = typeof left.stopSequence === 'number' ? left.stopSequence : 999;
-    const rightSequence = typeof right.stopSequence === 'number' ? right.stopSequence : 999;
-    return leftSequence - rightSequence;
-  })[0] || null;
+      const leftSequence = typeof left.stopSequence === 'number' ? left.stopSequence : 999;
+      const rightSequence = typeof right.stopSequence === 'number' ? right.stopSequence : 999;
+      return leftSequence - rightSequence;
+    })[0] || null
+  );
 }
 
 export function formatTrafficUpdatedAt(updatedAt?: number | null): string {

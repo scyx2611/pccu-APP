@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -60,7 +60,7 @@ export default function PrivacyScreen() {
         Platform.OS === 'ios' ? '無法啟用 Face ID' : '無法啟用生物辨識',
         Platform.OS === 'ios'
           ? '這台裝置尚未設定 Face ID，或目前執行環境不支援。'
-          : '這台裝置尚未設定生物辨識，或目前執行環境不支援。'
+          : '這台裝置尚未設定生物辨識，或目前執行環境不支援。',
       );
       setGradeFaceIdProtectionEnabledState(false);
       await setGradeFaceIdProtectionEnabled(false);
@@ -68,7 +68,8 @@ export default function PrivacyScreen() {
     }
 
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: Platform.OS === 'ios' ? '啟用 Face ID 保護歷年成績' : '啟用生物辨識保護歷年成績',
+      promptMessage:
+        Platform.OS === 'ios' ? '啟用 Face ID 保護歷年成績' : '啟用生物辨識保護歷年成績',
       cancelLabel: '取消',
       disableDeviceFallback: false,
     });
@@ -108,7 +109,7 @@ export default function PrivacyScreen() {
               void continueEnableProtection();
             },
           },
-        ]
+        ],
       );
       return;
     }
@@ -124,11 +125,13 @@ export default function PrivacyScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.sectionTitle, { color: theme.textSub }]}>首頁資料</Text>
-      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}> 
+      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}>
         <View style={styles.switchRow}>
           <View style={styles.textWrap}>
             <Text style={[styles.cellTitle, { color: theme.text }]}>隱藏成績摘要數字</Text>
-            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>首頁成績卡的平均、班排、系排將改以小圓點顯示。</Text>
+            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
+              首頁成績卡的平均、班排、系排將改以小圓點顯示。
+            </Text>
           </View>
           <Switch
             value={hideHomeGradeDetails}
@@ -140,7 +143,7 @@ export default function PrivacyScreen() {
       </View>
 
       <Text style={[styles.sectionTitle, { color: theme.textSub }]}>歷年成績</Text>
-      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}> 
+      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}>
         <View style={styles.switchRow}>
           <View style={styles.textWrap}>
             <Text style={[styles.cellTitle, { color: theme.text }]}>
@@ -161,8 +164,10 @@ export default function PrivacyScreen() {
         </View>
       </View>
 
-      <View style={[styles.noteCard, { backgroundColor: theme.card }]}> 
-        <Text style={[styles.noteText, { color: theme.textSub }]}>Face ID 保護只會影響進入歷年成績頁時的驗證流程，不會改動首頁與課表的其他資料同步邏輯。</Text>
+      <View style={[styles.noteCard, { backgroundColor: theme.card }]}>
+        <Text style={[styles.noteText, { color: theme.textSub }]}>
+          Face ID 保護只會影響進入歷年成績頁時的驗證流程，不會改動首頁與課表的其他資料同步邏輯。
+        </Text>
       </View>
 
       <View style={styles.bottomSpacer} />

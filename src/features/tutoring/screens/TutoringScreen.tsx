@@ -45,16 +45,24 @@ export default function TutoringScreen() {
 
   const statusText = useMemo(() => {
     switch (syncPhase) {
-      case 'logging_in': return '登入課輔中';
-      case 'fetching_courses': return '同步課程中';
-      case 'fetching_details': return '預載課程內容中';
-      case 'complete': return '同步完成';
-      case 'error': return error ?? '同步失敗';
-      default: return '';
+      case 'logging_in':
+        return '登入課輔中';
+      case 'fetching_courses':
+        return '同步課程中';
+      case 'fetching_details':
+        return '預載課程內容中';
+      case 'complete':
+        return '同步完成';
+      case 'error':
+        return error ?? '同步失敗';
+      default:
+        return '';
     }
   }, [syncPhase, error]);
 
-  const isSyncing = syncStatus === 'syncing' || (syncPhase !== 'idle' && syncPhase !== 'complete' && syncPhase !== 'error');
+  const isSyncing =
+    syncStatus === 'syncing' ||
+    (syncPhase !== 'idle' && syncPhase !== 'complete' && syncPhase !== 'error');
   const loading = isSyncing && courses.length === 0;
 
   const updatedAtLineText = buildUpdatedAtText({
@@ -125,51 +133,66 @@ export default function TutoringScreen() {
           />
         }
       >
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>課輔專區</Text>
-        <Text style={[styles.subtitle, { color: theme.textSub }]}>
-          你還有{pendingAssignments.length}項作業未繳交
-        </Text>
-      </View>
-
-      <View style={styles.cardsContainer}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>所有課程</Text>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.text }]}>課輔專區</Text>
+          <Text style={[styles.subtitle, { color: theme.textSub }]}>
+            你還有{pendingAssignments.length}項作業未繳交
+          </Text>
         </View>
 
-        {loading ? (
-          <View style={[styles.statusCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
-            <ActivityIndicator size="small" color={theme.primary} />
-            <Text style={[styles.statusCardText, { color: theme.textSub }]}>
-              {statusText || '正在整理課輔課程...'}
-            </Text>
+        <View style={styles.cardsContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>所有課程</Text>
           </View>
-        ) : null}
 
-        {!loading && courseCards.length === 0 ? (
-          <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>目前沒有課程資料</Text>
-            <Text style={[styles.emptyText, { color: theme.textSub }]}>
-              下拉刷新或等待背景同步完成後，課程會顯示在這裡。
-            </Text>
-          </View>
-        ) : null}
+          {loading ? (
+            <View
+              style={[
+                styles.statusCard,
+                { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+              ]}
+            >
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.statusCardText, { color: theme.textSub }]}>
+                {statusText || '正在整理課輔課程...'}
+              </Text>
+            </View>
+          ) : null}
 
-        {courseCards.map(({ course, latestMessage }) => (
-          <TutoringCourseCard
-            key={course.courseCode}
-            course={course}
-            latestMessage={latestMessage}
-            onPress={handleCoursePress}
-          />
-        ))}
+          {!loading && courseCards.length === 0 ? (
+            <View
+              style={[
+                styles.emptyCard,
+                { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+              ]}
+            >
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>目前沒有課程資料</Text>
+              <Text style={[styles.emptyText, { color: theme.textSub }]}>
+                下拉刷新或等待背景同步完成後，課程會顯示在這裡。
+              </Text>
+            </View>
+          ) : null}
 
-        <Text style={[styles.syncLine, { color: syncPhase === 'error' ? theme.danger || '#FF3B30' : theme.textSub }]}>
-          {syncLineText}
-        </Text>
+          {courseCards.map(({ course, latestMessage }) => (
+            <TutoringCourseCard
+              key={course.courseCode}
+              course={course}
+              latestMessage={latestMessage}
+              onPress={handleCoursePress}
+            />
+          ))}
 
-        <View style={styles.bottomSpacer} />
-      </View>
+          <Text
+            style={[
+              styles.syncLine,
+              { color: syncPhase === 'error' ? theme.danger || '#FF3B30' : theme.textSub },
+            ]}
+          >
+            {syncLineText}
+          </Text>
+
+          <View style={styles.bottomSpacer} />
+        </View>
       </ScrollView>
     </View>
   );
@@ -212,7 +235,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 26,
     elevation: 12,
   },
@@ -228,7 +251,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: StyleSheet.hairlineWidth,
     shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 26,
     elevation: 12,
   },

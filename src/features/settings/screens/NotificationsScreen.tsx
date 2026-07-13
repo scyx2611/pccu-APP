@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
@@ -94,7 +94,7 @@ export default function NotificationsScreen() {
     if (value && presentationMode !== 'dynamic-island') {
       Alert.alert(
         '目前會使用一般通知',
-        '你現在不是 build 環境，因此課程提醒會先用一般本地通知顯示；之後改用 iOS build / dev client 時，才會走靈動島模式。'
+        '你現在不是 build 環境，因此課程提醒會先用一般本地通知顯示；之後改用 iOS build / dev client 時，才會走靈動島模式。',
       );
     }
 
@@ -109,11 +109,13 @@ export default function NotificationsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.sectionTitle, { color: theme.textSub }]}>通知設定</Text>
-      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}> 
+      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}>
         <View style={styles.switchRow}>
           <View style={styles.textWrap}>
             <Text style={[styles.cellTitle, { color: theme.text }]}>啟用通知</Text>
-            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>接收課表、成績與校園相關提醒通知。</Text>
+            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
+              接收課表、成績與校園相關提醒通知。
+            </Text>
           </View>
           <Switch
             value={notificationsEnabled}
@@ -128,7 +130,9 @@ export default function NotificationsScreen() {
         <Animated.View style={[styles.switchRow, courseReminderHighlightStyle]}>
           <View style={styles.textWrap}>
             <Text style={[styles.cellTitle, { color: theme.text }]}>課程即時通知</Text>
-            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>上課前 10 分鐘提醒下節課資訊。</Text>
+            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
+              上課前 10 分鐘提醒下節課資訊。
+            </Text>
           </View>
           <Switch
             value={notificationsEnabled && courseRemindersEnabled}

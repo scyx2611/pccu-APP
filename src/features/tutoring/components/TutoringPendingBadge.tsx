@@ -31,7 +31,10 @@ const SIZE_CONFIG = {
   },
 };
 
-export default function TutoringPendingBadge({ count, size = 'medium' }: TutoringPendingBadgeProps) {
+export default function TutoringPendingBadge({
+  count,
+  size = 'medium',
+}: TutoringPendingBadgeProps) {
   const { theme } = useTheme();
   const config = SIZE_CONFIG[size];
 

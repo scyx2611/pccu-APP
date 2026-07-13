@@ -19,11 +19,13 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }
 };
 
 function getStatusInfo(assignment: TutoringAssignment) {
-  return STATUS_CONFIG[assignment.stateCode] || {
-    label: assignment.stateLabel || assignment.stateCode || '未知',
-    bg: 'rgba(142,142,147,0.12)',
-    color: '#8E8E93',
-  };
+  return (
+    STATUS_CONFIG[assignment.stateCode] || {
+      label: assignment.stateLabel || assignment.stateCode || '未知',
+      bg: 'rgba(142,142,147,0.12)',
+      color: '#8E8E93',
+    }
+  );
 }
 
 function isOverdue(assignment: TutoringAssignment): boolean {
@@ -36,7 +38,11 @@ function isOverdue(assignment: TutoringAssignment): boolean {
   return false;
 }
 
-export default function TutoringAssignmentItem({ assignment, isExpanded: controlledExpanded, onToggle }: TutoringAssignmentItemProps) {
+export default function TutoringAssignmentItem({
+  assignment,
+  isExpanded: controlledExpanded,
+  onToggle,
+}: TutoringAssignmentItemProps) {
   const { theme } = useTheme();
   const [internalExpanded, setInternalExpanded] = useState(false);
   const pressAnim = React.useRef(new Animated.Value(0)).current;
@@ -90,11 +96,12 @@ export default function TutoringAssignmentItem({ assignment, isExpanded: control
         截止：{formatDate(assignment.endAt)}
       </Text>
 
-      {(assignment.stateCode === '' || assignment.stateCode === '4') && assignment.remainingSubmissionCount != null && (
-        <Text style={[styles.metaText, { color: overdue ? '#FF3B30' : theme.textSub }]}>
-          剩餘繳交次數：{assignment.remainingSubmissionCount}
-        </Text>
-      )}
+      {(assignment.stateCode === '' || assignment.stateCode === '4') &&
+        assignment.remainingSubmissionCount != null && (
+          <Text style={[styles.metaText, { color: overdue ? '#FF3B30' : theme.textSub }]}>
+            剩餘繳交次數：{assignment.remainingSubmissionCount}
+          </Text>
+        )}
 
       <View style={styles.expandToggle}>
         <AppSymbol
@@ -115,14 +122,18 @@ export default function TutoringAssignmentItem({ assignment, isExpanded: control
           {assignment.commentText ? (
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.text }]}>說明</Text>
-              <Text style={[styles.detailText, { color: theme.textSub }]}>{assignment.commentText}</Text>
+              <Text style={[styles.detailText, { color: theme.textSub }]}>
+                {assignment.commentText}
+              </Text>
             </View>
           ) : null}
 
           {assignment.reviewText ? (
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.text }]}>評語</Text>
-              <Text style={[styles.detailText, { color: theme.textSub }]}>{assignment.reviewText}</Text>
+              <Text style={[styles.detailText, { color: theme.textSub }]}>
+                {assignment.reviewText}
+              </Text>
             </View>
           ) : null}
 
@@ -133,7 +144,12 @@ export default function TutoringAssignmentItem({ assignment, isExpanded: control
               </Text>
               {assignment.attachments.map((att, idx) => (
                 <View key={att.serialNo ?? idx} style={styles.attachmentRow}>
-                  <AppSymbol name="paperclip" size={14} tintColor={theme.textSub} fallback={<Text>📎</Text>} />
+                  <AppSymbol
+                    name="paperclip"
+                    size={14}
+                    tintColor={theme.textSub}
+                    fallback={<Text>📎</Text>}
+                  />
                   <Text style={[styles.attachmentText, { color: theme.textSub }]} numberOfLines={1}>
                     {att.title}
                   </Text>

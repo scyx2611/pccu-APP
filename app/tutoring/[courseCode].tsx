@@ -11,11 +11,13 @@ export default function TutoringCourseDetailRoute() {
   const courseName = typeof params.courseName === 'string' ? params.courseName : undefined;
   const department = typeof params.department === 'string' ? params.department : undefined;
   const selectedCourse = useTutoringStore((state) =>
-    state.courses.find((course) => String(course.courseCode) === courseCode)
+    state.courses.find((course) => String(course.courseCode) === courseCode),
   );
   const resolvedCourseName =
     normalizeTutoringText(courseName || selectedCourse?.courseName || courseCode) || '課輔課程';
-  const resolvedDepartment = normalizeTutoringText(department || selectedCourse?.deptName || selectedCourse?.label);
+  const resolvedDepartment = normalizeTutoringText(
+    department || selectedCourse?.deptName || selectedCourse?.label,
+  );
 
   return (
     <>

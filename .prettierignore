@@ -1,0 +1,15 @@
+node_modules/
+.expo/
+.expo-export-*/
+dist/
+coverage/
+docs/superpowers/
+expo-ios26-app-demo-master/
+scripts/schedule-1208-debug/
+__fixtures__/html/
+.codex/
+.agents/
+.superpowers/
+.worktrees/
+package-lock.json
+replace_icons.js

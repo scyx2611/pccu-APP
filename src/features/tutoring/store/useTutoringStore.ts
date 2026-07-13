@@ -71,8 +71,7 @@ export const useTutoringStore = create<UseTutoringStore>()((set) => ({
 
   setWelcomeText: (welcomeText) => set({ welcomeText }),
 
-  setLastSyncedAt: (timestamp) =>
-    set({ lastSyncedAt: timestamp ? new Date(timestamp) : null }),
+  setLastSyncedAt: (timestamp) => set({ lastSyncedAt: timestamp ? new Date(timestamp) : null }),
 
   hydrate: async () => {
     try {
@@ -87,14 +86,15 @@ export const useTutoringStore = create<UseTutoringStore>()((set) => ({
           const courseCode = String(course.courseCode || '').trim();
           if (!courseCode) return;
 
-          const [announcements, materials, assignments, progress, classmates, courseInfo] = await Promise.all([
-            tutoringStorage.getCourseDetail(courseCode, 'announcements'),
-            tutoringStorage.getCourseDetail(courseCode, 'materials'),
-            tutoringStorage.getCourseDetail(courseCode, 'assignments'),
-            tutoringStorage.getCourseDetail(courseCode, 'progress'),
-            tutoringStorage.getCourseDetail(courseCode, 'classmates'),
-            tutoringStorage.getCourseInfo(courseCode),
-          ]);
+          const [announcements, materials, assignments, progress, classmates, courseInfo] =
+            await Promise.all([
+              tutoringStorage.getCourseDetail(courseCode, 'announcements'),
+              tutoringStorage.getCourseDetail(courseCode, 'materials'),
+              tutoringStorage.getCourseDetail(courseCode, 'assignments'),
+              tutoringStorage.getCourseDetail(courseCode, 'progress'),
+              tutoringStorage.getCourseDetail(courseCode, 'classmates'),
+              tutoringStorage.getCourseInfo(courseCode),
+            ]);
 
           if (announcements || materials || assignments || progress || classmates || courseInfo) {
             const detail: CourseDetail = {

@@ -152,12 +152,7 @@ describe('useTrafficSync (PccuSyncEngine wrapper)', () => {
   });
 
   it('TrafficSyncAgent.tsx has been deleted', () => {
-    const agentPath = path.resolve(
-      __dirname,
-      '..',
-      'components',
-      'TrafficSyncAgent.tsx',
-    );
+    const agentPath = path.resolve(__dirname, '..', 'components', 'TrafficSyncAgent.tsx');
 
     expect(fs.existsSync(agentPath)).toBe(false);
   });

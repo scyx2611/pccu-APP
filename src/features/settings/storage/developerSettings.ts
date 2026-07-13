@@ -24,7 +24,9 @@ function notifyDeveloperDebugEnabled(value: boolean) {
   });
 }
 
-export function subscribeHomeCourseCardTestEnabled(listener: HomeCourseCardTestListener): () => void {
+export function subscribeHomeCourseCardTestEnabled(
+  listener: HomeCourseCardTestListener,
+): () => void {
   homeCourseCardTestListeners.add(listener);
   return () => {
     homeCourseCardTestListeners.delete(listener);

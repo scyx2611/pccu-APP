@@ -28,7 +28,7 @@ describe('schedule timeline helpers', () => {
         makeCourse({ dayOfWeek: 4 }),
         makeCourse({ dayOfWeek: 5 }),
       ],
-      new Date('2026-04-22T10:30:00+08:00')
+      new Date('2026-04-22T10:30:00+08:00'),
     );
 
     expect(chips).toHaveLength(5);
@@ -52,12 +52,20 @@ describe('schedule timeline helpers', () => {
     const course = makeCourse({ dayOfWeek: 3, startPeriod: 2, endPeriod: 3 });
     const selectedDate = new Date('2026-04-22T00:00:00+08:00');
 
-    expect(getTimelineCourseStatus(course, selectedDate, new Date('2026-04-22T08:50:00+08:00'))).toBe('upcoming');
-    expect(getTimelineCourseStatus(course, selectedDate, new Date('2026-04-22T09:30:00+08:00'))).toBe('active');
-    expect(getTimelineCourseStatus(course, selectedDate, new Date('2026-04-22T11:10:00+08:00'))).toBe('completed');
+    expect(
+      getTimelineCourseStatus(course, selectedDate, new Date('2026-04-22T08:50:00+08:00')),
+    ).toBe('upcoming');
+    expect(
+      getTimelineCourseStatus(course, selectedDate, new Date('2026-04-22T09:30:00+08:00')),
+    ).toBe('active');
+    expect(
+      getTimelineCourseStatus(course, selectedDate, new Date('2026-04-22T11:10:00+08:00')),
+    ).toBe('completed');
   });
 
   it('formats a merged period range into a readable time range', () => {
-    expect(formatCourseTimeRange(makeCourse({ startPeriod: 2, endPeriod: 4 }))).toBe('09:10 - 12:00');
+    expect(formatCourseTimeRange(makeCourse({ startPeriod: 2, endPeriod: 4 }))).toBe(
+      '09:10 - 12:00',
+    );
   });
 });

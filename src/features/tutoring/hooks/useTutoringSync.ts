@@ -6,7 +6,10 @@ interface UseTutoringSyncReturn {
   /** Trigger a full tutoring sync (courses + assignments + pending). */
   sync: (options?: { priority?: number; silent?: boolean; force?: boolean }) => Promise<void>;
   /** Trigger a single-course detail sync. */
-  syncCourseDetail: (courseCode: string, options?: { priority?: number; force?: boolean; silent?: boolean }) => Promise<void>;
+  syncCourseDetail: (
+    courseCode: string,
+    options?: { priority?: number; force?: boolean; silent?: boolean },
+  ) => Promise<void>;
   /** Whether a sync is currently in progress. */
   syncInProgress: boolean;
 }
@@ -14,7 +17,9 @@ interface UseTutoringSyncReturn {
 let overviewSyncPromise: Promise<void> | null = null;
 const detailSyncPromises = new Map<string, Promise<void>>();
 
-function hasLoadedSupplementalDetail(detail: { progress?: unknown; classmates?: unknown } | undefined) {
+function hasLoadedSupplementalDetail(
+  detail: { progress?: unknown; classmates?: unknown } | undefined,
+) {
   if (!detail) return false;
   return (
     Object.prototype.hasOwnProperty.call(detail, 'progress') &&
@@ -83,14 +88,18 @@ export function useTutoringSync(): UseTutoringSyncReturn {
   );
 
   const syncCourseDetail = useCallback(
-    async (courseCode: string, options?: { priority?: number; force?: boolean; silent?: boolean }) => {
+    async (
+      courseCode: string,
+      options?: { priority?: number; force?: boolean; silent?: boolean },
+    ) => {
       const normalizedCourseCode = String(courseCode || '').trim();
       if (!normalizedCourseCode) return;
 
       const { priority = 5, force = false, silent = false } = options ?? {};
       const existingDetail = useTutoringStore.getState().courseDetails.get(normalizedCourseCode);
 
-      if (existingDetail?.courseInfo && hasLoadedSupplementalDetail(existingDetail) && !force) return;
+      if (existingDetail?.courseInfo && hasLoadedSupplementalDetail(existingDetail) && !force)
+        return;
       if (detailSyncPromises.has(normalizedCourseCode) && !force) return;
 
       const runSync = async () => {

@@ -1,17 +1,22 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  Pressable,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
-import { CourseData } from '../../pccu/parsers/pccuScraper';
+import { CourseData, SemesterGrade } from '../../pccu/parsers/pccuScraper';
 import { getCourses } from '../../schedule/storage/scheduleStorage';
 import { useTrafficData } from '../../traffic/hooks/useTrafficData';
-import {
-  pickBestTrafficArrival,
-} from '../../traffic/types';
-import { SemesterGrade } from '../../pccu/parsers/pccuScraper';
+import { pickBestTrafficArrival } from '../../traffic/types';
 import { getGrades } from '../../grade/storage/gradeStorage';
 import { getHideHomeGradeDetails } from '../../settings/storage/privacySettings';
 import {
@@ -35,7 +40,7 @@ type NextClassInfo = {
   status: 'now' | 'next';
 };
 
-const PERIOD_TIMES: Array<{ start: [number, number]; end: [number, number] }> = [
+const PERIOD_TIMES: { start: [number, number]; end: [number, number] }[] = [
   { start: [8, 10], end: [9, 0] },
   { start: [9, 10], end: [10, 0] },
   { start: [10, 10], end: [11, 0] },
@@ -145,7 +150,8 @@ const findFeaturedClass = (courses: CourseData[], now: Date): NextClassInfo | nu
 
     const startLabel = formatTime(slot.start[0], slot.start[1]);
     const endLabel = formatTime(endSlot.end[0], endSlot.end[1]);
-    const isOngoing = dayOffset === 0 && start.getTime() <= now.getTime() && end.getTime() > now.getTime();
+    const isOngoing =
+      dayOffset === 0 && start.getTime() <= now.getTime() && end.getTime() > now.getTime();
 
     if (isOngoing) {
       return {
@@ -164,7 +170,9 @@ const findFeaturedClass = (courses: CourseData[], now: Date): NextClassInfo | nu
       end.setDate(end.getDate() + 7);
     }
 
-    const futureDayOffset = Math.round((startOfDay(start).getTime() - todayStart.getTime()) / (24 * 60 * 60 * 1000));
+    const futureDayOffset = Math.round(
+      (startOfDay(start).getTime() - todayStart.getTime()) / (24 * 60 * 60 * 1000),
+    );
     const dayLabel = futureDayOffset === 0 ? '今天' : DAY_LABELS[start.getDay()];
     const candidate: NextClassInfo = {
       course,
@@ -210,7 +218,9 @@ const findUpcomingClass = (courses: CourseData[], now: Date): NextClassInfo | nu
       end.setDate(end.getDate() + 7);
     }
 
-    const futureDayOffset = Math.round((startOfDay(start).getTime() - todayStart.getTime()) / (24 * 60 * 60 * 1000));
+    const futureDayOffset = Math.round(
+      (startOfDay(start).getTime() - todayStart.getTime()) / (24 * 60 * 60 * 1000),
+    );
     const dayLabel = futureDayOffset === 0 ? '今天' : DAY_LABELS[start.getDay()];
     const candidate: NextClassInfo = {
       course,
@@ -296,7 +306,7 @@ export default function HomeScreen() {
       void refreshUser();
       void refreshPrivacy();
       void refreshDeveloperTestSettings();
-    }, [refreshCourses, refreshDeveloperTestSettings, refreshGrades, refreshPrivacy, refreshUser])
+    }, [refreshCourses, refreshDeveloperTestSettings, refreshGrades, refreshPrivacy, refreshUser]),
   );
 
   useEffect(() => subscribeHomeCourseCardTestEnabled(setHomeCourseCardTestEnabledState), []);
@@ -309,7 +319,9 @@ export default function HomeScreen() {
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=25.137&longitude=121.539&current_weather=true&timezone=Asia%2FTaipei');
+        const res = await fetch(
+          'https://api.open-meteo.com/v1/forecast?latitude=25.137&longitude=121.539&current_weather=true&timezone=Asia%2FTaipei',
+        );
         const data = await res.json();
         if (data?.current_weather) {
           setWeather({
@@ -330,35 +342,47 @@ export default function HomeScreen() {
 
   const developerTestClasses = useMemo(() => makeDeveloperTestClasses(now), [now]);
   const featuredClass = useMemo(
-    () => homeCourseCardTestEnabled ? developerTestClasses.current : findFeaturedClass(courses, now),
-    [courses, developerTestClasses, homeCourseCardTestEnabled, now]
+    () =>
+      homeCourseCardTestEnabled ? developerTestClasses.current : findFeaturedClass(courses, now),
+    [courses, developerTestClasses, homeCourseCardTestEnabled, now],
   );
   const upcomingClass = useMemo(
-    () => homeCourseCardTestEnabled ? developerTestClasses.next : findUpcomingClass(courses, now),
-    [courses, developerTestClasses, homeCourseCardTestEnabled, now]
+    () => (homeCourseCardTestEnabled ? developerTestClasses.next : findUpcomingClass(courses, now)),
+    [courses, developerTestClasses, homeCourseCardTestEnabled, now],
   );
 
   const latestGrade = useMemo(() => {
     if (!grades || grades.length === 0) return null;
-    return grades.find((grade) => grade.stats && (grade.stats.average || grade.stats.classRank || grade.stats.deptRank)) || grades[0];
+    return (
+      grades.find(
+        (grade) =>
+          grade.stats && (grade.stats.average || grade.stats.classRank || grade.stats.deptRank),
+      ) || grades[0]
+    );
   }, [grades]);
 
   const gradeSummary = useMemo(() => {
     if (!latestGrade) return null;
     return {
-      avg: hideHomeGradeDetails ? maskAverageValue(latestGrade.stats?.average) : latestGrade.stats?.average,
-      classRank: hideHomeGradeDetails ? maskRankValue(latestGrade.stats?.classRank) : latestGrade.stats?.classRank,
-      deptRank: hideHomeGradeDetails ? maskRankValue(latestGrade.stats?.deptRank) : latestGrade.stats?.deptRank,
+      avg: hideHomeGradeDetails
+        ? maskAverageValue(latestGrade.stats?.average)
+        : latestGrade.stats?.average,
+      classRank: hideHomeGradeDetails
+        ? maskRankValue(latestGrade.stats?.classRank)
+        : latestGrade.stats?.classRank,
+      deptRank: hideHomeGradeDetails
+        ? maskRankValue(latestGrade.stats?.deptRank)
+        : latestGrade.stats?.deptRank,
     };
   }, [hideHomeGradeDetails, latestGrade]);
 
   const downhillSummary = useMemo(
     () => pickBestTrafficArrival(traffic.snapshot?.downhill || []),
-    [traffic.snapshot]
+    [traffic.snapshot],
   );
   const uphillSummary = useMemo(
     () => pickBestTrafficArrival(traffic.snapshot?.uphill || []),
-    [traffic.snapshot]
+    [traffic.snapshot],
   );
 
   const openTraffic = () => {
@@ -378,7 +402,9 @@ export default function HomeScreen() {
   };
 
   const trafficPressStyle: any = {
-    transform: [{ scale: trafficPressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) }],
+    transform: [
+      { scale: trafficPressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) },
+    ],
   };
 
   const pressStyle: any = {
@@ -393,7 +419,9 @@ export default function HomeScreen() {
   };
 
   const gradePressStyle: any = {
-    transform: [{ scale: gradePressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) }],
+    transform: [
+      { scale: gradePressAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) },
+    ],
   };
   const { count: pendingTutoringCount } = usePendingCount();
 
@@ -401,7 +429,8 @@ export default function HomeScreen() {
   const weatherText = formatYangmingshanWeather(weather);
   const courseCardBackground = theme.syncBtnBg;
   const weatherValueText = weather?.temp !== undefined ? `${weather.temp}°C` : '--';
-  const weatherCaptionText = weather?.code !== undefined && weather.code >= 51 ? '山區有雨' : '陽明山天氣';
+  const weatherCaptionText =
+    weather?.code !== undefined && weather.code >= 51 ? '山區有雨' : '陽明山天氣';
   const gradeValueText = gradeSummary?.avg || '--';
   const gradeCaptionText = gradeSummary ? '平均分數' : gradeLoading ? '讀取成績中' : '尚未同步';
   const tutoringValueText = pendingTutoringCount > 0 ? String(pendingTutoringCount) : '0';
@@ -428,35 +457,84 @@ export default function HomeScreen() {
           <View style={styles.courseStack}>
             <AnimatedPressable
               onPress={openSchedule}
-              onPressIn={() => Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true }).start()}
-              onPressOut={() => Animated.spring(pressAnim, { toValue: 0, useNativeDriver: true }).start()}
-              style={[styles.featureCard, { backgroundColor: courseCardBackground, borderColor: '#FFFFFF', shadowColor: theme.text }, pressStyle]}
+              onPressIn={() =>
+                Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true }).start()
+              }
+              onPressOut={() =>
+                Animated.spring(pressAnim, { toValue: 0, useNativeDriver: true }).start()
+              }
+              style={[
+                styles.featureCard,
+                {
+                  backgroundColor: courseCardBackground,
+                  borderColor: '#FFFFFF',
+                  shadowColor: theme.text,
+                },
+                pressStyle,
+              ]}
             >
               <View style={styles.featureMainRow}>
-                <AppSymbol name="clock.fill" size={40} tintColor={theme.primary} style={styles.featureIcon} fallback={<Text>課表</Text>} />
+                <AppSymbol
+                  name="clock.fill"
+                  size={40}
+                  tintColor={theme.primary}
+                  style={styles.featureIcon}
+                  fallback={<Text>課表</Text>}
+                />
                 <View style={styles.featureContent}>
-                  <View style={[styles.statusPill, { backgroundColor: featuredClass?.status === 'now' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(73, 84, 188, 0.10)' }]}>
-                    {featuredClass?.status === 'now' ? <View style={[styles.statusDot, { backgroundColor: theme.danger }]} /> : null}
-                    <Text style={[styles.statusPillText, { color: featuredClass?.status === 'now' ? theme.danger : theme.primary }]}>
+                  <View
+                    style={[
+                      styles.statusPill,
+                      {
+                        backgroundColor:
+                          featuredClass?.status === 'now'
+                            ? 'rgba(239, 68, 68, 0.08)'
+                            : 'rgba(73, 84, 188, 0.10)',
+                      },
+                    ]}
+                  >
+                    {featuredClass?.status === 'now' ? (
+                      <View style={[styles.statusDot, { backgroundColor: theme.danger }]} />
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.statusPillText,
+                        { color: featuredClass?.status === 'now' ? theme.danger : theme.primary },
+                      ]}
+                    >
                       {featuredClass?.status === 'now' ? '正在進行' : '下一堂課'}
                     </Text>
                   </View>
                   {featuredClass ? (
                     <>
-                      <Text style={[styles.featureTitle, { color: theme.text }]} numberOfLines={1}>{normalizeText(featuredClass.course.name)}</Text>
-                      <Text style={[styles.featureMeta, { color: theme.textSub }]} numberOfLines={1}>
+                      <Text style={[styles.featureTitle, { color: theme.text }]} numberOfLines={1}>
+                        {normalizeText(featuredClass.course.name)}
+                      </Text>
+                      <Text
+                        style={[styles.featureMeta, { color: theme.textSub }]}
+                        numberOfLines={1}
+                      >
                         {`${normalizeText(featuredClass.course.location) || '未知地點'} · ${featuredClass.startLabel} - ${featuredClass.endLabel}`}
                       </Text>
                     </>
                   ) : scheduleLoading ? (
                     <View style={styles.gridLoadingRow}>
                       <ActivityIndicator size="small" color={theme.primary} />
-                      <Text style={[styles.featureMeta, { color: theme.textSub, marginLeft: 6 }]}>讀取課表中...</Text>
+                      <Text style={[styles.featureMeta, { color: theme.textSub, marginLeft: 6 }]}>
+                        讀取課表中...
+                      </Text>
                     </View>
                   ) : (
                     <>
-                      <Text style={[styles.featureTitle, { color: theme.text }]} numberOfLines={1}>尚未同步課表</Text>
-                      <Text style={[styles.featureMeta, { color: theme.textSub }]} numberOfLines={1}>點此同步完整課表</Text>
+                      <Text style={[styles.featureTitle, { color: theme.text }]} numberOfLines={1}>
+                        尚未同步課表
+                      </Text>
+                      <Text
+                        style={[styles.featureMeta, { color: theme.textSub }]}
+                        numberOfLines={1}
+                      >
+                        點此同步完整課表
+                      </Text>
                     </>
                   )}
                 </View>
@@ -465,9 +543,21 @@ export default function HomeScreen() {
             {featuredClass?.status === 'now' && upcomingClass ? (
               <AnimatedPressable
                 onPress={openSchedule}
-                onPressIn={() => Animated.spring(nextClassPressAnim, { toValue: 1, useNativeDriver: true }).start()}
-                onPressOut={() => Animated.spring(nextClassPressAnim, { toValue: 0, useNativeDriver: true }).start()}
-                style={[styles.nextClassCard, { backgroundColor: courseCardBackground, borderColor: 'rgba(255,255,255,0.65)', shadowColor: theme.text }, nextClassPressStyle]}
+                onPressIn={() =>
+                  Animated.spring(nextClassPressAnim, { toValue: 1, useNativeDriver: true }).start()
+                }
+                onPressOut={() =>
+                  Animated.spring(nextClassPressAnim, { toValue: 0, useNativeDriver: true }).start()
+                }
+                style={[
+                  styles.nextClassCard,
+                  {
+                    backgroundColor: courseCardBackground,
+                    borderColor: 'rgba(255,255,255,0.65)',
+                    shadowColor: theme.text,
+                  },
+                  nextClassPressStyle,
+                ]}
               >
                 <View style={styles.nextStripLeft}>
                   <View style={styles.nextBadgeRow}>
@@ -481,8 +571,12 @@ export default function HomeScreen() {
                   </Text>
                 </View>
                 <View style={styles.nextStripRight}>
-                  <Text style={[styles.miniLabel, { color: theme.textSub }]} numberOfLines={1}>{normalizeText(upcomingClass.course.location) || '未知地點'}</Text>
-                  <Text style={[styles.nextTimeText, { color: theme.text }]}>{upcomingClass.startLabel}</Text>
+                  <Text style={[styles.miniLabel, { color: theme.textSub }]} numberOfLines={1}>
+                    {normalizeText(upcomingClass.course.location) || '未知地點'}
+                  </Text>
+                  <Text style={[styles.nextTimeText, { color: theme.text }]}>
+                    {upcomingClass.startLabel}
+                  </Text>
                 </View>
               </AnimatedPressable>
             ) : null}
@@ -491,62 +585,158 @@ export default function HomeScreen() {
           <View style={styles.smallCardsGrid}>
             <AnimatedPressable
               onPress={openTraffic}
-              onPressIn={() => Animated.spring(trafficPressAnim, { toValue: 1, useNativeDriver: true }).start()}
-              onPressOut={() => Animated.spring(trafficPressAnim, { toValue: 0, useNativeDriver: true }).start()}
-              style={[styles.smallCard, { backgroundColor: courseCardBackground, borderColor: '#FFFFFF', shadowColor: theme.text }, trafficPressStyle]}
-          >
+              onPressIn={() =>
+                Animated.spring(trafficPressAnim, { toValue: 1, useNativeDriver: true }).start()
+              }
+              onPressOut={() =>
+                Animated.spring(trafficPressAnim, { toValue: 0, useNativeDriver: true }).start()
+              }
+              style={[
+                styles.smallCard,
+                {
+                  backgroundColor: courseCardBackground,
+                  borderColor: '#FFFFFF',
+                  shadowColor: theme.text,
+                },
+                trafficPressStyle,
+              ]}
+            >
               <View style={styles.smallCardHeader}>
-                <AppSymbol name="bus.fill" size={24} tintColor={theme.primary} style={styles.smallIcon} fallback={<Text>Bus</Text>} />
-                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>公車動態</Text>
+                <AppSymbol
+                  name="bus.fill"
+                  size={24}
+                  tintColor={theme.primary}
+                  style={styles.smallIcon}
+                  fallback={<Text>Bus</Text>}
+                />
+                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>
+                  公車動態
+                </Text>
               </View>
               <View style={styles.smallCardBody}>
                 <View style={styles.busValueRow}>
-                  <Text style={[styles.busCardValueChinese, { color: theme.text }]} numberOfLines={1}>G</Text>
-                  <Text style={[styles.busCardValueNumber, { color: theme.text }]} numberOfLines={1}>5</Text>
+                  <Text
+                    style={[styles.busCardValueChinese, { color: theme.text }]}
+                    numberOfLines={1}
+                  >
+                    G
+                  </Text>
+                  <Text
+                    style={[styles.busCardValueNumber, { color: theme.text }]}
+                    numberOfLines={1}
+                  >
+                    5
+                  </Text>
                 </View>
               </View>
-              <Text style={[styles.smallCardCaption, { color: theme.primary }]} numberOfLines={1}>將到站</Text>
+              <Text style={[styles.smallCardCaption, { color: theme.primary }]} numberOfLines={1}>
+                將到站
+              </Text>
             </AnimatedPressable>
 
-            <View style={[styles.smallCard, { backgroundColor: courseCardBackground, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+            <View
+              style={[
+                styles.smallCard,
+                {
+                  backgroundColor: courseCardBackground,
+                  borderColor: '#FFFFFF',
+                  shadowColor: theme.text,
+                },
+              ]}
+            >
               <View style={styles.smallCardHeader}>
-                <AppSymbol name="sun.max.fill" size={22} tintColor={theme.warning} style={styles.smallIcon} fallback={<Text>天氣</Text>} />
-                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>天氣狀況</Text>
+                <AppSymbol
+                  name="sun.max.fill"
+                  size={22}
+                  tintColor={theme.warning}
+                  style={styles.smallIcon}
+                  fallback={<Text>天氣</Text>}
+                />
+                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>
+                  天氣狀況
+                </Text>
               </View>
               <View style={styles.smallCardBody}>
-                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{weatherValueText}</Text>
+                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>
+                  {weatherValueText}
+                </Text>
               </View>
-              <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>{weatherCaptionText}</Text>
+              <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>
+                {weatherCaptionText}
+              </Text>
             </View>
 
             <AnimatedPressable
               onPress={openGrades}
-              onPressIn={() => Animated.spring(gradePressAnim, { toValue: 1, useNativeDriver: true }).start()}
-              onPressOut={() => Animated.spring(gradePressAnim, { toValue: 0, useNativeDriver: true }).start()}
-              style={[styles.smallCard, { backgroundColor: courseCardBackground, borderColor: '#FFFFFF', shadowColor: theme.text }, gradePressStyle]}
-          >
+              onPressIn={() =>
+                Animated.spring(gradePressAnim, { toValue: 1, useNativeDriver: true }).start()
+              }
+              onPressOut={() =>
+                Animated.spring(gradePressAnim, { toValue: 0, useNativeDriver: true }).start()
+              }
+              style={[
+                styles.smallCard,
+                {
+                  backgroundColor: courseCardBackground,
+                  borderColor: '#FFFFFF',
+                  shadowColor: theme.text,
+                },
+                gradePressStyle,
+              ]}
+            >
               <View style={styles.smallCardHeader}>
-                <AppSymbol name="medal.fill" size={22} tintColor={theme.warning} style={styles.smallIcon} fallback={<Text>成績</Text>} />
-                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>成績蓋覽</Text>
+                <AppSymbol
+                  name="medal.fill"
+                  size={22}
+                  tintColor={theme.warning}
+                  style={styles.smallIcon}
+                  fallback={<Text>成績</Text>}
+                />
+                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>
+                  成績蓋覽
+                </Text>
               </View>
               <View style={styles.smallCardBody}>
-                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{gradeValueText}</Text>
+                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>
+                  {gradeValueText}
+                </Text>
               </View>
-              <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>{gradeCaptionText}</Text>
+              <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>
+                {gradeCaptionText}
+              </Text>
             </AnimatedPressable>
 
             <AnimatedPressable
               onPress={openTutoring}
-              style={[styles.smallCard, { backgroundColor: courseCardBackground, borderColor: '#FFFFFF', shadowColor: theme.text }]}
-          >
+              style={[
+                styles.smallCard,
+                {
+                  backgroundColor: courseCardBackground,
+                  borderColor: '#FFFFFF',
+                  shadowColor: theme.text,
+                },
+              ]}
+            >
               <View style={styles.smallCardHeader}>
-                <AppSymbol name="book.fill" size={22} tintColor={theme.success} style={styles.smallIcon} fallback={<Text>課輔</Text>} />
-                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>待交作業</Text>
+                <AppSymbol
+                  name="book.fill"
+                  size={22}
+                  tintColor={theme.success}
+                  style={styles.smallIcon}
+                  fallback={<Text>課輔</Text>}
+                />
+                <Text style={[styles.smallCardLabel, { color: theme.textSub }]} numberOfLines={1}>
+                  待交作業
+                </Text>
               </View>
               <View style={styles.smallCardBody}>
-                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>{tutoringValueText}</Text>
+                <Text style={[styles.smallCardValue, { color: theme.text }]} numberOfLines={1}>
+                  {tutoringValueText}
+                </Text>
               </View>
-              <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>{tutoringCaptionText}</Text>
+              <Text style={[styles.smallCardCaption, { color: theme.textSub }]} numberOfLines={1}>
+                {tutoringCaptionText}
+              </Text>
             </AnimatedPressable>
           </View>
         </View>
@@ -587,7 +777,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     zIndex: 3,
     shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 26,
     elevation: 12,
   },
@@ -631,11 +821,22 @@ const styles = StyleSheet.create({
   nextStripRight: { alignItems: 'flex-end' },
   nextBadgeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
   miniLabel: { fontSize: 10, lineHeight: 15, fontWeight: '800' },
-  timePill: { marginLeft: 8, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6, backgroundColor: 'rgba(73,84,188,0.10)' },
+  timePill: {
+    marginLeft: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: 'rgba(73,84,188,0.10)',
+  },
   timePillText: { fontSize: 10, lineHeight: 15, fontWeight: '900' },
   nextCourseText: { fontSize: 16, lineHeight: 24, fontWeight: '900' },
   nextTimeText: { fontSize: 14, lineHeight: 20, fontWeight: '900' },
-  smallCardsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
+  smallCardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+  },
   smallCard: {
     width: '47.5%',
     aspectRatio: 1,

@@ -15,7 +15,10 @@ import { useTheme } from '../../../providers/theme/ThemeProvider';
 import { TAB_MATERIAL_COLORS, TOP_TAB_MATERIAL } from '../../../navigation/tabMaterials';
 import AppSymbol from '../../../shared/components/AppSymbol';
 import { useTutoringSync } from '../hooks/useTutoringSync';
-import { downloadTutoringFile, uploadTutoringAssignmentFile } from '../services/tutoringFileActions';
+import {
+  downloadTutoringFile,
+  uploadTutoringAssignmentFile,
+} from '../services/tutoringFileActions';
 import { useTutoringStore } from '../store/useTutoringStore';
 import {
   TutoringAnnouncement,
@@ -45,15 +48,19 @@ const SEGMENTED_CONTROL_MATERIAL = TOP_TAB_MATERIAL.background;
 const SEGMENTED_CONTROL_ACTIVE_MATERIAL = TOP_TAB_MATERIAL.activeBackground;
 const SEGMENTED_CONTROL_BORDER = TOP_TAB_MATERIAL.border;
 
-const TABS: Array<{
+const TABS: {
   key: TabType;
   label: string;
   icon: { default: string; selected: string };
-}> = [
+}[] = [
   { key: 'course', label: '課程', icon: { default: 'book', selected: 'book.fill' } },
   { key: 'announcements', label: '公告', icon: { default: 'bell', selected: 'bell.fill' } },
   { key: 'materials', label: '教材', icon: { default: 'doc.text', selected: 'doc.text.fill' } },
-  { key: 'assignments', label: '作業', icon: { default: 'checklist', selected: 'checklist.checked' } },
+  {
+    key: 'assignments',
+    label: '作業',
+    icon: { default: 'checklist', selected: 'checklist.checked' },
+  },
   { key: 'progress', label: '進度', icon: { default: 'chart.bar', selected: 'chart.bar.fill' } },
   { key: 'classmates', label: '同學', icon: { default: 'person.2', selected: 'person.2.fill' } },
 ];
@@ -86,7 +93,10 @@ function formatAnnouncementBody(announcement?: TutoringAnnouncement | null) {
   let body = cleanMultilineText(announcement?.contentText || announcement?.contentHtml || title);
 
   body = body
-    .replace(/\s*(發布日期|公告日期|公告內容|內容|考試時間|考試範圍|考試方式|說明|備註|附件)\s*[：:]\s*/g, '\n$1：')
+    .replace(
+      /\s*(發布日期|公告日期|公告內容|內容|考試時間|考試範圍|考試方式|說明|備註|附件)\s*[：:]\s*/g,
+      '\n$1：',
+    )
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
@@ -133,7 +143,11 @@ function assignmentStatus(assignment: TutoringAssignment) {
     if (due && !Number.isNaN(due.getTime()) && due.getTime() < Date.now()) {
       return { label: '已逾期', color: '#FF3B30', bg: 'rgba(255,59,48,0.12)' };
     }
-    return { label: assignment.stateLabel || '未繳交', color: '#FF9500', bg: 'rgba(255,149,0,0.14)' };
+    return {
+      label: assignment.stateLabel || '未繳交',
+      color: '#FF9500',
+      bg: 'rgba(255,149,0,0.14)',
+    };
   }
 
   return { label: assignment.stateLabel || '已繳交', color: '#34C759', bg: 'rgba(52,199,89,0.14)' };
@@ -192,7 +206,7 @@ function PressableCard({
         onPress={onPress}
         onPressIn={() => animateTo(0.97)}
         onPressOut={() => animateTo(1)}
-        style={({ pressed }) => pressed ? styles.cardPressed : null}
+        style={({ pressed }) => (pressed ? styles.cardPressed : null)}
       >
         {children}
       </Pressable>
@@ -212,7 +226,9 @@ export default function TutoringCourseDetailScreen({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const progressRefreshAttemptRef = useRef<string | null>(null);
 
-  const course = useTutoringStore((state) => state.courses.find((item) => item.courseCode === courseCode));
+  const course = useTutoringStore((state) =>
+    state.courses.find((item) => item.courseCode === courseCode),
+  );
   const courseDetail = useTutoringStore((state) => state.courseDetails.get(courseCode));
   const syncPhase = useTutoringStore((state) => state.syncPhase);
   const error = useTutoringStore((state) => state.error);
@@ -224,17 +240,24 @@ export default function TutoringCourseDetailScreen({
   const progress = courseDetail?.progress ?? [];
   const classmates = courseDetail?.classmates ?? [];
   const courseInfo = courseDetail?.courseInfo;
-  const resolvedCourseName = cleanText(courseName || course?.courseName || courseCode) || '課輔課程';
-  const resolvedDepartment = cleanText(department || course?.deptName || course?.label) || '課輔課程';
+  const resolvedCourseName =
+    cleanText(courseName || course?.courseName || courseCode) || '課輔課程';
+  const resolvedDepartment =
+    cleanText(department || course?.deptName || course?.label) || '課輔課程';
   const pendingAssignments = assignments.filter(isAssignmentPending).length;
   const tabValues = TABS.map((tab) => {
     const count =
-      tab.key === 'announcements' ? announcements.length :
-      tab.key === 'materials' ? materials.length :
-      tab.key === 'assignments' ? assignments.length :
-      tab.key === 'progress' ? progress.length :
-      tab.key === 'classmates' ? classmates.length :
-      null;
+      tab.key === 'announcements'
+        ? announcements.length
+        : tab.key === 'materials'
+          ? materials.length
+          : tab.key === 'assignments'
+            ? assignments.length
+            : tab.key === 'progress'
+              ? progress.length
+              : tab.key === 'classmates'
+                ? classmates.length
+                : null;
     return { ...tab, count };
   });
   const needsSupplementalCourseDetail =
@@ -250,17 +273,26 @@ export default function TutoringCourseDetailScreen({
 
   const statusText = useMemo(() => {
     switch (syncPhase) {
-      case 'logging_in': return '登入課輔中';
-      case 'fetching_courses': return '同步課輔課程中';
-      case 'fetching_details': return '同步課程詳情中';
-      case 'complete': return '同步完成';
-      case 'error': return error ?? '同步失敗';
-      default: return '';
+      case 'logging_in':
+        return '登入課輔中';
+      case 'fetching_courses':
+        return '同步課輔課程中';
+      case 'fetching_details':
+        return '同步課程詳情中';
+      case 'complete':
+        return '同步完成';
+      case 'error':
+        return error ?? '同步失敗';
+      default:
+        return '';
     }
   }, [syncPhase, error]);
 
   const isSyncing =
-    (!courseDetail || needsCourseDetail) && syncPhase !== 'idle' && syncPhase !== 'complete' && syncPhase !== 'error';
+    (!courseDetail || needsCourseDetail) &&
+    syncPhase !== 'idle' &&
+    syncPhase !== 'complete' &&
+    syncPhase !== 'error';
 
   useEffect(() => {
     if (!courseDetail || needsCourseDetail) {
@@ -270,7 +302,13 @@ export default function TutoringCourseDetailScreen({
 
   useEffect(() => {
     const needsProgressRefresh = progress.length === 0 || hasSuspiciousProgressRows(progress);
-    if (activeTab !== 'progress' || !needsProgressRefresh || isSyncing || syncPhase === 'fetching_details') return;
+    if (
+      activeTab !== 'progress' ||
+      !needsProgressRefresh ||
+      isSyncing ||
+      syncPhase === 'fetching_details'
+    )
+      return;
     if (progressRefreshAttemptRef.current === courseCode) return;
 
     progressRefreshAttemptRef.current = courseCode;
@@ -293,7 +331,10 @@ export default function TutoringCourseDetailScreen({
           setBusyAction('download');
           void downloadTutoringFile(action)
             .catch((downloadError) => {
-              Alert.alert('下載失敗', downloadError instanceof Error ? downloadError.message : '請稍後再試。');
+              Alert.alert(
+                '下載失敗',
+                downloadError instanceof Error ? downloadError.message : '請稍後再試。',
+              );
             })
             .finally(() => setBusyAction(null));
         },
@@ -301,60 +342,74 @@ export default function TutoringCourseDetailScreen({
     ]);
   }, []);
 
-  const runUpload = useCallback((assignment: TutoringAssignment) => {
-    Alert.alert('上傳作業', '將選取一個檔案並上傳到課輔系統。', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '選擇檔案',
-        onPress: () => {
-          setBusyAction('upload');
-          void uploadTutoringAssignmentFile(courseCode, assignment.homeSn)
-            .then((result) => {
-              if (!result?.canceled) {
-                Alert.alert('上傳完成', '作業檔案已送出，稍後會重新同步狀態。');
-                void syncCourseDetail(courseCode, { force: true, silent: true });
-              }
-            })
-            .catch((uploadError) => {
-              Alert.alert('上傳失敗', uploadError instanceof Error ? uploadError.message : '請稍後再試。');
-            })
-            .finally(() => setBusyAction(null));
+  const runUpload = useCallback(
+    (assignment: TutoringAssignment) => {
+      Alert.alert('上傳作業', '將選取一個檔案並上傳到課輔系統。', [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '選擇檔案',
+          onPress: () => {
+            setBusyAction('upload');
+            void uploadTutoringAssignmentFile(courseCode, assignment.homeSn)
+              .then((result) => {
+                if (!result?.canceled) {
+                  Alert.alert('上傳完成', '作業檔案已送出，稍後會重新同步狀態。');
+                  void syncCourseDetail(courseCode, { force: true, silent: true });
+                }
+              })
+              .catch((uploadError) => {
+                Alert.alert(
+                  '上傳失敗',
+                  uploadError instanceof Error ? uploadError.message : '請稍後再試。',
+                );
+              })
+              .finally(() => setBusyAction(null));
+          },
         },
-      },
-    ]);
-  }, [courseCode, syncCourseDetail]);
+      ]);
+    },
+    [courseCode, syncCourseDetail],
+  );
 
-  const downloadAttachment = useCallback((
-    kind: 'announcement' | 'assignment' | 'submitted',
-    attachment: TutoringFileAttachment,
-    extra?: { homeSn?: number | null },
-  ) => {
-    runDownload({
-      courseCode,
-      kind,
-      fileName: attachmentLabel(attachment),
-      downloadUrl: attachment.downloadUrl,
-      targetNo: attachment.targetNo,
-      serialNo: attachment.serialNo,
-      homeSn: extra?.homeSn ?? null,
-    });
-  }, [courseCode, runDownload]);
+  const downloadAttachment = useCallback(
+    (
+      kind: 'announcement' | 'assignment' | 'submitted',
+      attachment: TutoringFileAttachment,
+      extra?: { homeSn?: number | null },
+    ) => {
+      runDownload({
+        courseCode,
+        kind,
+        fileName: attachmentLabel(attachment),
+        downloadUrl: attachment.downloadUrl,
+        targetNo: attachment.targetNo,
+        serialNo: attachment.serialNo,
+        homeSn: extra?.homeSn ?? null,
+      });
+    },
+    [courseCode, runDownload],
+  );
 
-  const openAnnouncementDetail = useCallback((announcement: TutoringAnnouncement) => {
-    const fallbackBody = cleanText(announcement.contentText || announcement.contentHtml || announcement.title);
-    setDetailItem({
-      type: 'announcement',
-      item: {
-        ...announcement,
-        contentText: fallbackBody,
-        contentHtml: announcement.contentHtml || fallbackBody,
-      },
-    });
+  const openAnnouncementDetail = useCallback(
+    (announcement: TutoringAnnouncement) => {
+      const fallbackBody = cleanText(
+        announcement.contentText || announcement.contentHtml || announcement.title,
+      );
+      setDetailItem({
+        type: 'announcement',
+        item: {
+          ...announcement,
+          contentText: fallbackBody,
+          contentHtml: announcement.contentHtml || fallbackBody,
+        },
+      });
 
-    if (!cleanText(announcement.contentText || announcement.contentHtml)) {
-      void syncCourseDetail(courseCode, { force: true, silent: true });
-    }
-  }, [courseCode, syncCourseDetail]);
+      if (!cleanText(announcement.contentText || announcement.contentHtml)) {
+        void syncCourseDetail(courseCode, { force: true, silent: true });
+      }
+    },
+    [courseCode, syncCourseDetail],
+  );
 
   const renderCourseDetails = () => {
     const courseInfoRows = [
@@ -363,14 +418,26 @@ export default function TutoringCourseDetailScreen({
       { label: '學年期', value: courseInfo?.academicYearTerm },
       { label: '開課班級', value: courseInfo?.departmentClass || resolvedDepartment },
       { label: '必選修', value: courseInfo?.requiredType },
-      { label: '學分', value: courseInfo?.creditText || (course?.credit != null ? course.credit.toFixed(1) : '') },
+      {
+        label: '學分',
+        value: courseInfo?.creditText || (course?.credit != null ? course.credit.toFixed(1) : ''),
+      },
       { label: '英語授課', value: courseInfo?.englishLevel },
       { label: '上課時間', value: courseInfo?.scheduleText },
       { label: '預計人數', value: courseInfo?.expectedEnrollment },
     ];
 
     return (
-      <View style={[styles.heroCard, { backgroundColor: theme.syncBtnBg || theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+      <View
+        style={[
+          styles.heroCard,
+          {
+            backgroundColor: theme.syncBtnBg || theme.card,
+            borderColor: '#FFFFFF',
+            shadowColor: theme.text,
+          },
+        ]}
+      >
         <Text style={[styles.courseTitle, { color: theme.text }]} numberOfLines={3}>
           {resolvedCourseName}
         </Text>
@@ -382,7 +449,9 @@ export default function TutoringCourseDetailScreen({
           {courseInfoRows.map((row) => (
             <View key={row.label} style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: theme.textSub }]}>{row.label}</Text>
-              <Text style={[styles.infoValue, { color: theme.text }]}>{cleanText(row.value) || '尚未同步'}</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>
+                {cleanText(row.value) || '尚未同步'}
+              </Text>
             </View>
           ))}
         </View>
@@ -397,7 +466,14 @@ export default function TutoringCourseDetailScreen({
             <Text style={[styles.summaryLabel, { color: theme.textSub }]}>教材</Text>
           </View>
           <View style={styles.summaryItem}>
-            <Text style={[styles.summaryValue, { color: pendingAssignments > 0 ? theme.danger || '#FF3B30' : theme.text }]}>{assignments.length}</Text>
+            <Text
+              style={[
+                styles.summaryValue,
+                { color: pendingAssignments > 0 ? theme.danger || '#FF3B30' : theme.text },
+              ]}
+            >
+              {assignments.length}
+            </Text>
             <Text style={[styles.summaryLabel, { color: theme.textSub }]}>作業</Text>
           </View>
         </View>
@@ -409,16 +485,27 @@ export default function TutoringCourseDetailScreen({
     const preview = formatAnnouncementPreview(announcement);
 
     return (
-      <PressableCard key={`${announcement.serialNo ?? index}-announcement`} onPress={() => openAnnouncementDetail(announcement)}>
-        <View style={[styles.itemCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+      <PressableCard
+        key={`${announcement.serialNo ?? index}-announcement`}
+        onPress={() => openAnnouncementDetail(announcement)}
+      >
+        <View
+          style={[
+            styles.itemCard,
+            { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+          ]}
+        >
           <View style={styles.itemHeaderRow}>
-            {!announcement.isRead ? <View style={[styles.unreadDot, { backgroundColor: theme.primary }]} /> : null}
+            {!announcement.isRead ? (
+              <View style={[styles.unreadDot, { backgroundColor: theme.primary }]} />
+            ) : null}
             <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={2}>
               {cleanText(announcement.title) || '未命名公告'}
             </Text>
           </View>
           <Text style={[styles.itemMeta, { color: theme.textSub }]} numberOfLines={1}>
-            {cleanText(announcement.teacherName) || '課輔系統'} · {formatDate(announcement.createdAt)}
+            {cleanText(announcement.teacherName) || '課輔系統'} ·{' '}
+            {formatDate(announcement.createdAt)}
           </Text>
           {preview ? (
             <Text style={[styles.itemBody, { color: theme.textSub }]} numberOfLines={2}>
@@ -449,10 +536,17 @@ export default function TutoringCourseDetailScreen({
         });
       }}
     >
-      <View style={[styles.itemCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+      <View
+        style={[
+          styles.itemCard,
+          { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+        ]}
+      >
         <View style={styles.itemHeaderRow}>
           <View style={[styles.typePill, { backgroundColor: 'rgba(10,122,255,0.10)' }]}>
-            <Text style={[styles.typePillText, { color: theme.primary }]}>{material.catalog || '教材'}</Text>
+            <Text style={[styles.typePillText, { color: theme.primary }]}>
+              {material.catalog || '教材'}
+            </Text>
           </View>
           {material.isNew ? (
             <View style={[styles.typePill, { backgroundColor: 'rgba(255,149,0,0.14)' }]}>
@@ -461,7 +555,12 @@ export default function TutoringCourseDetailScreen({
           ) : null}
           {material.downable ? (
             <View style={[styles.iconPill, { backgroundColor: theme.primary }]}>
-              <AppSymbol name="arrow.down.doc.fill" size={14} tintColor="#FFFFFF" fallback={<Text style={styles.iconFallback}>↓</Text>} />
+              <AppSymbol
+                name="arrow.down.doc.fill"
+                size={14}
+                tintColor="#FFFFFF"
+                fallback={<Text style={styles.iconFallback}>↓</Text>}
+              />
             </View>
           ) : null}
         </View>
@@ -469,7 +568,8 @@ export default function TutoringCourseDetailScreen({
           {cleanText(material.title || material.fileName) || '未命名教材'}
         </Text>
         <Text style={[styles.itemMeta, { color: theme.textSub }]} numberOfLines={1}>
-          {cleanText(material.fileName) || '無檔名'} · 更新 {formatDate(material.updatedAt || material.endAt)}
+          {cleanText(material.fileName) || '無檔名'} · 更新{' '}
+          {formatDate(material.updatedAt || material.endAt)}
         </Text>
         {material.memoText ? (
           <Text style={[styles.itemBody, { color: theme.textSub }]} numberOfLines={3}>
@@ -485,10 +585,21 @@ export default function TutoringCourseDetailScreen({
     const remaining = assignment.remainingSubmissionCount;
 
     return (
-      <PressableCard key={`${assignment.mySn ?? assignment.homeSn ?? index}-assignment`} onPress={() => setDetailItem({ type: 'assignment', item: assignment })}>
-        <View style={[styles.itemCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+      <PressableCard
+        key={`${assignment.mySn ?? assignment.homeSn ?? index}-assignment`}
+        onPress={() => setDetailItem({ type: 'assignment', item: assignment })}
+      >
+        <View
+          style={[
+            styles.itemCard,
+            { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+          ]}
+        >
           <View style={styles.itemHeaderRow}>
-            <Text style={[styles.itemTitle, styles.itemTitleWithBadge, { color: theme.text }]} numberOfLines={2}>
+            <Text
+              style={[styles.itemTitle, styles.itemTitleWithBadge, { color: theme.text }]}
+              numberOfLines={2}
+            >
               {cleanText(assignment.title) || '未命名作業'}
             </Text>
             <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
@@ -504,7 +615,8 @@ export default function TutoringCourseDetailScreen({
             </Text>
           ) : null}
           <Text style={[styles.itemMeta, { color: theme.primary }]} numberOfLines={1}>
-            附件 {(assignment.attachments ?? []).length} · 已繳交 {(assignment.submittedFiles ?? []).length}
+            附件 {(assignment.attachments ?? []).length} · 已繳交{' '}
+            {(assignment.submittedFiles ?? []).length}
           </Text>
         </View>
       </PressableCard>
@@ -512,31 +624,70 @@ export default function TutoringCourseDetailScreen({
   };
 
   const renderProgress = (item: TutoringProgressItem, index: number) => (
-    <View key={`${item.id || index}-progress`} style={[styles.itemCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+    <View
+      key={`${item.id || index}-progress`}
+      style={[
+        styles.itemCard,
+        { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+      ]}
+    >
       <View style={styles.itemHeaderRow}>
-        <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={2}>{cleanText(item.title) || '課程進度'}</Text>
-        {item.percent != null ? <Text style={[styles.percentText, { color: theme.primary }]}>{Math.round(item.percent * 100)}%</Text> : null}
+        <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={2}>
+          {cleanText(item.title) || '課程進度'}
+        </Text>
+        {item.percent != null ? (
+          <Text style={[styles.percentText, { color: theme.primary }]}>
+            {Math.round(item.percent * 100)}%
+          </Text>
+        ) : null}
       </View>
       {item.percent != null ? (
-        <View style={[styles.progressTrack, { backgroundColor: theme.border || 'rgba(142,142,147,0.18)' }]}>
-          <View style={[styles.progressFill, { backgroundColor: theme.primary, width: `${Math.round(item.percent * 100)}%` }]} />
+        <View
+          style={[
+            styles.progressTrack,
+            { backgroundColor: theme.border || 'rgba(142,142,147,0.18)' },
+          ]}
+        >
+          <View
+            style={[
+              styles.progressFill,
+              { backgroundColor: theme.primary, width: `${Math.round(item.percent * 100)}%` },
+            ]}
+          />
         </View>
       ) : null}
-      {cleanText(item.value) ? <Text style={[styles.itemBody, { color: theme.textSub }]}>{cleanText(item.value)}</Text> : null}
+      {cleanText(item.value) ? (
+        <Text style={[styles.itemBody, { color: theme.textSub }]}>{cleanText(item.value)}</Text>
+      ) : null}
     </View>
   );
 
   const renderClassmate = (classmate: TutoringClassmate, index: number) => (
-    <View key={`${classmate.id || index}-classmate`} style={[styles.itemCard, styles.classmateCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+    <View
+      key={`${classmate.id || index}-classmate`}
+      style={[
+        styles.itemCard,
+        styles.classmateCard,
+        { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+      ]}
+    >
       <View style={[styles.avatar, { backgroundColor: 'rgba(10,122,255,0.12)' }]}>
-        <Text style={[styles.avatarText, { color: theme.primary }]}>{cleanText(classmate.name).slice(0, 1) || '同'}</Text>
+        <Text style={[styles.avatarText, { color: theme.primary }]}>
+          {cleanText(classmate.name).slice(0, 1) || '同'}
+        </Text>
       </View>
       <View style={styles.classmateBody}>
-        <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={1}>{cleanText(classmate.name) || '未命名同學'}</Text>
+        <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={1}>
+          {cleanText(classmate.name) || '未命名同學'}
+        </Text>
         <Text style={[styles.itemMeta, { color: theme.textSub }]} numberOfLines={1}>
           {cleanText(classmate.departmentClass) || cleanText(classmate.id) || '課輔同學'}
         </Text>
-        {cleanText(classmate.email) ? <Text style={[styles.itemMeta, { color: theme.textSub }]} numberOfLines={1}>{cleanText(classmate.email)}</Text> : null}
+        {cleanText(classmate.email) ? (
+          <Text style={[styles.itemMeta, { color: theme.textSub }]} numberOfLines={1}>
+            {cleanText(classmate.email)}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -545,15 +696,24 @@ export default function TutoringCourseDetailScreen({
     if (activeTab === 'course') return renderCourseDetails();
 
     const activeItems =
-      activeTab === 'announcements' ? announcements :
-      activeTab === 'materials' ? materials :
-      activeTab === 'assignments' ? assignments :
-      activeTab === 'progress' ? progress :
-      classmates;
+      activeTab === 'announcements'
+        ? announcements
+        : activeTab === 'materials'
+          ? materials
+          : activeTab === 'assignments'
+            ? assignments
+            : activeTab === 'progress'
+              ? progress
+              : classmates;
 
     if (isSyncing && activeItems.length === 0) {
       return (
-        <View style={[styles.stateCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+        <View
+          style={[
+            styles.stateCard,
+            { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+          ]}
+        >
           <ActivityIndicator size="small" color={theme.primary} />
           <Text style={[styles.stateText, { color: theme.textSub }]}>
             {statusText || '同步課程詳情中'}
@@ -565,7 +725,12 @@ export default function TutoringCourseDetailScreen({
     if (activeItems.length === 0) {
       const label = TABS.find((tab) => tab.key === activeTab)?.label ?? '資料';
       return (
-        <View style={[styles.stateCard, { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text }]}>
+        <View
+          style={[
+            styles.stateCard,
+            { backgroundColor: theme.card, borderColor: '#FFFFFF', shadowColor: theme.text },
+          ]}
+        >
           <Text style={[styles.stateTitle, { color: theme.text }]}>尚無{label}</Text>
           <Text style={[styles.stateText, { color: theme.textSub }]}>
             下拉重新整理可再次向課輔系統同步。
@@ -592,7 +757,9 @@ export default function TutoringCourseDetailScreen({
       onPress={() => downloadAttachment(kind, attachment, { homeSn })}
     >
       <AppSymbol name="paperclip" size={15} tintColor={theme.primary} fallback={<Text>↧</Text>} />
-      <Text style={[styles.attachmentText, { color: theme.text }]} numberOfLines={1}>{attachmentLabel(attachment)}</Text>
+      <Text style={[styles.attachmentText, { color: theme.text }]} numberOfLines={1}>
+        {attachmentLabel(attachment)}
+      </Text>
     </Pressable>
   );
 
@@ -600,36 +767,44 @@ export default function TutoringCourseDetailScreen({
     if (!detailItem) return null;
     const isAnnouncement = detailItem.type === 'announcement';
     const latestAnnouncement = isAnnouncement
-      ? announcements.find((announcement) => (
-          detailItem.item.serialNo != null &&
-          announcement.serialNo === detailItem.item.serialNo
-        )) ?? announcements.find((announcement) => (
-          cleanText(announcement.title) === cleanText(detailItem.item.title)
-        )) ?? detailItem.item
+      ? (announcements.find(
+          (announcement) =>
+            detailItem.item.serialNo != null && announcement.serialNo === detailItem.item.serialNo,
+        ) ??
+        announcements.find(
+          (announcement) => cleanText(announcement.title) === cleanText(detailItem.item.title),
+        ) ??
+        detailItem.item)
       : null;
     const detailAnnouncement = latestAnnouncement ?? (isAnnouncement ? detailItem.item : null);
     const title = isAnnouncement
       ? cleanText(detailItem.item.title) || '公告詳情'
       : cleanText(detailItem.item.title) || '作業詳情';
-    const announcementBody = isAnnouncement
-      ? formatAnnouncementBody(detailAnnouncement)
-      : '';
+    const announcementBody = isAnnouncement ? formatAnnouncementBody(detailAnnouncement) : '';
 
     return (
       <Modal visible transparent animationType="slide" onRequestClose={() => setDetailItem(null)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]} numberOfLines={2}>{title}</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]} numberOfLines={2}>
+                {title}
+              </Text>
               <Pressable style={styles.closeButton} onPress={() => setDetailItem(null)}>
-                <AppSymbol name="xmark" size={16} tintColor={theme.textSub} fallback={<Text>×</Text>} />
+                <AppSymbol
+                  name="xmark"
+                  size={16}
+                  tintColor={theme.textSub}
+                  fallback={<Text>×</Text>}
+                />
               </Pressable>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               {isAnnouncement ? (
                 <>
                   <Text style={[styles.modalMeta, { color: theme.textSub }]}>
-                    {cleanText(detailAnnouncement?.teacherName) || '課輔系統'} · {formatDateTime(detailAnnouncement?.createdAt)}
+                    {cleanText(detailAnnouncement?.teacherName) || '課輔系統'} ·{' '}
+                    {formatDateTime(detailAnnouncement?.createdAt)}
                   </Text>
                   <Text style={[styles.modalBody, { color: theme.text }]} selectable>
                     {announcementBody || title}
@@ -637,44 +812,70 @@ export default function TutoringCourseDetailScreen({
                   {(detailAnnouncement?.attachments ?? []).length > 0 ? (
                     <View style={styles.modalSection}>
                       <Text style={[styles.modalSectionTitle, { color: theme.text }]}>附件</Text>
-                      {(detailAnnouncement?.attachments ?? []).map((attachment) => renderAttachmentButton(attachment, 'announcement'))}
+                      {(detailAnnouncement?.attachments ?? []).map((attachment) =>
+                        renderAttachmentButton(attachment, 'announcement'),
+                      )}
                     </View>
                   ) : null}
                 </>
               ) : (
                 <>
                   <View style={styles.modalSection}>
-                    <Text style={[styles.modalMeta, { color: theme.textSub }]}>截止 {formatDateTime(detailItem.item.endAt)}</Text>
+                    <Text style={[styles.modalMeta, { color: theme.textSub }]}>
+                      截止 {formatDateTime(detailItem.item.endAt)}
+                    </Text>
                     <Text style={[styles.modalMeta, { color: theme.textSub }]}>
                       剩餘繳交次數 {detailItem.item.remainingSubmissionCount ?? '未提供'}
                     </Text>
                     <Text style={[styles.modalMeta, { color: theme.textSub }]}>
                       已使用 {detailItem.item.usedCount ?? 0}
-                      {detailItem.item.maxSubmissionCount != null ? ` / ${detailItem.item.maxSubmissionCount}` : ''}
+                      {detailItem.item.maxSubmissionCount != null
+                        ? ` / ${detailItem.item.maxSubmissionCount}`
+                        : ''}
                     </Text>
                   </View>
                   {detailItem.item.commentText ? (
                     <View style={styles.modalSection}>
-                      <Text style={[styles.modalSectionTitle, { color: theme.text }]}>作業說明</Text>
-                      <Text style={[styles.modalBody, { color: theme.text }]} selectable>{cleanText(detailItem.item.commentText)}</Text>
+                      <Text style={[styles.modalSectionTitle, { color: theme.text }]}>
+                        作業說明
+                      </Text>
+                      <Text style={[styles.modalBody, { color: theme.text }]} selectable>
+                        {cleanText(detailItem.item.commentText)}
+                      </Text>
                     </View>
                   ) : null}
                   {(detailItem.item.attachments ?? []).length > 0 ? (
                     <View style={styles.modalSection}>
-                      <Text style={[styles.modalSectionTitle, { color: theme.text }]}>作業附件</Text>
-                      {(detailItem.item.attachments ?? []).map((attachment) => renderAttachmentButton(attachment, 'assignment', detailItem.item.homeSn))}
+                      <Text style={[styles.modalSectionTitle, { color: theme.text }]}>
+                        作業附件
+                      </Text>
+                      {(detailItem.item.attachments ?? []).map((attachment) =>
+                        renderAttachmentButton(attachment, 'assignment', detailItem.item.homeSn),
+                      )}
                     </View>
                   ) : null}
                   <View style={styles.modalSection}>
-                    <Text style={[styles.modalSectionTitle, { color: theme.text }]}>已繳交作業</Text>
-                    {(detailItem.item.submittedFiles ?? []).length > 0
-                      ? (detailItem.item.submittedFiles ?? []).map((attachment) => renderAttachmentButton(attachment, 'submitted', detailItem.item.homeSn))
-                      : <Text style={[styles.modalMeta, { color: theme.textSub }]}>尚未同步到已繳交檔案</Text>}
+                    <Text style={[styles.modalSectionTitle, { color: theme.text }]}>
+                      已繳交作業
+                    </Text>
+                    {(detailItem.item.submittedFiles ?? []).length > 0 ? (
+                      (detailItem.item.submittedFiles ?? []).map((attachment) =>
+                        renderAttachmentButton(attachment, 'submitted', detailItem.item.homeSn),
+                      )
+                    ) : (
+                      <Text style={[styles.modalMeta, { color: theme.textSub }]}>
+                        尚未同步到已繳交檔案
+                      </Text>
+                    )}
                   </View>
                   {detailItem.item.reviewText ? (
                     <View style={styles.modalSection}>
-                      <Text style={[styles.modalSectionTitle, { color: theme.text }]}>批改回饋</Text>
-                      <Text style={[styles.modalBody, { color: theme.text }]} selectable>{cleanText(detailItem.item.reviewText)}</Text>
+                      <Text style={[styles.modalSectionTitle, { color: theme.text }]}>
+                        批改回饋
+                      </Text>
+                      <Text style={[styles.modalBody, { color: theme.text }]} selectable>
+                        {cleanText(detailItem.item.reviewText)}
+                      </Text>
                     </View>
                   ) : null}
                   {detailItem.item.uploadable ? (
@@ -683,7 +884,9 @@ export default function TutoringCourseDetailScreen({
                       onPress={() => runUpload(detailItem.item)}
                       disabled={busyAction === 'upload'}
                     >
-                      {busyAction === 'upload' ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+                      {busyAction === 'upload' ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : null}
                       <Text style={styles.primaryButtonText}>上傳作業</Text>
                     </Pressable>
                   ) : null}
@@ -704,7 +907,12 @@ export default function TutoringCourseDetailScreen({
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing || isSyncing} onRefresh={handleRefresh} tintColor={theme.primary} colors={[theme.primary]} />
+          <RefreshControl
+            refreshing={refreshing || isSyncing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
         }
       >
         <View style={[styles.segmentedControl, { shadowColor: theme.text }]}>
@@ -724,7 +932,11 @@ export default function TutoringCourseDetailScreen({
                       size={20}
                       tintColor={color}
                       weight={active ? 'bold' : 'semibold'}
-                      fallback={<Text style={[styles.segmentIconFallback, { color }]}>{active ? '●' : '○'}</Text>}
+                      fallback={
+                        <Text style={[styles.segmentIconFallback, { color }]}>
+                          {active ? '●' : '○'}
+                        </Text>
+                      }
                     />
                   </View>
                   <View style={styles.segmentLabelRow}>
@@ -751,11 +963,14 @@ export default function TutoringCourseDetailScreen({
           </View>
         </View>
 
-        <View style={styles.listStack}>
-          {renderItems()}
-        </View>
+        <View style={styles.listStack}>{renderItems()}</View>
 
-        <Text style={[styles.syncLine, { color: syncPhase === 'error' ? theme.danger || '#FF3B30' : theme.textSub }]}>
+        <Text
+          style={[
+            styles.syncLine,
+            { color: syncPhase === 'error' ? theme.danger || '#FF3B30' : theme.textSub },
+          ]}
+        >
           {statusText || '下拉可同步最新課輔資料'}
         </Text>
 
@@ -849,7 +1064,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     borderWidth: StyleSheet.hairlineWidth,
     shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 26,
     elevation: 12,
   },

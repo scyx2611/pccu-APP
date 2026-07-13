@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -50,30 +50,26 @@ export default function SecurityScreen() {
       return;
     }
 
-    Alert.alert(
-      '需要重新登入',
-      '開啟儲存帳號密碼後，需重新登入才會套用這項設定。',
-      [
-        {
-          text: '取消',
-          style: 'cancel',
-          onPress: () => {
-            setRememberCredentialsEnabledState(false);
-          },
+    Alert.alert('需要重新登入', '開啟儲存帳號密碼後，需重新登入才會套用這項設定。', [
+      {
+        text: '取消',
+        style: 'cancel',
+        onPress: () => {
+          setRememberCredentialsEnabledState(false);
         },
-        {
-          text: '重新登入',
-          onPress: () => {
-            void (async () => {
-              setRememberCredentialsEnabledState(true);
-              await setRememberCredentialsEnabled(true);
-              await logoutPCCU();
-              router.replace('/');
-            })();
-          },
+      },
+      {
+        text: '重新登入',
+        onPress: () => {
+          void (async () => {
+            setRememberCredentialsEnabledState(true);
+            await setRememberCredentialsEnabled(true);
+            await logoutPCCU();
+            router.replace('/');
+          })();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const continueEnableBiometricLogin = async () => {
@@ -93,7 +89,7 @@ export default function SecurityScreen() {
         `無法啟用${biometricLabel}`,
         Platform.OS === 'ios'
           ? '這台裝置尚未設定 Face ID，或目前執行環境不支援。'
-          : '這台裝置尚未設定生物辨識，或目前執行環境不支援。'
+          : '這台裝置尚未設定生物辨識，或目前執行環境不支援。',
       );
       setBiometricLoginEnabledState(false);
       await setBiometricLoginEnabled(false);
@@ -126,7 +122,7 @@ export default function SecurityScreen() {
     if (!rememberCredentialsEnabled) {
       Alert.alert(
         '需先開啟儲存帳號密碼',
-        `${biometricLabel} 登入必須搭配已儲存的帳號密碼使用，請先開啟「儲存帳號密碼」。`
+        `${biometricLabel} 登入必須搭配已儲存的帳號密碼使用，請先開啟「儲存帳號密碼」。`,
       );
       setBiometricLoginEnabledState(false);
       await setBiometricLoginEnabled(false);
@@ -151,7 +147,7 @@ export default function SecurityScreen() {
               void continueEnableBiometricLogin();
             },
           },
-        ]
+        ],
       );
       return;
     }
@@ -167,11 +163,13 @@ export default function SecurityScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.sectionTitle, { color: theme.textSub }]}>登入安全</Text>
-      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}> 
+      <View style={[styles.insetGroup, { backgroundColor: theme.card }]}>
         <View style={styles.switchRow}>
           <View style={styles.textWrap}>
             <Text style={[styles.cellTitle, { color: theme.text }]}>儲存帳號密碼</Text>
-            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>開啟後，下次登入成功會自動記住帳號與密碼。</Text>
+            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
+              開啟後，下次登入成功會自動記住帳號與密碼。
+            </Text>
           </View>
           <Switch
             value={rememberCredentialsEnabled}
@@ -185,8 +183,12 @@ export default function SecurityScreen() {
 
         <View style={styles.switchRow}>
           <View style={styles.textWrap}>
-            <Text style={[styles.cellTitle, { color: theme.text }]}>{`使用${biometricLabel}登入`}</Text>
-            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>需先儲存帳號密碼，之後自動登入前會先通過 {biometricLabel} 或生物辨識驗證。</Text>
+            <Text
+              style={[styles.cellTitle, { color: theme.text }]}
+            >{`使用${biometricLabel}登入`}</Text>
+            <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
+              需先儲存帳號密碼，之後自動登入前會先通過 {biometricLabel} 或生物辨識驗證。
+            </Text>
           </View>
           <Switch
             value={biometricLoginEnabled}
@@ -198,8 +200,10 @@ export default function SecurityScreen() {
         </View>
       </View>
 
-      <View style={[styles.noteCard, { backgroundColor: theme.card }]}> 
-        <Text style={[styles.noteText, { color: theme.textSub }]}>登入安全設定只會影響帳密保存與登入前驗證流程，不會改動課表、成績與其他同步資料。</Text>
+      <View style={[styles.noteCard, { backgroundColor: theme.card }]}>
+        <Text style={[styles.noteText, { color: theme.textSub }]}>
+          登入安全設定只會影響帳密保存與登入前驗證流程，不會改動課表、成績與其他同步資料。
+        </Text>
       </View>
 
       <View style={styles.bottomSpacer} />

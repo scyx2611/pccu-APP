@@ -51,7 +51,7 @@ export function useGradeSync() {
         syncInProgressRef.current = false;
       }
     },
-    [setSyncStatus, setLastSyncedAt, setError, setGrades]
+    [setSyncStatus, setLastSyncedAt, setError, setGrades],
   );
 
   return { sync, syncInProgress: syncInProgressRef.current };

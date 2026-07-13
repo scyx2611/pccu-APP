@@ -53,7 +53,7 @@ export function useScheduleSync() {
         syncInProgressRef.current = false;
       }
     },
-    [setSyncStatus, setLastSyncedAt, setError, setCourses]
+    [setSyncStatus, setLastSyncedAt, setError, setCourses],
   );
 
   return { sync, syncInProgress: syncInProgressRef.current };

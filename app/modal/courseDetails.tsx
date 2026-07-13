@@ -27,11 +27,22 @@ export default function CourseDetailsScreen() {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <Stack.Screen options={{ title: '課程詳細' }} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-
         <View style={styles.header}>
           <Text style={[styles.courseName, { color: theme.text }]}>{course.name}</Text>
-          <View style={[styles.badge, course.required ? { backgroundColor: 'rgba(255,59,48,0.1)' } : { backgroundColor: 'rgba(52,199,89,0.1)' }]}>
-            <Text style={[styles.badgeText, course.required ? { color: theme.danger } : { color: theme.success }]}>
+          <View
+            style={[
+              styles.badge,
+              course.required
+                ? { backgroundColor: 'rgba(255,59,48,0.1)' }
+                : { backgroundColor: 'rgba(52,199,89,0.1)' },
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgeText,
+                course.required ? { color: theme.danger } : { color: theme.success },
+              ]}
+            >
               {course.required ? '必修' : '選修'}
             </Text>
           </View>
@@ -87,8 +98,15 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 14, fontWeight: '700' },
   insetGroup: { borderRadius: 12, overflow: 'hidden' },
   cellRow: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  iconBox: { width: 30, height: 30, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  iconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   cellLabel: { flex: 1, fontSize: 16 },
   cellValue: { fontSize: 16, fontWeight: '500' },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: 58 }
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: 58 },
 });

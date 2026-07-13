@@ -38,7 +38,7 @@ export function clearScraperDebugPreviewFrame(): void {
 }
 
 export function subscribeScraperDebugPreviewFrame(
-  listener: ScraperDebugPreviewListener
+  listener: ScraperDebugPreviewListener,
 ): () => void {
   listeners.add(listener);
   return () => {
@@ -58,7 +58,7 @@ export function setScraperDebugRuntimeState(state: ScraperDebugRuntimeState): vo
 }
 
 export function subscribeScraperDebugRuntimeState(
-  listener: ScraperDebugRuntimeListener
+  listener: ScraperDebugRuntimeListener,
 ): () => void {
   runtimeListeners.add(listener);
   return () => {

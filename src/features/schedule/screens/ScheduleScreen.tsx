@@ -47,7 +47,15 @@ type ScheduleScreenProps = {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const CALENDAR_WEEKDAYS = ['\u65e5', '\u4e00', '\u4e8c', '\u4e09', '\u56db', '\u4e94', '\u516d'] as const;
+const CALENDAR_WEEKDAYS = [
+  '\u65e5',
+  '\u4e00',
+  '\u4e8c',
+  '\u4e09',
+  '\u56db',
+  '\u4e94',
+  '\u516d',
+] as const;
 
 const getDateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -55,7 +63,7 @@ const getDateKey = (date: Date) =>
 const buildCalendarMonthCells = (monthDate: Date) => {
   const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
   const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
-  const cells: Array<Date | null> = Array.from({ length: firstDay.getDay() }, () => null);
+  const cells: (Date | null)[] = Array.from({ length: firstDay.getDay() }, () => null);
 
   for (let day = 1; day <= daysInMonth; day += 1) {
     cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
@@ -65,7 +73,8 @@ const buildCalendarMonthCells = (monthDate: Date) => {
   return cells;
 };
 
-const formatCalendarMonthTitle = (date: Date) => `${date.getFullYear()}\u5e74 ${date.getMonth() + 1}\u6708`;
+const formatCalendarMonthTitle = (date: Date) =>
+  `${date.getFullYear()}\u5e74 ${date.getMonth() + 1}\u6708`;
 
 const STATUS_META: Record<
   TimelineCourseStatus,
@@ -114,7 +123,10 @@ const normalizeCourseType = (course: CourseData) => {
   return '\u9078\u4fee';
 };
 
-export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTick = 0 }: ScheduleScreenProps) {
+export default function ScheduleScreen({
+  animationTestTick = 0,
+  manualRefreshTick = 0,
+}: ScheduleScreenProps) {
   const { theme } = useTheme();
   const courses = useScheduleStore((state) => state.courses);
   const lastSyncedAt = useScheduleStore((state) => state.lastSyncedAt);
@@ -135,7 +147,9 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(toJsDay(new Date().getDay()));
-  const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() => getScraperDebugRuntimeState());
+  const [debugRuntime, setDebugRuntime] = useState<ScraperDebugRuntimeState>(() =>
+    getScraperDebugRuntimeState(),
+  );
   const highlightAnim = useRef(new Animated.Value(1)).current;
   const manualRefreshMountedRef = useRef(false);
   const animationTestMountedRef = useRef(false);
@@ -146,7 +160,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
 
   const dateChips = useMemo(
     () => buildScheduleDateChips(courses, scheduleAnchorDate, selectedDayOfWeek),
-    [courses, scheduleAnchorDate, selectedDayOfWeek]
+    [courses, scheduleAnchorDate, selectedDayOfWeek],
   );
 
   useEffect(() => {
@@ -157,17 +171,20 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
 
   const selectedDate = useMemo(
     () => getDateForDayOfWeek(scheduleAnchorDate, selectedDayOfWeek),
-    [scheduleAnchorDate, selectedDayOfWeek]
+    [scheduleAnchorDate, selectedDayOfWeek],
   );
   const selectedCourses = useMemo(
     () => getCoursesForScheduleDay(courses, selectedDayOfWeek),
-    [courses, selectedDayOfWeek]
+    [courses, selectedDayOfWeek],
   );
   const selectedDateText = useMemo(() => formatScheduleFullDate(selectedDate), [selectedDate]);
   const selectedDateKey = useMemo(() => getDateKey(selectedDate), [selectedDate]);
   const todayDateKey = useMemo(() => getDateKey(now), [now]);
   const isViewingToday = selectedDateKey === todayDateKey;
-  const calendarMonthCells = useMemo(() => buildCalendarMonthCells(calendarMonthDate), [calendarMonthDate]);
+  const calendarMonthCells = useMemo(
+    () => buildCalendarMonthCells(calendarMonthDate),
+    [calendarMonthDate],
+  );
 
   const updatedAtLineText = buildUpdatedAtText({
     updatedAt: lastSyncedAt,
@@ -231,7 +248,9 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
   }, [selectedDate]);
 
   const moveCalendarMonth = useCallback((offset: number) => {
-    setCalendarMonthDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+    setCalendarMonthDate(
+      (current) => new Date(current.getFullYear(), current.getMonth() + offset, 1),
+    );
   }, []);
 
   const selectCalendarDate = useCallback((date: Date) => {
@@ -277,7 +296,7 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
       return () => {
         active = false;
       };
-    }, [hydrate, resetSync, sync])
+    }, [hydrate, resetSync, sync]),
   );
 
   const renderTimelineCard = (course: CourseData, index: number) => {
@@ -289,7 +308,10 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
     const showActivePulse = status === 'active';
 
     return (
-      <View style={styles.timelineRow} key={`${course.name}-${course.dayOfWeek}-${course.startPeriod}-${index}`}>
+      <View
+        style={styles.timelineRow}
+        key={`${course.name}-${course.dayOfWeek}-${course.startPeriod}-${index}`}
+      >
         <View style={styles.timelineColumn}>
           <View
             style={[
@@ -320,7 +342,9 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                 name={statusMeta.icon}
                 size={16}
                 tintColor={iconColor}
-                fallback={<Text style={{ color: iconColor }}>{status === 'active' ? 'Now' : 'Ok'}</Text>}
+                fallback={
+                  <Text style={{ color: iconColor }}>{status === 'active' ? 'Now' : 'Ok'}</Text>
+                }
               />
             </View>
           </View>
@@ -352,14 +376,24 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
             <View
               style={[
                 styles.statusPill,
-                { backgroundColor: status === 'active' ? '#EAF3FF' : statusMeta.pillBackgroundColor },
+                {
+                  backgroundColor: status === 'active' ? '#EAF3FF' : statusMeta.pillBackgroundColor,
+                },
               ]}
             >
               <AppSymbol
                 name={status === 'active' ? 'sparkles' : statusMeta.icon}
                 size={12}
                 tintColor={status === 'active' ? theme.primary : statusMeta.pillTextColor}
-                fallback={<Text style={{ color: status === 'active' ? theme.primary : statusMeta.pillTextColor }}>i</Text>}
+                fallback={
+                  <Text
+                    style={{
+                      color: status === 'active' ? theme.primary : statusMeta.pillTextColor,
+                    }}
+                  >
+                    i
+                  </Text>
+                }
               />
               <Text
                 style={[
@@ -425,7 +459,9 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                   tintColor={theme.textSub}
                   fallback={<Text style={{ color: theme.textSub }}>P</Text>}
                 />
-                <Text style={[styles.courseInfoText, { color: theme.textSub }]}>{course.teacher}</Text>
+                <Text style={[styles.courseInfoText, { color: theme.textSub }]}>
+                  {course.teacher}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -456,21 +492,20 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
-        refreshControl={(
+        refreshControl={
           <RefreshControl
             refreshing={pullRefreshing}
             onRefresh={handlePullRefresh}
             tintColor={theme.primary}
             colors={[theme.primary]}
           />
-        )}
+        }
       >
         <View style={styles.headerBlock}>
           <View style={styles.headerRow}>
             <View style={styles.headerTextBlock}>
               <Text style={[styles.headerDate, { color: theme.textSub }]}>{selectedDateText}</Text>
             </View>
-
           </View>
 
           <View style={styles.dateStripWrap}>
@@ -530,9 +565,13 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                   name="ellipsis"
                   size={20}
                   tintColor={theme.text}
-                  fallback={<Text style={[styles.moreDateChipText, { color: theme.text }]}>...</Text>}
+                  fallback={
+                    <Text style={[styles.moreDateChipText, { color: theme.text }]}>...</Text>
+                  }
                 />
-                <Text style={[styles.moreDateChipText, { color: theme.textSub }]}>{'\u66f4\u591a'}</Text>
+                <Text style={[styles.moreDateChipText, { color: theme.textSub }]}>
+                  {'\u66f4\u591a'}
+                </Text>
               </Pressable>
             </ScrollView>
             <LinearGradient
@@ -553,12 +592,19 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
         </View>
 
         {developerDebugEnabled ? (
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View
+            style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+          >
             <Text style={[styles.noticeTitle, { color: theme.text }]}>Debug</Text>
             <Text style={[styles.debugText, { color: theme.textSub }]}>
               Status: {syncStatus} | Error: {error ?? '-'}
             </Text>
-            <View style={[styles.debugPreviewSlot, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+            <View
+              style={[
+                styles.debugPreviewSlot,
+                { backgroundColor: theme.bg, borderColor: theme.border },
+              ]}
+            >
               <View style={styles.debugRuntimeStack}>
                 <View style={styles.debugRuntimeRow}>
                   <Text style={[styles.debugRuntimeLabel, { color: theme.textSub }]}>Mode</Text>
@@ -587,21 +633,31 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
         ) : null}
 
         {isLoading ? (
-          <View style={[styles.statusCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View
+            style={[styles.statusCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+          >
             <ActivityIndicator size="small" color={theme.primary} />
-            <Text style={[styles.statusText, { color: theme.textSub }]}>{'\u8ab2\u8868\u8f09\u5165\u4e2d...'}</Text>
+            <Text style={[styles.statusText, { color: theme.textSub }]}>
+              {'\u8ab2\u8868\u8f09\u5165\u4e2d...'}
+            </Text>
           </View>
         ) : null}
 
         {!isLoading && error ? (
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.noticeTitle, { color: theme.text }]}>{'\u540c\u6b65\u5931\u6557'}</Text>
+          <View
+            style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+          >
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>
+              {'\u540c\u6b65\u5931\u6557'}
+            </Text>
             <Text style={[styles.noticeText, { color: theme.textSub }]}>{error}</Text>
           </View>
         ) : null}
 
         {!isLoading && !error && selectedCourses.length === 0 ? (
-          <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View
+            style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+          >
             <AppSymbol
               name="calendar"
               size={30}
@@ -612,7 +668,9 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
               {isViewingToday ? '\u4eca\u5929\u6c92\u6709\u8ab2' : '\u7576\u5929\u6c92\u6709\u8ab2'}
             </Text>
             <Text style={[styles.emptyText, { color: theme.textSub }]}>
-              {'\u53ef\u4ee5\u5207\u63db\u4e0a\u65b9\u65e5\u671f\u67e5\u770b\u5176\u4ed6\u8ab2\u8868\u3002'}
+              {
+                '\u53ef\u4ee5\u5207\u63db\u4e0a\u65b9\u65e5\u671f\u67e5\u770b\u5176\u4ed6\u8ab2\u8868\u3002'
+              }
             </Text>
           </View>
         ) : null}
@@ -630,7 +688,9 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
               style={[styles.syncBadge, { backgroundColor: theme.card, borderColor: theme.border }]}
             >
               <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={[styles.syncBadgeText, { color: theme.primary }]}>{'\u66f4\u65b0\u4e2d'}</Text>
+              <Text style={[styles.syncBadgeText, { color: theme.primary }]}>
+                {'\u66f4\u65b0\u4e2d'}
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -652,7 +712,9 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
           >
             <View style={styles.calendarHeader}>
               <View style={styles.calendarTitleBlock}>
-                <Text style={[styles.calendarTitle, { color: theme.text }]}>{'\u884c\u4e8b\u66c6'}</Text>
+                <Text style={[styles.calendarTitle, { color: theme.text }]}>
+                  {'\u884c\u4e8b\u66c6'}
+                </Text>
                 <Text style={[styles.calendarSubtitle, { color: theme.textSub }]}>
                   {'\u9078\u64c7\u8981\u67e5\u770b\u7684\u65e5\u671f'}
                 </Text>
@@ -670,15 +732,25 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                   name="xmark"
                   size={16}
                   tintColor={theme.primary}
-                  fallback={<Text style={[styles.calendarCloseText, { color: theme.primary }]}>X</Text>}
+                  fallback={
+                    <Text style={[styles.calendarCloseText, { color: theme.primary }]}>X</Text>
+                  }
                 />
               </Pressable>
             </View>
 
-            <View style={[styles.calendarMonthCard, { backgroundColor: theme.syncBtnBg, borderColor: '#FFFFFF' }]}>
+            <View
+              style={[
+                styles.calendarMonthCard,
+                { backgroundColor: theme.syncBtnBg, borderColor: '#FFFFFF' },
+              ]}
+            >
               <Pressable
                 onPress={() => moveCalendarMonth(-1)}
-                style={({ pressed }) => [styles.calendarMonthButton, { opacity: pressed ? 0.55 : 1 }]}
+                style={({ pressed }) => [
+                  styles.calendarMonthButton,
+                  { opacity: pressed ? 0.55 : 1 },
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel="\u4e0a\u4e00\u500b\u6708"
               >
@@ -689,7 +761,10 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
               </Text>
               <Pressable
                 onPress={() => moveCalendarMonth(1)}
-                style={({ pressed }) => [styles.calendarMonthButton, { opacity: pressed ? 0.55 : 1 }]}
+                style={({ pressed }) => [
+                  styles.calendarMonthButton,
+                  { opacity: pressed ? 0.55 : 1 },
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel="\u4e0b\u4e00\u500b\u6708"
               >
@@ -697,10 +772,18 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
               </Pressable>
             </View>
 
-            <View style={[styles.calendarGridCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View
+              style={[
+                styles.calendarGridCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
               <View style={styles.calendarWeekdayRow}>
                 {CALENDAR_WEEKDAYS.map((weekday) => (
-                  <Text key={weekday} style={[styles.calendarWeekdayText, { color: theme.textSub }]}>
+                  <Text
+                    key={weekday}
+                    style={[styles.calendarWeekdayText, { color: theme.textSub }]}
+                  >
                     {weekday}
                   </Text>
                 ))}
@@ -712,7 +795,10 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                   const dateKey = getDateKey(date);
                   const isSelected = dateKey === selectedDateKey;
                   const isToday = dateKey === todayDateKey;
-                  const dayCourseCount = getCoursesForScheduleDay(courses, toJsDay(date.getDay())).length;
+                  const dayCourseCount = getCoursesForScheduleDay(
+                    courses,
+                    toJsDay(date.getDay()),
+                  ).length;
 
                   return (
                     <Pressable
@@ -721,7 +807,11 @@ export default function ScheduleScreen({ animationTestTick = 0, manualRefreshTic
                       style={({ pressed }) => [
                         styles.calendarDayCell,
                         {
-                          backgroundColor: isSelected ? theme.primary : isToday ? theme.syncBtnBg : 'transparent',
+                          backgroundColor: isSelected
+                            ? theme.primary
+                            : isToday
+                              ? theme.syncBtnBg
+                              : 'transparent',
                           opacity: pressed ? 0.72 : 1,
                         },
                       ]}
@@ -762,7 +852,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 0 },
   headerBlock: { marginTop: -8, marginBottom: 18 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
   headerTextBlock: { flex: 1, paddingRight: 0 },
   headerDate: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
   dateStripWrap: { position: 'relative' },
@@ -1017,4 +1112,3 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: { height: Platform.OS === 'ios' ? 92 : 84 },
 });
-

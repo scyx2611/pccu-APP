@@ -80,14 +80,15 @@ export function useCourseDetail(courseCode: string) {
     setIsLoading(true);
     setError(null);
     try {
-      const [annoData, matData, assignData, progressData, classmatesData, infoData] = await Promise.all([
-        getCourseDetail(courseCode, 'announcements'),
-        getCourseDetail(courseCode, 'materials'),
-        getCourseDetail(courseCode, 'assignments'),
-        getCourseDetail(courseCode, 'progress'),
-        getCourseDetail(courseCode, 'classmates'),
-        getCourseInfo(courseCode),
-      ]);
+      const [annoData, matData, assignData, progressData, classmatesData, infoData] =
+        await Promise.all([
+          getCourseDetail(courseCode, 'announcements'),
+          getCourseDetail(courseCode, 'materials'),
+          getCourseDetail(courseCode, 'assignments'),
+          getCourseDetail(courseCode, 'progress'),
+          getCourseDetail(courseCode, 'classmates'),
+          getCourseInfo(courseCode),
+        ]);
 
       setAnnouncements((annoData as TutoringAnnouncement[]) || []);
       setMaterials((matData as TutoringMaterial[]) || []);
@@ -124,13 +125,13 @@ export function useCourseDetail(courseCode: string) {
  */
 export function usePendingCount() {
   const { pendingAssignments } = useTutoringData();
-  
-  // Note: The prompt specifies filtering by 'status', but the TutoringAssignment type 
+
+  // Note: The prompt specifies filtering by 'status', but the TutoringAssignment type
   // uses 'stateCode'. Based on tutoringScripts.ts:
   // stateCode === '' (empty string) represents 'pending' (unsubmitted)
   // stateCode === '4' represents 'resubmit'
   const count = pendingAssignments.filter(
-    (assignment) => assignment.stateCode === '' || assignment.stateCode === '4'
+    (assignment) => assignment.stateCode === '' || assignment.stateCode === '4',
   ).length;
 
   return { count };

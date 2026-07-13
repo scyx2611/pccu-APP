@@ -112,7 +112,13 @@ describe('pccuScraper parser', () => {
 
     expect(semesters).toHaveLength(1);
     expect(semesters[0].courses).toEqual([
-      expect.objectContaining({ type: '必修', code: '', name: '程式設計', credits: '3', score: '88' }),
+      expect.objectContaining({
+        type: '必修',
+        code: '',
+        name: '程式設計',
+        credits: '3',
+        score: '88',
+      }),
     ]);
   });
 
@@ -200,7 +206,7 @@ describe('pccuScraper parser', () => {
         dayOfWeek: 1,
         startPeriod: 1,
         endPeriod: 2,
-      })
+      }),
     );
   });
 

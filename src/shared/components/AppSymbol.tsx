@@ -57,12 +57,19 @@ export default function AppSymbol({
   style,
   fallback,
 }: AppSymbolProps) {
-  const iosVersion = typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10);
+  const iosVersion =
+    typeof Platform.Version === 'number'
+      ? Platform.Version
+      : parseInt(String(Platform.Version), 10);
   const resolvedFallback =
-    typeof fallback === 'string' || typeof fallback === 'number'
-      ? <Text style={{ fontSize: size, color: tintColor }}>{String(fallback)}</Text>
-      : fallback;
-  const defaultFallback = resolvedFallback ?? <Text style={{ fontSize: size, color: tintColor }}>?</Text>;
+    typeof fallback === 'string' || typeof fallback === 'number' ? (
+      <Text style={{ fontSize: size, color: tintColor }}>{String(fallback)}</Text>
+    ) : (
+      fallback
+    );
+  const defaultFallback = resolvedFallback ?? (
+    <Text style={{ fontSize: size, color: tintColor }}>?</Text>
+  );
 
   if (Platform.OS === 'ios' && iosVersion >= 17) {
     return (

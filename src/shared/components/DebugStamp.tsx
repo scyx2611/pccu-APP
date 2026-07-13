@@ -7,7 +7,12 @@ export default function DebugStamp({ label }: { label: string }) {
 
   return (
     <View style={styles.wrap} pointerEvents="none">
-      <Text style={[styles.text, { color: theme.text, backgroundColor: theme.card, borderColor: theme.border }]}>
+      <Text
+        style={[
+          styles.text,
+          { color: theme.text, backgroundColor: theme.card, borderColor: theme.border },
+        ]}
+      >
         {label}
       </Text>
     </View>

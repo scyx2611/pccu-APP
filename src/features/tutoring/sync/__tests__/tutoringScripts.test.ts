@@ -47,7 +47,9 @@ describe('buildTutoringSingleCourseScript', () => {
     expect(script).toContain('clickCourseEntry(courseNavigationHints)');
     expect(script).toContain('clickCourseProgressTab()');
     expect(script).toContain('/^(?:進度|progress)(?:\\s*\\d+)?$/i.test(text)');
-    expect(script).toContain("var selectors = 'a, button, input, td, [role=\"tab\"], [onclick], li, span';");
+    expect(script).toContain(
+      'var selectors = \'a, button, input, td, [role="tab"], [onclick], li, span\';',
+    );
     expect(script).not.toContain('progressHashCandidates');
     expect(script).not.toContain('tryProgressHashCandidates');
     expect(script).toContain('readProgressAfterNavigation');
@@ -57,7 +59,9 @@ describe('buildTutoringSingleCourseScript', () => {
     expect(script).toContain('startIndex');
     expect(script).toContain('weekPrefixMatch');
     expect(script).not.toContain('prefix.match(/(d{1,2})s*$/)');
-    expect(script).toContain("source.replace(/(^|\\s)(\\d{1,2})(20\\d{2}[\\/.-]\\d{1,2}[\\/.-]\\d{1,2})/g, '$1$2 $3')");
+    expect(script).toContain(
+      "source.replace(/(^|\\s)(\\d{1,2})(20\\d{2}[\\/.-]\\d{1,2}[\\/.-]\\d{1,2})/g, '$1$2 $3')",
+    );
     expect(script).toContain('Detail');
     expect(script).toContain('progress_probe');
     expect(script).toContain("progressSource = progress.length > 0 ? 'schedule_html'");
@@ -77,26 +81,27 @@ describe('buildTutoringSingleCourseScript', () => {
 
 describe('tutoring injected text normalization', () => {
   it('decodes HTML entities in classmate names before posting detail data', () => {
-    const classmate = runHelperExpression<{ name: string }>(
-      "normalizeClassmateRow(value, 0)",
-      { ID: 'A001', Name: '&#x9673;&#x5927;&#x6587;' },
-    );
+    const classmate = runHelperExpression<{ name: string }>('normalizeClassmateRow(value, 0)', {
+      ID: 'A001',
+      Name: '&#x9673;&#x5927;&#x6587;',
+    });
 
     expect(classmate.name).toBe('陳大文');
   });
 
   it('uses the clearest available classmate name when one source is mojibake', () => {
-    const classmate = runHelperExpression<{ name: string }>(
-      "normalizeClassmateRow(value, 0)",
-      { ID: 'A002', Name: '\u00e7\u008e\u008b\u00e5\u00b0\u008f\u00e6\u0098\u008e', StdName: '王小明' },
-    );
+    const classmate = runHelperExpression<{ name: string }>('normalizeClassmateRow(value, 0)', {
+      ID: 'A002',
+      Name: '\u00e7\u008e\u008b\u00e5\u00b0\u008f\u00e6\u0098\u008e',
+      StdName: '王小明',
+    });
 
     expect(classmate.name).toBe('王小明');
   });
 
   it('decodes progress titles and values before posting detail data', () => {
     const progress = runHelperExpression<{ title: string; value: string }>(
-      "normalizeProgressRow(value, 0)",
+      'normalizeProgressRow(value, 0)',
       { Title: '&#x8AB2;&#x7A0B;&#x9032;&#x5EA6;', Value: '&#49;&#48;&#48;&#37;' },
     );
 
@@ -105,10 +110,10 @@ describe('tutoring injected text normalization', () => {
   });
 
   it('uses the clearest available progress title when one source is mojibake', () => {
-    const progress = runHelperExpression<{ title: string }>(
-      "normalizeProgressRow(value, 0)",
-      { Title: '\u00e8\u00aa\u00b2\u00e7\u00a8\u008b\u00e9\u0080\u00b2\u00e5\u00ba\u00a6', Label: '課程進度' },
-    );
+    const progress = runHelperExpression<{ title: string }>('normalizeProgressRow(value, 0)', {
+      Title: '\u00e8\u00aa\u00b2\u00e7\u00a8\u008b\u00e9\u0080\u00b2\u00e5\u00ba\u00a6',
+      Label: '課程進度',
+    });
 
     expect(progress.title).toBe('課程進度');
   });
@@ -116,8 +121,8 @@ describe('tutoring injected text normalization', () => {
 
 describe('tutoring progress HTML extraction', () => {
   it('extracts week, date, title, and reading notes from a single course progress page', () => {
-    const rows = runHelperExpression<Array<{ Title: string; Value: string }>>(
-      "parseCourseScheduleProgressText(value)",
+    const rows = runHelperExpression<{ Title: string; Value: string }[]>(
+      'parseCourseScheduleProgressText(value)',
       [
         '4026 企業管理',
         '1 2026/02/24 課程說明',
@@ -127,15 +132,30 @@ describe('tutoring progress HTML extraction', () => {
     );
 
     expect(rows).toEqual([
-      { ID: 'course-schedule-progress-0', Title: '第 1 週 課程說明', Value: '2026/02/24', Percent: null },
-      { ID: 'course-schedule-progress-1', Title: '第 2 週 管理學概論(1)', Value: '2026/03/03 · Reading: chapter 01', Percent: null },
-      { ID: 'course-schedule-progress-2', Title: '第 3 週 管理學概論(2)', Value: '2026/03/10', Percent: null },
+      {
+        ID: 'course-schedule-progress-0',
+        Title: '第 1 週 課程說明',
+        Value: '2026/02/24',
+        Percent: null,
+      },
+      {
+        ID: 'course-schedule-progress-1',
+        Title: '第 2 週 管理學概論(1)',
+        Value: '2026/03/03 · Reading: chapter 01',
+        Percent: null,
+      },
+      {
+        ID: 'course-schedule-progress-2',
+        Title: '第 3 週 管理學概論(2)',
+        Value: '2026/03/10',
+        Percent: null,
+      },
     ]);
   });
 
   it('extracts progress rows from the public fullcontent syllabus format', () => {
-    const rows = runHelperExpression<Array<{ Title: string; Value: string }>>(
-      "parseCourseScheduleProgressText(value)",
+    const rows = runHelperExpression<{ Title: string; Value: string }[]>(
+      'parseCourseScheduleProgressText(value)',
       [
         '課程進度',
         '  1. 2026/02/24  | 課程說明',
@@ -146,15 +166,30 @@ describe('tutoring progress HTML extraction', () => {
     );
 
     expect(rows).toEqual([
-      { ID: 'course-schedule-progress-0', Title: '第 1 週 課程說明', Value: '2026/02/24', Percent: null },
-      { ID: 'course-schedule-progress-1', Title: '第 2 週 管理學概論(1)', Value: '2026/03/03 · Reading: chapter 01', Percent: null },
-      { ID: 'course-schedule-progress-2', Title: '第 3 週 管理學概論(2)', Value: '2026/03/10', Percent: null },
+      {
+        ID: 'course-schedule-progress-0',
+        Title: '第 1 週 課程說明',
+        Value: '2026/02/24',
+        Percent: null,
+      },
+      {
+        ID: 'course-schedule-progress-1',
+        Title: '第 2 週 管理學概論(1)',
+        Value: '2026/03/03 · Reading: chapter 01',
+        Percent: null,
+      },
+      {
+        ID: 'course-schedule-progress-2',
+        Title: '第 3 週 管理學概論(2)',
+        Value: '2026/03/10',
+        Percent: null,
+      },
     ]);
   });
 
   it('extracts date-only progress rows from the current public fullcontent format', () => {
-    const rows = runHelperExpression<Array<{ Title: string; Value: string }>>(
-      "parseCourseScheduleProgressText(value)",
+    const rows = runHelperExpression<{ Title: string; Value: string }[]>(
+      'parseCourseScheduleProgressText(value)',
       [
         '課程進度',
         '2026/02/24 課程說明',
@@ -165,10 +200,30 @@ describe('tutoring progress HTML extraction', () => {
     );
 
     expect(rows).toEqual([
-      { ID: 'course-schedule-progress-0', Title: '第 1 週 課程說明', Value: '2026/02/24', Percent: null },
-      { ID: 'course-schedule-progress-1', Title: '第 2 週 管理學概論(1)', Value: '2026/03/03 · Reading: chapter 01', Percent: null },
-      { ID: 'course-schedule-progress-2', Title: '第 3 週 管理學概論(2)', Value: '2026/03/10', Percent: null },
-      { ID: 'course-schedule-progress-3', Title: '第 4 週 人力資源管理', Value: '2026/05/05', Percent: null },
+      {
+        ID: 'course-schedule-progress-0',
+        Title: '第 1 週 課程說明',
+        Value: '2026/02/24',
+        Percent: null,
+      },
+      {
+        ID: 'course-schedule-progress-1',
+        Title: '第 2 週 管理學概論(1)',
+        Value: '2026/03/03 · Reading: chapter 01',
+        Percent: null,
+      },
+      {
+        ID: 'course-schedule-progress-2',
+        Title: '第 3 週 管理學概論(2)',
+        Value: '2026/03/10',
+        Percent: null,
+      },
+      {
+        ID: 'course-schedule-progress-3',
+        Title: '第 4 週 人力資源管理',
+        Value: '2026/05/05',
+        Percent: null,
+      },
     ]);
   });
 
@@ -180,11 +235,7 @@ describe('tutoring progress HTML extraction', () => {
         title: '我的課程',
         activeText: '我的課程',
         headerText: '我的課程',
-        bodyText: [
-          '4026 企業管理',
-          '2026/05/05 體育',
-          '2026/04/13 商用軟體應用與設計',
-        ].join('\n'),
+        bodyText: ['4026 企業管理', '2026/05/05 體育', '2026/04/13 商用軟體應用與設計'].join('\n'),
       },
     );
 
@@ -214,11 +265,9 @@ describe('tutoring progress HTML extraction', () => {
         title: '',
         activeText: '進度',
         headerText: '',
-        bodyText: [
-          '4026 企業管理',
-          '1 2026/02/24 課程說明',
-          '2 2026/03/03 管理學概論(1)',
-        ].join('\n'),
+        bodyText: ['4026 企業管理', '1 2026/02/24 課程說明', '2 2026/03/03 管理學概論(1)'].join(
+          '\n',
+        ),
       },
     );
 
@@ -233,10 +282,7 @@ describe('tutoring progress HTML extraction', () => {
         title: '',
         activeText: '我的課程',
         headerText: '',
-        bodyText: [
-          '4026 企業管理',
-          '1 2026/02/24 課程說明',
-        ].join('\n'),
+        bodyText: ['4026 企業管理', '1 2026/02/24 課程說明'].join('\n'),
       },
     );
 

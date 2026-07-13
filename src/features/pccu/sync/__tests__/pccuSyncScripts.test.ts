@@ -29,7 +29,9 @@ describe('buildLoginScript', () => {
     expect(script).toContain('function isUsableCredentialField(node)');
     expect(script).toContain('var accountFilled = isFieldFilled(accountInput)');
     expect(script).toContain('var passwordFilled = isFieldFilled(passwordInput)');
-    expect(script).toContain("post({ t: 'status', m: '登入欄位填寫狀態 account=' + accountFilled + ' password=' + passwordFilled });");
+    expect(script).toContain(
+      "post({ t: 'status', m: '登入欄位填寫狀態 account=' + accountFilled + ' password=' + passwordFilled });",
+    );
     expect(script).not.toContain('password=p456');
   });
 });
@@ -42,7 +44,7 @@ describe('buildAdaptiveSchedulePageScript', () => {
     expect(script).toContain('findQueryForm');
     expect(script).toContain('resolveFormAction');
     expect(script).toContain('submitQueryForm');
-    expect(script).toContain("var searchFlag = form.querySelector('[name=\"hidChkSearch\"]');");
+    expect(script).toContain('var searchFlag = form.querySelector(\'[name="hidChkSearch"]\');');
     expect(script).toContain("var searchAction = 'searchByStudent';");
     expect(script).toContain('searchFlag.value = searchAction;');
     expect(script).toContain('Schedule query requires relogin');
@@ -92,7 +94,7 @@ describe('buildAdaptiveSchedulePageScript', () => {
 
     expect(script).not.toContain('/pubTdItem_Period|pubContent/.test(markup)');
     expect(script).toContain('function hasScheduleResultMarker(html) {');
-    expect(script).toContain('var markup = String(html || \'\');');
+    expect(script).toContain("var markup = String(html || '');");
     expect(script).toContain('/pubTdItem_Period|PrintTitle/.test(markup)');
     expect(script).not.toContain('/pubContent/.test(markup)');
   });
@@ -103,13 +105,15 @@ describe('buildAdaptiveSchedulePageScript', () => {
     expect(script).toContain('function isScheduleMenuPage(url)');
     expect(script).toContain('function navigateToStudentSchedulePage(doc)');
     expect(script).toContain('queryByStudent.asp?QuerySource=queryCourse');
-    expect(script).toContain("post({ t: 'status', m: '\\u76f4\\u63a5\\u5207\\u5230\\u5b78\\u751f\\u8ab2\\u8868\\u67e5\\u8a62...' });");
+    expect(script).toContain(
+      "post({ t: 'status', m: '\\u76f4\\u63a5\\u5207\\u5230\\u5b78\\u751f\\u8ab2\\u8868\\u67e5\\u8a62...' });",
+    );
   });
 
   it('does not treat generic login text on AP1 pages as relogin', () => {
     const script = buildAdaptiveSchedulePageScript();
 
-    expect(script).not.toContain('|relogin|login/i.test(text || \'\')');
+    expect(script).not.toContain("|relogin|login/i.test(text || '')");
     expect(script).toContain('login has expired|please login again|session expired');
   });
 });
@@ -137,9 +141,13 @@ describe('buildServiceOpenScript', () => {
   it('keeps polling after gfOpenLink and includes the ap1 direct fallback for code 1208', () => {
     const script = buildServiceOpenScript('1208');
 
-    expect(script).toContain('https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse');
-    expect(script).toContain('post({ t: \'popup\', url: fallbackTargetUrl });');
-    expect(script).not.toContain("gfOpenLink('1208', 'service', '0', '00', '', '');\n             return;");
+    expect(script).toContain(
+      'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+    );
+    expect(script).toContain("post({ t: 'popup', url: fallbackTargetUrl });");
+    expect(script).not.toContain(
+      "gfOpenLink('1208', 'service', '0', '00', '', '');\n             return;",
+    );
   });
 
   it('uses grade-specific target detection for code 1220', () => {
@@ -155,7 +163,9 @@ describe('buildServiceOpenScript', () => {
 
     expect(script).toContain('TransUrl\\\\.aspx\\\\?PrjNo=1202|icas\\\\.pccu\\\\.edu\\\\.tw');
     expect(script).toContain('https://icas.pccu.edu.tw/cfp/');
-    expect(script).not.toContain('https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse');
+    expect(script).not.toContain(
+      'https://ap1.pccu.edu.tw/queryCourse/queryByStudent.asp?QuerySource=queryCourse',
+    );
   });
 });
 
@@ -174,7 +184,9 @@ describe('buildRobustGradePageScript', () => {
     expect(script).toContain('function isGradeMenuPage(url)');
     expect(script).toContain('function navigateToGradeHistoryPage(doc)');
     expect(script).toContain('scoreListAll.asp');
-    expect(script).toContain("post({ t: 'status', m: '\\u76f4\\u63a5\\u5207\\u5230\\u6b77\\u5e74\\u6210\\u7e3e\\u55ae...' });");
+    expect(script).toContain(
+      "post({ t: 'status', m: '\\u76f4\\u63a5\\u5207\\u5230\\u6b77\\u5e74\\u6210\\u7e3e\\u55ae...' });",
+    );
   });
 
   it('does not treat index_score as the final historical grade result', () => {
@@ -189,23 +201,29 @@ describe('buildRobustGradePageScript', () => {
 
     expect(script).toContain('clickedSearch');
     expect(script).toContain('function findGradeSearchControl()');
-    expect(script).toContain("post({ t: 'status', m: '\\u67e5\\u8a62\\u6b77\\u5e74\\u6210\\u7e3e\\u4e2d...' });");
+    expect(script).toContain(
+      "post({ t: 'status', m: '\\u67e5\\u8a62\\u6b77\\u5e74\\u6210\\u7e3e\\u4e2d...' });",
+    );
   });
 
   it('prefers clicking the history tab before falling back to direct scoreListAll navigation', () => {
     const script = buildRobustGradePageScript();
     const historyTabIndex = script.indexOf('var historyInfo = findHistoryTab();');
     const clickIndex = script.indexOf('clickedHistory = click(historyTab);');
-    const resolveUrlIndex = script.indexOf('var historyUrl = resolveNavTarget(historyDoc, historyTab);');
+    const resolveUrlIndex = script.indexOf(
+      'var historyUrl = resolveNavTarget(historyDoc, historyTab);',
+    );
     const directFallbackIndex = script.indexOf(
-      'if (attempts >= 4 && isGradeMenuPage(workUrl) && navigateToGradeHistoryPage(workDoc))'
+      'if (attempts >= 4 && isGradeMenuPage(workUrl) && navigateToGradeHistoryPage(workDoc))',
     );
 
     expect(historyTabIndex).toBeGreaterThan(-1);
     expect(clickIndex).toBeGreaterThan(historyTabIndex);
     expect(resolveUrlIndex).toBeGreaterThan(clickIndex);
     expect(directFallbackIndex).toBeGreaterThan(resolveUrlIndex);
-    expect(script).toContain('if (attempts >= 4 && isGradeMenuPage(workUrl) && navigateToGradeHistoryPage(workDoc))');
+    expect(script).toContain(
+      'if (attempts >= 4 && isGradeMenuPage(workUrl) && navigateToGradeHistoryPage(workDoc))',
+    );
   });
 
   it('submits the grade history form when the search button is not discoverable', () => {
@@ -213,7 +231,7 @@ describe('buildRobustGradePageScript', () => {
 
     expect(script).toContain('function findGradeQueryForm(doc)');
     expect(script).toContain('function submitGradeSearchForm(doc, form)');
-    expect(script).toContain("form.querySelector('[name=\"hidChkSearch\"]')");
+    expect(script).toContain('form.querySelector(\'[name="hidChkSearch"]\')');
     expect(script).toContain("var searchAction = 'search';");
     expect(script).toContain('searchFlag.value = searchAction;');
     expect(script).toContain('form.submit();');

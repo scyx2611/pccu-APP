@@ -115,7 +115,13 @@ export type TutoringSyncResult = {
   message?: string;
 };
 
-export type SyncPhase = 'idle' | 'logging_in' | 'fetching_courses' | 'fetching_details' | 'complete' | 'error';
+export type SyncPhase =
+  | 'idle'
+  | 'logging_in'
+  | 'fetching_courses'
+  | 'fetching_details'
+  | 'complete'
+  | 'error';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 

@@ -54,7 +54,7 @@ export function useTrafficData({
         setError(result?.message ?? '交通資訊更新失敗');
       }
     },
-    [trafficSync, loadSnapshot]
+    [trafficSync, loadSnapshot],
   );
 
   useEffect(() => {

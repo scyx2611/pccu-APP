@@ -14,11 +14,7 @@ export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
   return (
     <View style={[styles.screen, { backgroundColor: theme.bg }]}>
       <LinearGradient
-        colors={[
-          theme.ambient1 || theme.bg,
-          theme.ambient2 || theme.bg,
-          theme.bg,
-        ]}
+        colors={[theme.ambient1 || theme.bg, theme.ambient2 || theme.bg, theme.bg]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -33,7 +29,9 @@ export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
           <Text style={[styles.badgeText, { color: theme.primary }]}>PCCU 校園資訊助手</Text>
         </View>
 
-        <Text style={[styles.title, { color: theme.text }]}>把課表、成績和校園資訊收進同一個 app。</Text>
+        <Text style={[styles.title, { color: theme.text }]}>
+          把課表、成績和校園資訊收進同一個 app。
+        </Text>
         <Text style={[styles.subtitle, { color: theme.textSub }]}>
           登入 PCCU 帳號後，會自動整理課表與成績，首頁也能直接看到下節課和成績摘要。
         </Text>
@@ -45,17 +43,26 @@ export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
             </View>
             <View style={styles.featureCopy}>
               <Text style={[styles.featureTitle, { color: theme.text }]}>智慧課表同步</Text>
-              <Text style={[styles.featureText, { color: theme.textSub }]}>保留上次快取，更新完成後自動刷新。</Text>
+              <Text style={[styles.featureText, { color: theme.textSub }]}>
+                保留上次快取，更新完成後自動刷新。
+              </Text>
             </View>
           </View>
 
           <View style={styles.featureRow}>
             <View style={[styles.featureIcon, { backgroundColor: 'rgba(255, 149, 0, 0.14)' }]}>
-              <AppSymbol name="graduationcap.fill" size={18} tintColor={theme.warning} fallback="績" />
+              <AppSymbol
+                name="graduationcap.fill"
+                size={18}
+                tintColor={theme.warning}
+                fallback="績"
+              />
             </View>
             <View style={styles.featureCopy}>
               <Text style={[styles.featureTitle, { color: theme.text }]}>成績單快速整理</Text>
-              <Text style={[styles.featureText, { color: theme.textSub }]}>歷年學期資料直接展開，不用再翻頁查看。</Text>
+              <Text style={[styles.featureText, { color: theme.textSub }]}>
+                歷年學期資料直接展開，不用再翻頁查看。
+              </Text>
             </View>
           </View>
 
@@ -65,12 +72,17 @@ export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
             </View>
             <View style={styles.featureCopy}>
               <Text style={[styles.featureTitle, { color: theme.text }]}>首頁快速總覽</Text>
-              <Text style={[styles.featureText, { color: theme.textSub }]}>下節課、成績摘要和常用資訊都能一眼看到。</Text>
+              <Text style={[styles.featureText, { color: theme.textSub }]}>
+                下節課、成績摘要和常用資訊都能一眼看到。
+              </Text>
             </View>
           </View>
         </View>
 
-        <Pressable style={[styles.primaryButton, { backgroundColor: theme.primary }]} onPress={onStart}>
+        <Pressable
+          style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+          onPress={onStart}
+        >
           <Text style={styles.primaryButtonText}>開始登入</Text>
         </Pressable>
       </View>

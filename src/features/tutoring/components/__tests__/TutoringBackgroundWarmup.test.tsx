@@ -137,21 +137,24 @@ describe('TutoringBackgroundWarmup', () => {
         },
       ],
       courseDetails: new Map([
-        ['CS101', {
-          announcements: [],
-          materials: [],
-          assignments: [],
-          courseInfo: {
-            teacherName: '高荻華',
-            academicYearTerm: '1142',
-            departmentClass: 'U PCL 中文 1 (29)',
-            requiredType: '必修',
-            creditText: '2.0',
-            englishLevel: 'N',
-            scheduleText: '星期二, 02-03 大孝 0412',
-            expectedEnrollment: '64',
+        [
+          'CS101',
+          {
+            announcements: [],
+            materials: [],
+            assignments: [],
+            courseInfo: {
+              teacherName: '高荻華',
+              academicYearTerm: '1142',
+              departmentClass: 'U PCL 中文 1 (29)',
+              requiredType: '必修',
+              creditText: '2.0',
+              englishLevel: 'N',
+              scheduleText: '星期二, 02-03 大孝 0412',
+              expectedEnrollment: '64',
+            },
           },
-        }],
+        ],
       ]),
       lastSyncedAt: new Date(),
     });
@@ -189,21 +192,24 @@ describe('TutoringBackgroundWarmup', () => {
         },
       ],
       courseDetails: new Map([
-        ['CS101', {
-          announcements: [{} as any],
-          materials: [{} as any],
-          assignments: [{} as any],
-          courseInfo: {
-            teacherName: '高荻華',
-            academicYearTerm: '1142',
-            departmentClass: 'U PCL 中文 1 (29)',
-            requiredType: '必修',
-            creditText: '2.0',
-            englishLevel: 'N',
-            scheduleText: '星期二, 02-03 大孝 0412',
-            expectedEnrollment: '64',
+        [
+          'CS101',
+          {
+            announcements: [{} as any],
+            materials: [{} as any],
+            assignments: [{} as any],
+            courseInfo: {
+              teacherName: '高荻華',
+              academicYearTerm: '1142',
+              departmentClass: 'U PCL 中文 1 (29)',
+              requiredType: '必修',
+              creditText: '2.0',
+              englishLevel: 'N',
+              scheduleText: '星期二, 02-03 大孝 0412',
+              expectedEnrollment: '64',
+            },
           },
-        }],
+        ],
       ]),
       lastSyncedAt: new Date(),
     });

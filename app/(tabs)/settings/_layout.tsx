@@ -1,4 +1,4 @@
-﻿import { Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useTheme } from '../../../src/providers/theme/ThemeProvider';
 
 export default function SettingsLayout() {

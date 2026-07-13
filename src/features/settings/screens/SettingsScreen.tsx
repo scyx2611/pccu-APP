@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ColorValue, Platform, PlatformColor, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  ColorValue,
+  Platform,
+  PlatformColor,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { ThemeMode, useTheme } from '../../../providers/theme/ThemeProvider';
@@ -48,7 +58,10 @@ function SettingsNavigationRow({
         accessibilityRole="button"
         android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
         onPress={onPress}
-        style={({ pressed }) => [styles.navigationCell, pressed && { backgroundColor: pressedBackground }]}
+        style={({ pressed }) => [
+          styles.navigationCell,
+          pressed && { backgroundColor: pressedBackground },
+        ]}
       >
         <View style={styles.navigationIconContainer}>
           <AppSymbol
@@ -75,7 +88,9 @@ function SettingsNavigationRow({
           fallback={<Text style={{ color: chevronColor }}>&gt;</Text>}
         />
       </Pressable>
-      {showSeparator ? <View style={[styles.navigationSeparator, { backgroundColor: separatorColor }]} /> : null}
+      {showSeparator ? (
+        <View style={[styles.navigationSeparator, { backgroundColor: separatorColor }]} />
+      ) : null}
     </View>
   );
 }
@@ -94,13 +109,17 @@ export default function SettingsScreen() {
   const { mode, theme } = useTheme();
   const [userName, setUserName] = useState('');
   const [studentProgram, setStudentProgram] = useState('系級未同步');
-  const groupedBackground = Platform.OS === 'ios' ? PlatformColor('systemGroupedBackground') : theme.bg;
-  const groupedCardBackground = Platform.OS === 'ios' ? PlatformColor('secondarySystemGroupedBackground') : theme.syncBtnBg;
+  const groupedBackground =
+    Platform.OS === 'ios' ? PlatformColor('systemGroupedBackground') : theme.bg;
+  const groupedCardBackground =
+    Platform.OS === 'ios' ? PlatformColor('secondarySystemGroupedBackground') : theme.syncBtnBg;
   const groupedSeparator = Platform.OS === 'ios' ? IOS_SEPARATOR_COLOR : theme.border;
-  const groupedSectionText = Platform.OS === 'ios' ? PlatformColor('secondaryLabel') : theme.textSub;
+  const groupedSectionText =
+    Platform.OS === 'ios' ? PlatformColor('secondaryLabel') : theme.textSub;
   const avatarBackground = Platform.OS === 'ios' ? PlatformColor('systemGray5') : theme.rankBg;
   const avatarBorder = Platform.OS === 'ios' ? PlatformColor('separator') : theme.border;
-  const cellPressedBackground = Platform.OS === 'ios' ? PlatformColor('systemGray5') : 'rgba(0, 0, 0, 0.10)';
+  const cellPressedBackground =
+    Platform.OS === 'ios' ? PlatformColor('systemGray5') : 'rgba(0, 0, 0, 0.10)';
   const chevronColor = Platform.OS === 'ios' ? IOS_CHEVRON_COLOR : theme.textSub;
 
   useEffect(() => {
@@ -114,7 +133,9 @@ export default function SettingsScreen() {
       if (!active) return;
 
       setUserName((storedName || '').trim());
-      const program = cachedGrades.grades?.map((grade) => extractStudentProgram(grade.title)).find(Boolean);
+      const program = cachedGrades.grades
+        ?.map((grade) => extractStudentProgram(grade.title))
+        .find(Boolean);
       setStudentProgram(program || '系級未同步');
     };
 
@@ -154,8 +175,15 @@ export default function SettingsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View style={[styles.profileCard, { backgroundColor: groupedCardBackground }]}>
-        <View style={[styles.avatar, { backgroundColor: avatarBackground, borderColor: avatarBorder }]}>
-          <AppSymbol name="person.fill" size={28} tintColor={theme.textSub} fallback={<Text style={{ color: theme.textSub }}>人</Text>} />
+        <View
+          style={[styles.avatar, { backgroundColor: avatarBackground, borderColor: avatarBorder }]}
+        >
+          <AppSymbol
+            name="person.fill"
+            size={28}
+            tintColor={theme.textSub}
+            fallback={<Text style={{ color: theme.textSub }}>人</Text>}
+          />
         </View>
         <View style={styles.profileTextWrap}>
           <Text style={[styles.profileName, { color: theme.text }]} numberOfLines={1}>
@@ -243,7 +271,10 @@ export default function SettingsScreen() {
         <Pressable
           accessibilityRole="button"
           android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
-          style={({ pressed }) => [styles.cellRowCenter, pressed && { backgroundColor: cellPressedBackground }]}
+          style={({ pressed }) => [
+            styles.cellRowCenter,
+            pressed && { backgroundColor: cellPressedBackground },
+          ]}
           onPress={handleLogout}
         >
           <Text style={[styles.logoutText, { color: theme.danger }]}>登出目前帳號</Text>

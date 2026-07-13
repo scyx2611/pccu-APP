@@ -21,7 +21,7 @@ let cachedCourseInfo: Record<string, TutoringCourseInfo> = {};
 export async function setTutoringData(snapshot: TutoringSnapshot): Promise<void> {
   cachedSnapshot = snapshot;
   cachedCourses = snapshot.courses;
-  // Note: The actual TutoringSnapshot type on disk has pendingAssignmentCount, 
+  // Note: The actual TutoringSnapshot type on disk has pendingAssignmentCount,
   // but the prompt implies we might store the assignments themselves.
   // We'll store the whole snapshot as the primary data.
   try {
@@ -32,7 +32,10 @@ export async function setTutoringData(snapshot: TutoringSnapshot): Promise<void>
   }
 }
 
-export async function getTutoringData(): Promise<{ snapshot: TutoringSnapshot | null; updatedAt: number | null }> {
+export async function getTutoringData(): Promise<{
+  snapshot: TutoringSnapshot | null;
+  updatedAt: number | null;
+}> {
   if (cachedSnapshot) {
     return { snapshot: cachedSnapshot, updatedAt: cachedSnapshot.updatedAt };
   }
@@ -64,17 +67,19 @@ export async function setCourses(courses: TutoringCourse[]): Promise<void> {
   cachedCourses = courses;
   try {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
-    const snapshot: TutoringSnapshot = stored ? JSON.parse(stored) : {
-      courses: [],
-      pendingAssignmentCount: 0,
-      updatedAt: Date.now(),
-      semester: '',
-      welcome: '',
-    };
-    
+    const snapshot: TutoringSnapshot = stored
+      ? JSON.parse(stored)
+      : {
+          courses: [],
+          pendingAssignmentCount: 0,
+          updatedAt: Date.now(),
+          semester: '',
+          welcome: '',
+        };
+
     snapshot.courses = courses;
     snapshot.updatedAt = Date.now();
-    
+
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
     await AsyncStorage.setItem(LAST_STORAGE_KEY, JSON.stringify(snapshot));
   } catch (error) {
@@ -140,7 +145,7 @@ export async function getPendingAssignments(): Promise<TutoringAssignment[] | nu
 export async function setCourseDetail(
   courseCode: string,
   type: 'announcements' | 'materials' | 'assignments' | 'progress' | 'classmates',
-  items: any[]
+  items: any[],
 ): Promise<void> {
   if (!cachedCourseDetails[courseCode]) {
     cachedCourseDetails[courseCode] = {};
@@ -157,7 +162,7 @@ export async function setCourseDetail(
 
 export async function getCourseDetail(
   courseCode: string,
-  type: 'announcements' | 'materials' | 'assignments' | 'progress' | 'classmates'
+  type: 'announcements' | 'materials' | 'assignments' | 'progress' | 'classmates',
 ): Promise<any[] | null> {
   if (cachedCourseDetails[courseCode]?.[type]) {
     return cachedCourseDetails[courseCode][type];
@@ -180,10 +185,7 @@ export async function getCourseDetail(
   return null;
 }
 
-export async function setCourseInfo(
-  courseCode: string,
-  info: TutoringCourseInfo
-): Promise<void> {
+export async function setCourseInfo(courseCode: string, info: TutoringCourseInfo): Promise<void> {
   cachedCourseInfo[courseCode] = info;
 
   try {
@@ -227,7 +229,7 @@ export async function clearAll(): Promise<void> {
 
   try {
     const keys = await AsyncStorage.getAllKeys();
-    const tutoringKeys = keys.filter(key => key.startsWith('cached_tutoring'));
+    const tutoringKeys = keys.filter((key) => key.startsWith('cached_tutoring'));
     await AsyncStorage.multiRemove(tutoringKeys);
   } catch (error) {
     console.log('Clear tutoring cache failed:', error);

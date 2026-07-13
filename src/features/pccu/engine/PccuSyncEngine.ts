@@ -29,9 +29,7 @@ export type SyncAbortReason = 'timeout' | 'executor_unavailable' | 'engine_destr
 
 export type SyncAbortHandler = (reason: SyncAbortReason, error: Error) => void;
 
-export type SyncExecutor = (
-  request: SyncRequest
-) => Promise<any>;
+export type SyncExecutor = (request: SyncRequest) => Promise<any>;
 
 export type EngineState = 'idle' | 'paused' | 'processing';
 
@@ -205,7 +203,10 @@ export class PccuSyncEngine {
     return this.executorRecord !== null;
   }
 
-  waitForExecutorReady(timeoutMs = EXECUTOR_READY_TIMEOUT_MS, pollIntervalMs = EXECUTOR_READY_POLL_MS): Promise<void> {
+  waitForExecutorReady(
+    timeoutMs = EXECUTOR_READY_TIMEOUT_MS,
+    pollIntervalMs = EXECUTOR_READY_POLL_MS,
+  ): Promise<void> {
     if (this.isExecutorReady()) {
       return Promise.resolve();
     }
@@ -237,24 +238,26 @@ export class PccuSyncEngine {
    */
   requestSync(type: SyncType, priority?: number, options?: Record<string, unknown>): Promise<any> {
     return new Promise((resolve, reject) => {
-    const request: InternalSyncRequest = {
-      id: this.generateId(type),
-      type,
-      priority: priority ?? 5,
-      options,
-      resolve,
-      reject,
-      abortHandler: null,
-      setAbortHandler: (handler) => {
-        request.abortHandler = handler;
-      },
-      refreshTimeout: () => {
-        this.refreshActiveTimeout(request.id);
-      },
-    };
+      const request: InternalSyncRequest = {
+        id: this.generateId(type),
+        type,
+        priority: priority ?? 5,
+        options,
+        resolve,
+        reject,
+        abortHandler: null,
+        setAbortHandler: (handler) => {
+          request.abortHandler = handler;
+        },
+        refreshTimeout: () => {
+          this.refreshActiveTimeout(request.id);
+        },
+      };
 
       this.queue.enqueue(request);
-      logger.debug(`Enqueued ${type} (id=${request.id}, priority=${priority ?? 5}, queue=${this.queue.size})`);
+      logger.debug(
+        `Enqueued ${type} (id=${request.id}, priority=${priority ?? 5}, queue=${this.queue.size})`,
+      );
 
       this.processQueue();
     });
@@ -329,9 +332,9 @@ export class PccuSyncEngine {
     this.appStateSubscription = null;
     this.queue.clear();
     this.state = 'idle';
-      this.executorRecord = null;
-      this.activeRequest = null;
-      this.activeExecutorId = null;
+    this.executorRecord = null;
+    this.activeRequest = null;
+    this.activeExecutorId = null;
   }
 
   // -----------------------------------------------------------------------
@@ -410,7 +413,9 @@ export class PccuSyncEngine {
       this.activeTimeout = null;
       this.activeRequest = null;
       this.activeExecutorId = null;
-      const error = new Error(`Sync task ${request.id} (${request.type}) timed out after ${TASK_TIMEOUT_MS / 1000}s`);
+      const error = new Error(
+        `Sync task ${request.id} (${request.type}) timed out after ${TASK_TIMEOUT_MS / 1000}s`,
+      );
       request.abortHandler?.('timeout', error);
       request.reject(error);
       logger.debug(`Timeout - ${request.id}`);
