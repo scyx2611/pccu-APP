@@ -1,4 +1,5 @@
 import type { PCCUCredentials } from '../application/CredentialVault';
+import { appSessionCoordinator } from '../../../composition/appSession';
 import { credentialVault } from '../infrastructure/SecureStoreCredentialVault';
 import { clearPostLoginSyncHandled } from './postLoginSyncState';
 
@@ -127,10 +128,10 @@ export const getSavedPCCUCredentials = (): Promise<SavedCredentials | null> => {
   return activeCredentials ? Promise.resolve(activeCredentials) : credentialVault.getSaved();
 };
 
+/** @deprecated Compatibility wrapper. Remove in Phase 4 after non-screen callers migrate. */
 export const logoutPCCU = async () => {
-  await clearSavedPCCUCredentials();
+  await appSessionCoordinator.transition('logout');
   sessionWarmPromise = null;
   sessionWarmAt = 0;
   clearPostLoginSyncHandled();
-  await credentialVault.clearProfile();
 };

@@ -9,6 +9,7 @@ import { clearTrafficSnapshot } from '../features/traffic/storage/trafficStorage
 import { clearAll as clearTutoring } from '../features/tutoring/storage/tutoringStorage';
 import { useTutoringStore } from '../features/tutoring/store/useTutoringStore';
 import { useGradeStore } from '../features/grade/store/useGradeStore';
+import { consumeNextSessionCleanupFailure } from '../shared/testing/acceptanceFaults';
 
 const rejectedReasons = (results: PromiseSettledResult<unknown>[]) =>
   results
@@ -16,12 +17,17 @@ const rejectedReasons = (results: PromiseSettledResult<unknown>[]) =>
     .map((result) => result.reason);
 
 const clearFeatureCaches = async (): Promise<void> => {
-  const results = await Promise.allSettled([
+  const operations: Promise<unknown>[] = [
     clearCourses(),
     clearGrades(),
     clearTrafficSnapshot(),
     clearTutoring(),
-  ]);
+  ];
+  if (consumeNextSessionCleanupFailure()) {
+    operations.push(Promise.reject(new Error('acceptance_cleanup_failure')));
+  }
+
+  const results = await Promise.allSettled(operations);
   const failures = rejectedReasons(results);
   if (failures.length > 0) {
     throw new AggregateError(failures, 'feature_cache_clear_failed');

@@ -12,6 +12,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
+import { appSessionCoordinator } from '../../../composition/appSession';
+import { credentialVault } from '../infrastructure/SecureStoreCredentialVault';
 import {
   clearPersistedPCCUCredentials,
   clearSavedPCCUCredentials,
@@ -124,7 +126,8 @@ export default function LoginScreen() {
   }, []);
 
   const performLogin = async () => {
-    if (!account || !password) {
+    const normalizedAccount = account.trim();
+    if (!normalizedAccount || !password) {
       Alert.alert('無法登入', '請輸入學號與密碼');
       return;
     }
@@ -133,7 +136,19 @@ export default function LoginScreen() {
 
     try {
       const rememberCredentialsEnabled = await getRememberCredentialsEnabled();
-      const result = await loginPCCU(account, password, { persistCredentials: false });
+      const currentAccount =
+        credentialVault.getActive()?.account ?? (await credentialVault.getSaved())?.account;
+      if (
+        currentAccount &&
+        currentAccount.trim().toLocaleUpperCase('en-US') !==
+          normalizedAccount.toLocaleUpperCase('en-US')
+      ) {
+        await appSessionCoordinator.transition('account_switch');
+      }
+
+      const result = await loginPCCU(normalizedAccount, password, {
+        persistCredentials: false,
+      });
       if (!result.success) {
         setIsLoading(false);
         Alert.alert('登入失敗', result.message || '請確認學號與密碼是否正確');
@@ -141,7 +156,7 @@ export default function LoginScreen() {
       }
 
       if (rememberCredentialsEnabled) {
-        await savePCCUCredentials(account, password);
+        await savePCCUCredentials(normalizedAccount, password);
       } else {
         await clearPersistedPCCUCredentials();
       }
@@ -249,6 +264,7 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
+            testID="login-submit-button"
             style={[
               styles.loginButton,
               { backgroundColor: theme.primary },

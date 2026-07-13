@@ -3,8 +3,9 @@ import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'rea
 import * as LocalAuthentication from 'expo-local-authentication';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { router } from 'expo-router';
+import { appSessionCoordinator } from '../../../composition/appSession';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
-import { clearPersistedPCCUCredentials, logoutPCCU } from '../../auth/services/authService';
+import { clearPersistedPCCUCredentials } from '../../auth/services/authService';
 import {
   getBiometricLoginEnabled,
   getRememberCredentialsEnabled,
@@ -16,6 +17,8 @@ export default function SecurityScreen() {
   const { theme } = useTheme();
   const [rememberCredentialsEnabled, setRememberCredentialsEnabledState] = useState(false);
   const [biometricLoginEnabled, setBiometricLoginEnabledState] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutCleanupFailed, setLogoutCleanupFailed] = useState(false);
   const biometricLabel = Platform.OS === 'ios' ? 'Face ID' : '生物辨識';
   const isExpoGoOnIOS =
     Platform.OS === 'ios' && Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -39,6 +42,20 @@ export default function SecurityScreen() {
       active = false;
     };
   }, []);
+
+  const runLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutCleanupFailed(false);
+    try {
+      await appSessionCoordinator.transition('logout');
+      router.replace('/login');
+    } catch {
+      setLogoutCleanupFailed(true);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   const handleRememberCredentialsToggle = async (value: boolean) => {
     if (!value) {
@@ -64,8 +81,7 @@ export default function SecurityScreen() {
           void (async () => {
             setRememberCredentialsEnabledState(true);
             await setRememberCredentialsEnabled(true);
-            await logoutPCCU();
-            router.replace('/');
+            await runLogout();
           })();
         },
       },
@@ -172,8 +188,10 @@ export default function SecurityScreen() {
             </Text>
           </View>
           <Switch
+            testID="security-remember-switch"
             value={rememberCredentialsEnabled}
             onValueChange={(value) => void handleRememberCredentialsToggle(value)}
+            disabled={isLoggingOut}
             trackColor={{ false: theme.border, true: '#34C759' }}
             thumbColor="#FFFFFF"
           />
@@ -205,6 +223,19 @@ export default function SecurityScreen() {
           登入安全設定只會影響帳密保存與登入前驗證流程，不會改動課表、成績與其他同步資料。
         </Text>
       </View>
+
+      {logoutCleanupFailed ? (
+        <View style={[styles.noteCard, { backgroundColor: theme.card }]}>
+          <Text style={[styles.noteText, { color: theme.textSub }]}>無法完成安全清除。</Text>
+          <Text
+            accessibilityRole="button"
+            onPress={() => void runLogout()}
+            style={[styles.cleanupRetryText, { color: theme.danger }]}
+          >
+            重試清除
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
@@ -262,5 +293,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
   },
+  cleanupRetryText: { fontSize: 16, fontWeight: '700', marginTop: 10 },
   bottomSpacer: { height: 80 },
 });

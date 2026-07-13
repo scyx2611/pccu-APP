@@ -8,6 +8,13 @@ const mockVaultClearActive = jest.fn<void, []>();
 const mockVaultClearPersisted = jest.fn<Promise<void>, []>();
 const mockVaultClearProfile = jest.fn<Promise<void>, []>();
 const mockFetch = jest.fn<Promise<Response>, Parameters<typeof fetch>>();
+const mockSessionTransition = jest.fn<Promise<void>, ['logout']>();
+
+jest.mock('../../../../composition/appSession', () => ({
+  appSessionCoordinator: {
+    transition: (reason: 'logout') => mockSessionTransition(reason),
+  },
+}));
 
 jest.mock('../../infrastructure/SecureStoreCredentialVault', () => ({
   credentialVault: {
@@ -46,6 +53,7 @@ import {
   clearSessionPCCUCredentials,
   getSavedPCCUCredentials,
   loginPCCU,
+  logoutPCCU,
   savePCCUCredentials,
 } from '../authService';
 
@@ -66,6 +74,7 @@ describe('authService CredentialVault facade', () => {
     mockVaultClearPersisted.mockReset().mockResolvedValue(undefined);
     mockVaultClearProfile.mockReset().mockResolvedValue(undefined);
     mockFetch.mockReset().mockResolvedValue(loginResponse(false));
+    mockSessionTransition.mockReset().mockResolvedValue(undefined);
     global.fetch = mockFetch as typeof fetch;
   });
 
@@ -109,5 +118,14 @@ describe('authService CredentialVault facade', () => {
     expect(mockVaultSave).toHaveBeenCalledWith(credentials);
     expect(mockVaultClearActive).toHaveBeenCalledTimes(1);
     expect(mockVaultClearPersisted).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the deprecated logout wrapper on the session coordinator', async () => {
+    await expect(logoutPCCU()).resolves.toBeUndefined();
+
+    expect(mockSessionTransition).toHaveBeenCalledWith('logout');
+    expect(mockVaultClearActive).not.toHaveBeenCalled();
+    expect(mockVaultClearPersisted).not.toHaveBeenCalled();
+    expect(mockVaultClearProfile).not.toHaveBeenCalled();
   });
 });

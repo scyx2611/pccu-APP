@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import { appSessionCoordinator } from '../../../composition/appSession';
 import { ThemeMode, useTheme } from '../../../providers/theme/ThemeProvider';
-import { logoutPCCU } from '../../auth/services/authService';
 import { getGrades } from '../../grade/storage/gradeStorage';
 import AppSymbol from '../../../shared/components/AppSymbol';
 
@@ -109,6 +109,8 @@ export default function SettingsScreen() {
   const { mode, theme } = useTheme();
   const [userName, setUserName] = useState('');
   const [studentProgram, setStudentProgram] = useState('系級未同步');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutCleanupFailed, setLogoutCleanupFailed] = useState(false);
   const groupedBackground =
     Platform.OS === 'ios' ? PlatformColor('systemGroupedBackground') : theme.bg;
   const groupedCardBackground =
@@ -146,16 +148,27 @@ export default function SettingsScreen() {
     };
   }, []);
 
+  const runLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutCleanupFailed(false);
+    try {
+      await appSessionCoordinator.transition('logout');
+      router.replace('/login');
+    } catch {
+      setLogoutCleanupFailed(true);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert('登出帳號', '確定要登出目前的 PCCU 帳號嗎？', [
       { text: '取消', style: 'cancel' },
       {
         text: '登出',
         style: 'destructive',
-        onPress: async () => {
-          await logoutPCCU();
-          router.replace('/');
-        },
+        onPress: () => void runLogout(),
       },
     ]);
   };
@@ -269,8 +282,11 @@ export default function SettingsScreen() {
 
       <View style={[styles.insetGroup, { backgroundColor: groupedCardBackground }]}>
         <Pressable
+          testID="settings-logout-button"
           accessibilityRole="button"
+          accessibilityState={{ disabled: isLoggingOut }}
           android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
+          disabled={isLoggingOut}
           style={({ pressed }) => [
             styles.cellRowCenter,
             pressed && { backgroundColor: cellPressedBackground },
@@ -280,6 +296,21 @@ export default function SettingsScreen() {
           <Text style={[styles.logoutText, { color: theme.danger }]}>登出目前帳號</Text>
         </Pressable>
       </View>
+
+      {logoutCleanupFailed ? (
+        <View style={[styles.cleanupError, { backgroundColor: groupedCardBackground }]}>
+          <Text style={[styles.cleanupErrorText, { color: theme.textSub }]}>
+            無法完成安全清除。
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isLoggingOut}
+            onPress={() => void runLogout()}
+          >
+            <Text style={[styles.cleanupRetryText, { color: theme.danger }]}>重試清除</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
@@ -382,5 +413,15 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
+  cleanupError: {
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: -12,
+    marginBottom: 24,
+    borderRadius: 16,
+    padding: 14,
+  },
+  cleanupErrorText: { fontSize: 14, marginBottom: 8 },
+  cleanupRetryText: { fontSize: 16, fontWeight: '700' },
   bottomSpacer: { height: 80 },
 });

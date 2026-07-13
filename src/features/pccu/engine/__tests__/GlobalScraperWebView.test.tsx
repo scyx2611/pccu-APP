@@ -198,6 +198,7 @@ import {
 import { setDeveloperDebugEnabled } from '../../../settings/storage/developerSettings';
 import { clearScraperDebugPreviewFrame, setScraperDebugPreviewFrame } from '../scraperDebugPreview';
 import { clearRegisteredWebViewSession } from '../../../../core/sync/webview/webViewSessionControl';
+import { runRegisteredWebViewHostAcceptanceProbe } from '../../../../core/sync/webview/webViewAcceptanceProbe';
 
 describe('GlobalScraperWebView PCCU session gate', () => {
   beforeEach(async () => {
@@ -1482,4 +1483,20 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     expect(webViewPropsRef.current?.source?.uri).not.toBe(uriBeforeRelogin);
     rendered.unmount();
   });
+});
+it('exposes the production host decision to the Expo Go acceptance probe', () => {
+  render(<GlobalScraperWebView />);
+
+  expect(
+    runRegisteredWebViewHostAcceptanceProbe('https://ecampus.pccu.edu.tw/eCampus/default.aspx'),
+  ).toBe(true);
+  expect(
+    runRegisteredWebViewHostAcceptanceProbe('http://ecampus.pccu.edu.tw/eCampus/default.aspx'),
+  ).toBe(false);
+  expect(
+    runRegisteredWebViewHostAcceptanceProbe(
+      'https://ecampus.pccu.edu.tw.attacker.example/eCampus/default.aspx',
+    ),
+  ).toBe(false);
+  expect(mockStopLoading).toHaveBeenCalledTimes(2);
 });

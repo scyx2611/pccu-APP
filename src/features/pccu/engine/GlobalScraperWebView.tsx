@@ -16,6 +16,7 @@ import {
   registerWebViewSessionControl,
   type WebViewSessionClearReason,
 } from '../../../core/sync/webview/webViewSessionControl';
+import { registerWebViewHostAcceptanceProbe } from '../../../core/sync/webview/webViewAcceptanceProbe';
 import { PccuSyncEngine, type SyncRequest, type SyncType } from '../../pccu/engine/PccuSyncEngine';
 import { pccuBrowserSessionGate, type PccuBrowserSessionLease } from './pccuBrowserSessionGate';
 import { getSavedPCCUCredentials } from '../../auth/services/authService';
@@ -721,6 +722,14 @@ export default function GlobalScraperWebView() {
       return false;
     },
     [rejectActiveWebViewRequest],
+  );
+
+  useEffect(
+    () =>
+      registerWebViewHostAcceptanceProbe((url) =>
+        handleShouldStartLoadWithRequest({ url } as WebViewNavigation),
+      ),
+    [handleShouldStartLoadWithRequest],
   );
 
   const injectTrafficScript = useCallback(

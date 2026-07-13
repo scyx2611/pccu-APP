@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { runRegisteredWebViewHostAcceptanceProbe } from '../../../core/sync/webview/webViewAcceptanceProbe';
 import { useTheme } from '../../../providers/theme/ThemeProvider';
+import { armNextSessionCleanupFailure } from '../../../shared/testing/acceptanceFaults';
 import {
   getDeveloperDebugEnabled,
   getHomeCourseCardTestEnabled,
@@ -15,6 +17,9 @@ export default function DeveloperScreen() {
   const [developerDebugEnabled, setDeveloperDebugEnabledState] = useState(false);
   const [homeCourseCardTestEnabled, setHomeCourseCardTestEnabledState] = useState(false);
   const [sendingTestNotification, setSendingTestNotification] = useState(false);
+  const [hostProbeStatus, setHostProbeStatus] = useState<string | null>(null);
+  const [cleanupFaultArmed, setCleanupFaultArmed] = useState(false);
+  const [crashRequested, setCrashRequested] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -35,6 +40,10 @@ export default function DeveloperScreen() {
       active = false;
     };
   }, []);
+
+  if (crashRequested) {
+    throw new Error('acceptance_error_boundary_probe');
+  }
 
   const handleDeveloperDebugToggle = async (value: boolean) => {
     setDeveloperDebugEnabledState(value);
@@ -102,6 +111,31 @@ export default function DeveloperScreen() {
     } finally {
       setSendingTestNotification(false);
     }
+  };
+
+  const handleWebViewHostProbe = () => {
+    const allowed = runRegisteredWebViewHostAcceptanceProbe(
+      'https://ecampus.pccu.edu.tw/eCampus/default.aspx',
+    );
+    const blockedHttp = runRegisteredWebViewHostAcceptanceProbe(
+      'http://ecampus.pccu.edu.tw/eCampus/default.aspx',
+    );
+    const blockedDeceptive = runRegisteredWebViewHostAcceptanceProbe(
+      'https://ecampus.pccu.edu.tw.attacker.example/eCampus/default.aspx',
+    );
+
+    if (allowed === null || blockedHttp === null || blockedDeceptive === null) {
+      setHostProbeStatus('WebView 尚未就緒');
+      return;
+    }
+    setHostProbeStatus(
+      allowed === true && blockedHttp === false && blockedDeceptive === false ? '通過' : '失敗',
+    );
+  };
+
+  const handleArmCleanupFailure = () => {
+    armNextSessionCleanupFailure();
+    setCleanupFaultArmed(true);
   };
 
   return (
@@ -173,6 +207,53 @@ export default function DeveloperScreen() {
         </Text>
       </View>
 
+      {__DEV__ ? (
+        <>
+          <Text style={[styles.sectionTitle, styles.acceptanceTitle, { color: theme.textSub }]}>
+            Phase 0 Expo Go 驗收
+          </Text>
+          <View style={[styles.insetGroup, { backgroundColor: theme.card }]}>
+            <Pressable style={styles.actionRow} onPress={handleWebViewHostProbe}>
+              <View style={styles.textWrap}>
+                <Text style={[styles.cellTitle, { color: theme.text }]}>測試 WebView 網域阻擋</Text>
+                <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
+                  執行 HTTPS、HTTP 與欺騙網域的正式判定路徑。
+                </Text>
+              </View>
+              <Text style={[styles.actionLabel, { color: theme.primary }]}>
+                {hostProbeStatus ?? '執行'}
+              </Text>
+            </Pressable>
+
+            <View style={[styles.separator, { backgroundColor: theme.border }]} />
+
+            <Pressable style={styles.actionRow} onPress={handleArmCleanupFailure}>
+              <View style={styles.textWrap}>
+                <Text style={[styles.cellTitle, { color: theme.text }]}>模擬下次清理失敗</Text>
+                <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
+                  下一次登出會失敗一次，再按重試應成功。
+                </Text>
+              </View>
+              <Text style={[styles.actionLabel, { color: theme.primary }]}>
+                {cleanupFaultArmed ? '已準備' : '準備'}
+              </Text>
+            </Pressable>
+
+            <View style={[styles.separator, { backgroundColor: theme.border }]} />
+
+            <Pressable style={styles.actionRow} onPress={() => setCrashRequested(true)}>
+              <View style={styles.textWrap}>
+                <Text style={[styles.cellTitle, { color: theme.text }]}>測試 ErrorBoundary</Text>
+                <Text style={[styles.cellSubtitle, { color: theme.textSub }]}>
+                  顯示安全錯誤畫面，按重試後應重新載入。
+                </Text>
+              </View>
+              <Text style={[styles.actionLabel, { color: theme.danger }]}>觸發</Text>
+            </Pressable>
+          </View>
+        </>
+      ) : null}
+
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
@@ -240,5 +321,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
   },
+  acceptanceTitle: { marginTop: 24 },
   bottomSpacer: { height: 80 },
 });
