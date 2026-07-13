@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { WebView, WebViewNavigation } from 'react-native-webview';
+import { WebView, type WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
+import {
+  ALLOWED_WEBVIEW_ORIGINS,
+  isAllowedWebViewUrl,
+} from '../../../core/sync/webview/hostPolicy';
 import { PccuSyncEngine, type SyncRequest, type SyncType } from '../../pccu/engine/PccuSyncEngine';
 import { pccuBrowserSessionGate, type PccuBrowserSessionLease } from './pccuBrowserSessionGate';
 import { getSavedPCCUCredentials } from '../../auth/services/authService';
@@ -555,6 +559,49 @@ export default function GlobalScraperWebView() {
     trafficPhaseRef.current = 'done';
   }, []);
 
+  const rejectActiveWebViewRequest = useCallback(
+    (reason = 'webview_host_rejected') => {
+      webViewRef.current?.stopLoading();
+      const pending = pendingRef.current;
+      if (!pending || pending.completed) return;
+
+      logger.warn({ event: reason, syncKind: pending.request.type });
+      updateDebugMessage(`${reason}:${pending.request.type}`);
+
+      if (activeModeRef.current === 'traffic') {
+        void finishTraffic({ success: false, message: reason });
+        return;
+      }
+      finishPccu({ success: false, message: reason });
+    },
+    [finishPccu, finishTraffic, updateDebugMessage],
+  );
+
+  const navigateToAllowedUrl = useCallback(
+    (rawUrl: unknown): boolean => {
+      const targetUrl = typeof rawUrl === 'string' ? rawUrl : '';
+      if (!isAllowedWebViewUrl(targetUrl)) {
+        rejectActiveWebViewRequest();
+        return false;
+      }
+
+      webViewRef.current?.injectJavaScript(
+        `window.location.href=${JSON.stringify(targetUrl)};true;`,
+      );
+      return true;
+    },
+    [rejectActiveWebViewRequest],
+  );
+
+  const handleShouldStartLoadWithRequest = useCallback(
+    (request: WebViewNavigation): boolean => {
+      if (isAllowedWebViewUrl(request.url || '')) return true;
+      rejectActiveWebViewRequest();
+      return false;
+    },
+    [rejectActiveWebViewRequest],
+  );
+
   const injectTrafficScript = useCallback((direction: 'downhill' | 'uphill', routeId: string) => {
     const config = {
       direction,
@@ -573,6 +620,10 @@ export default function GlobalScraperWebView() {
     (nav: WebViewNavigation) => {
       if (nav.loading) return;
       const url = nav.url || '';
+      if (!isAllowedWebViewUrl(url)) {
+        rejectActiveWebViewRequest();
+        return;
+      }
       setDebugUrl(url);
       const pending = pendingRef.current;
       if (!pending) return;
@@ -747,7 +798,14 @@ export default function GlobalScraperWebView() {
         }
       }
     },
-    [runLogin, injectPccuScript, injectTrafficScript, openPccuTarget, updateDebugMessage],
+    [
+      runLogin,
+      injectPccuScript,
+      injectTrafficScript,
+      openPccuTarget,
+      rejectActiveWebViewRequest,
+      updateDebugMessage,
+    ],
   );
 
   // -----------------------------------------------------------------------
@@ -793,9 +851,7 @@ export default function GlobalScraperWebView() {
 
           if (data.t === 'popup') {
             pending.lastHandledUrl = '';
-            webViewRef.current?.injectJavaScript(
-              `window.location.href=${JSON.stringify(data.url)};true;`,
-            );
+            navigateToAllowedUrl(data.url);
             return;
           }
 
@@ -939,9 +995,7 @@ export default function GlobalScraperWebView() {
           }
 
           if (data.t === 'popup' && data.url) {
-            webViewRef.current?.injectJavaScript(
-              `window.location.href=${JSON.stringify(data.url)};true;`,
-            );
+            navigateToAllowedUrl(data.url);
             return;
           }
 
@@ -1172,6 +1226,7 @@ export default function GlobalScraperWebView() {
       persistCourses,
       restartPccuLogin,
       retryPccu,
+      navigateToAllowedUrl,
       updateDebugMessage,
     ],
   );
@@ -1183,6 +1238,10 @@ export default function GlobalScraperWebView() {
   const handleLoadEnd = useCallback(
     (event: any) => {
       const currentUrl = event.nativeEvent.url || '';
+      if (!isAllowedWebViewUrl(currentUrl)) {
+        rejectActiveWebViewRequest();
+        return;
+      }
       setDebugUrl(currentUrl);
       const pending = pendingRef.current;
       if (!pending) return;
@@ -1239,13 +1298,18 @@ export default function GlobalScraperWebView() {
         }
       }
     },
-    [runLogin, injectPccuScript, openPccuTarget, updateDebugMessage],
+    [runLogin, injectPccuScript, openPccuTarget, rejectActiveWebViewRequest, updateDebugMessage],
   );
 
   const handleOpenWindow = useCallback(
     (event: any) => {
       const targetUrl = String(event?.nativeEvent?.targetUrl || '');
       if (!targetUrl) return;
+
+      if (!isAllowedWebViewUrl(targetUrl)) {
+        rejectActiveWebViewRequest();
+        return;
+      }
 
       const pending = pendingRef.current;
       if (!pending) return;
@@ -1264,11 +1328,9 @@ export default function GlobalScraperWebView() {
       logger.debug('[openwindow]', mode, pending.request.type, targetUrl);
 
       pending.lastHandledUrl = '';
-      webViewRef.current?.injectJavaScript(
-        `window.location.href=${JSON.stringify(targetUrl)};true;`,
-      );
+      navigateToAllowedUrl(targetUrl);
     },
-    [updateDebugMessage],
+    [navigateToAllowedUrl, rejectActiveWebViewRequest, updateDebugMessage],
   );
 
   const handleDebugRefresh = useCallback(() => {
@@ -1292,9 +1354,13 @@ export default function GlobalScraperWebView() {
 
   useEffect(() => {
     if (activeModeRef.current === 'traffic') {
-      setSourceUri(trafficUrl);
+      if (isAllowedWebViewUrl(trafficUrl)) {
+        setSourceUri(trafficUrl);
+      } else {
+        rejectActiveWebViewRequest();
+      }
     }
-  }, [trafficUrl]);
+  }, [trafficUrl, rejectActiveWebViewRequest]);
 
   // -----------------------------------------------------------------------
   // Kick off PCCU flow when sourceUri changes and we have a pending request
@@ -1397,10 +1463,8 @@ export default function GlobalScraperWebView() {
   // -----------------------------------------------------------------------
 
   const activeUri = useMemo(() => {
-    if (activeModeRef.current === 'traffic') {
-      return trafficUrl;
-    }
-    return sourceUri;
+    const candidate = activeModeRef.current === 'traffic' ? trafficUrl : sourceUri;
+    return isAllowedWebViewUrl(candidate) ? candidate : PCCU_DEFAULT_URL;
   }, [trafficUrl, sourceUri]);
 
   // -----------------------------------------------------------------------
@@ -1461,12 +1525,13 @@ export default function GlobalScraperWebView() {
         pointerEvents={showDebugPreview ? 'auto' : 'none'}
         source={{ uri: activeUri }}
         containerStyle={showDebugPreview ? styles.debugWebViewContainer : styles.hiddenInner}
-        originWhitelist={['*']}
+        originWhitelist={ALLOWED_WEBVIEW_ORIGINS}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         domStorageEnabled
         cacheEnabled={false}
         userAgent={USER_AGENT}
+        onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
         onNavigationStateChange={handleNavChange}
         onMessage={handleMessage}
         onOpenWindow={handleOpenWindow}

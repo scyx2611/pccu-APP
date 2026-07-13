@@ -5,7 +5,9 @@ const mockGetSavedPCCUCredentials = jest.fn(async () => ({
 
 const mockInjectJavaScript = jest.fn();
 const mockReload = jest.fn();
+const mockStopLoading = jest.fn();
 const webViewPropsRef: { current: any | null } = { current: null };
+let consoleWarnSpy: jest.SpyInstance;
 
 jest.mock('react-native-webview', () => {
   const React = require('react');
@@ -16,6 +18,7 @@ jest.mock('react-native-webview', () => {
       React.useImperativeHandle(ref, () => ({
         injectJavaScript: mockInjectJavaScript,
         reload: mockReload,
+        stopLoading: mockStopLoading,
       }));
 
       return null;
@@ -133,6 +136,7 @@ import { clearScraperDebugPreviewFrame, setScraperDebugPreviewFrame } from '../s
 describe('GlobalScraperWebView PCCU session gate', () => {
   beforeEach(async () => {
     jest.useFakeTimers();
+    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     PccuSyncEngine.resetInstance();
     pccuBrowserSessionGate.resetForTests();
     await setDeveloperDebugEnabled(false);
@@ -140,6 +144,7 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     mockGetSavedPCCUCredentials.mockClear();
     mockInjectJavaScript.mockClear();
     mockReload.mockClear();
+    mockStopLoading.mockClear();
     (buildAdaptiveSchedulePageScript as jest.Mock).mockClear();
     (buildLoginScript as jest.Mock).mockClear();
     (buildRobustGradePageScript as jest.Mock).mockClear();
@@ -157,6 +162,7 @@ describe('GlobalScraperWebView PCCU session gate', () => {
       await Promise.resolve();
     });
     jest.useRealTimers();
+    consoleWarnSpy.mockRestore();
     PccuSyncEngine.resetInstance();
     pccuBrowserSessionGate.resetForTests();
   });
@@ -192,6 +198,70 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     expect((error as Error).message).toBe(
       'Sync executor became unavailable. Shared scraper was unmounted.',
     );
+  });
+
+  it('allows an observed HTTPS redirect and rejects a deceptive suffix', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+    const requestPromise = engine.requestSync('schedule').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let allowed: boolean | undefined;
+    act(() => {
+      allowed = webViewPropsRef.current?.onShouldStartLoadWithRequest?.({
+        url: 'https://ap1.pccu.edu.tw/queryCourse/index.asp',
+      });
+    });
+
+    expect(allowed).toBe(true);
+    expect(mockStopLoading).not.toHaveBeenCalled();
+
+    let rejected: boolean | undefined;
+    act(() => {
+      rejected = webViewPropsRef.current?.onShouldStartLoadWithRequest?.({
+        url: 'https://ecampus.pccu.edu.tw.evil.example/inside.aspx?secret=value',
+      });
+    });
+
+    expect(rejected).toBe(false);
+    expect(mockStopLoading).toHaveBeenCalledTimes(1);
+    expect(consoleWarnSpy).toHaveBeenCalledWith('[global-scraper]', {
+      event: 'webview_host_rejected',
+      syncKind: 'schedule',
+    });
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('webview_host_rejected');
+    rendered.unmount();
+  });
+
+  it('rejects an HTTP redirect and settles the active request once', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+    const requestPromise = engine.requestSync('grade').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let rejected: boolean | undefined;
+    act(() => {
+      rejected = webViewPropsRef.current?.onShouldStartLoadWithRequest?.({
+        url: 'http://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+      webViewPropsRef.current?.onShouldStartLoadWithRequest?.({
+        url: 'http://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+      });
+    });
+
+    expect(rejected).toBe(false);
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('webview_host_rejected');
+    rendered.unmount();
   });
 
   it('renders the live scraper preview only inside a registered debug slot', async () => {
