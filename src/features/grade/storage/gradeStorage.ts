@@ -51,9 +51,5 @@ export async function clearGrades(): Promise<void> {
   cachedGrades = null;
   cachedPre = null;
   cachedUpdatedAt = null;
-  try {
-    await AsyncStorage.removeItem(STORAGE_KEY);
-  } catch (e) {
-    console.log('Clear grades cache failed:', e);
-  }
+  await AsyncStorage.removeItem(STORAGE_KEY);
 }

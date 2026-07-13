@@ -34,10 +34,5 @@ export async function getTrafficSnapshot(): Promise<TrafficSnapshot | null> {
 
 export async function clearTrafficSnapshot(): Promise<void> {
   cachedSnapshot = null;
-
-  try {
-    await AsyncStorage.removeItem(STORAGE_KEY);
-  } catch (error) {
-    console.log('Clear traffic cache failed:', error);
-  }
+  await AsyncStorage.removeItem(STORAGE_KEY);
 }

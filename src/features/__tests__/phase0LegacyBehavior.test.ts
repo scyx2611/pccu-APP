@@ -14,7 +14,9 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   }),
 }));
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearGrades, getGrades, setGrades } from '../grade/storage/gradeStorage';
+import { useGradeStore } from '../grade/store/useGradeStore';
 import {
   clearCourses,
   getCourses as getSchedule,
@@ -30,6 +32,8 @@ import {
   getCourses as getTutoringCourses,
   setCourses as setTutoringCourses,
 } from '../tutoring/storage/tutoringStorage';
+import { useTutoringStore } from '../tutoring/store/useTutoringStore';
+import { useScheduleStore } from '../schedule/store/useScheduleStore';
 import type { CourseData, SemesterGrade } from '../pccu/parsers/pccuScraper';
 import type { TrafficSnapshot } from '../traffic/types';
 import type { TutoringCourse } from '../tutoring/types';
@@ -38,6 +42,7 @@ import type { TutoringCourse } from '../tutoring/types';
 describe('Phase 0 legacy persistence characterization', () => {
   beforeEach(async () => {
     mockValues.clear();
+    jest.clearAllMocks();
     await Promise.all([clearGrades(), clearCourses(), clearTrafficSnapshot(), clearAll()]);
   });
 
@@ -93,5 +98,54 @@ describe('Phase 0 legacy persistence characterization', () => {
 
     await expect(getTrafficSnapshot()).resolves.toEqual(traffic);
     await expect(getTutoringCourses()).resolves.toEqual(tutoring);
+  });
+
+  it('propagates persistent deletion failures from every feature cache', async () => {
+    jest.mocked(AsyncStorage.removeItem).mockRejectedValueOnce(new Error('grade-delete'));
+    await expect(clearGrades()).rejects.toThrow('grade-delete');
+
+    jest.mocked(AsyncStorage.removeItem).mockRejectedValueOnce(new Error('traffic-delete'));
+    await expect(clearTrafficSnapshot()).rejects.toThrow('traffic-delete');
+
+    jest.mocked(AsyncStorage.removeItem).mockRejectedValueOnce(new Error('schedule-delete'));
+    await expect(clearCourses()).rejects.toThrow('schedule_cache_clear_failed');
+
+    jest.mocked(AsyncStorage.getAllKeys).mockRejectedValueOnce(new Error('tutoring-delete'));
+    await expect(clearAll()).rejects.toThrow('tutoring-delete');
+  });
+
+  it('resets all account-bound store data and sync state', () => {
+    useScheduleStore.getState().setCourses([{ name: 'private course' } as CourseData]);
+    useScheduleStore.getState().setSyncStatus('error');
+    useGradeStore.getState().setGrades([{ title: 'private grade' } as SemesterGrade]);
+    useGradeStore.getState().setSyncStatus('error');
+    useTutoringStore.getState().setSemester('private semester');
+    useTutoringStore.getState().setSyncStatus('error');
+
+    useScheduleStore.getState().resetData();
+    useGradeStore.getState().resetData();
+    useTutoringStore.getState().resetData();
+
+    expect(useScheduleStore.getState()).toMatchObject({
+      courses: [],
+      lastSyncedAt: null,
+      syncStatus: 'idle',
+      error: null,
+    });
+    expect(useGradeStore.getState()).toMatchObject({
+      grades: [],
+      lastSyncedAt: null,
+      syncStatus: 'idle',
+      error: null,
+    });
+    expect(useTutoringStore.getState()).toMatchObject({
+      courses: [],
+      pendingAssignments: [],
+      lastSyncedAt: null,
+      syncStatus: 'idle',
+      syncPhase: 'idle',
+      semester: '',
+      error: null,
+    });
   });
 });

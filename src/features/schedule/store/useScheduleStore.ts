@@ -17,6 +17,7 @@ export interface ScheduleStoreActions {
   setSyncStatus: (status: ScheduleSyncStatus) => void;
   setError: (error: string | null) => void;
   resetSync: () => void;
+  resetData: () => void;
   hydrate: () => Promise<{ courses: CourseData[]; updatedAt: number | null }>;
 }
 
@@ -39,6 +40,8 @@ export const useScheduleStore = create<UseScheduleStore>()((set) => ({
   setError: (error) => set({ error, syncStatus: error ? 'error' : 'idle' }),
 
   resetSync: () => set({ syncStatus: 'idle', error: null }),
+
+  resetData: () => set({ courses: [], lastSyncedAt: null, syncStatus: 'idle', error: null }),
 
   hydrate: async () => {
     try {

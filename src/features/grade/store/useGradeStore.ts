@@ -17,6 +17,7 @@ export interface GradeStoreActions {
   setSyncStatus: (status: GradeSyncStatus) => void;
   setError: (error: string | null) => void;
   resetSync: () => void;
+  resetData: () => void;
   hydrate: () => Promise<void>;
 }
 
@@ -39,6 +40,8 @@ export const useGradeStore = create<UseGradeStore>()((set) => ({
   setError: (error) => set({ error, syncStatus: 'error' }),
 
   resetSync: () => set({ syncStatus: 'idle', error: null }),
+
+  resetData: () => set({ grades: [], lastSyncedAt: null, syncStatus: 'idle', error: null }),
 
   hydrate: async () => {
     try {

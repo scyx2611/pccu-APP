@@ -16,6 +16,7 @@ interface TutoringStoreActions {
   setSyncPhase: (phase: SyncPhase) => void;
   setSyncStatus: (status: SyncStatus) => void;
   resetSync: () => void;
+  resetData: () => void;
   setError: (error: string | null) => void;
   setSemester: (semester: string) => void;
   setWelcomeText: (text: string) => void;
@@ -64,6 +65,20 @@ export const useTutoringStore = create<UseTutoringStore>()((set) => ({
   setSyncStatus: (syncStatus) => set({ syncStatus }),
 
   resetSync: () => set({ syncStatus: 'idle', syncPhase: 'idle', error: null }),
+
+  resetData: () =>
+    set({
+      courses: [],
+      courseDetails: new Map<string, CourseDetail>(),
+      syncStatus: 'idle',
+      syncPhase: 'idle',
+      pendingAssignmentsCount: 0,
+      pendingAssignments: [],
+      lastSyncedAt: null,
+      error: null,
+      semester: '',
+      welcomeText: '',
+    }),
 
   setError: (error) => set({ error, syncStatus: 'error', syncPhase: 'error' }),
 

@@ -227,11 +227,7 @@ export async function clearAll(): Promise<void> {
   cachedCourseDetails = {};
   cachedCourseInfo = {};
 
-  try {
-    const keys = await AsyncStorage.getAllKeys();
-    const tutoringKeys = keys.filter((key) => key.startsWith('cached_tutoring'));
-    await AsyncStorage.multiRemove(tutoringKeys);
-  } catch (error) {
-    console.log('Clear tutoring cache failed:', error);
-  }
+  const keys = await AsyncStorage.getAllKeys();
+  const tutoringKeys = keys.filter((key) => key.startsWith('cached_tutoring'));
+  await AsyncStorage.multiRemove(tutoringKeys);
 }

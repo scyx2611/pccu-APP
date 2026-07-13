@@ -82,10 +82,14 @@ export async function clearCourses(): Promise<void> {
   cachedUpdatedAt = null;
   isMockData = false;
 
-  try {
-    await AsyncStorage.removeItem(STORAGE_KEY);
-    await AsyncStorage.removeItem(LAST_STORAGE_KEY);
-  } catch (error) {
-    console.log('Clear schedule cache failed:', error);
+  const results = await Promise.allSettled([
+    AsyncStorage.removeItem(STORAGE_KEY),
+    AsyncStorage.removeItem(LAST_STORAGE_KEY),
+  ]);
+  const failures = results
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    .map((result) => result.reason);
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'schedule_cache_clear_failed');
   }
 }
