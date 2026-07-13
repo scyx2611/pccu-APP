@@ -90,6 +90,7 @@ jest.mock('react-native-webview', () => {
 
 jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -120,14 +121,17 @@ jest.mock('../../parsers/pccuScraper', () => ({
 
 jest.mock('../../../grade/storage/gradeStorage', () => ({
   setGrades: jest.fn(),
+  clearGrades: jest.fn(),
 }));
 
 jest.mock('../../../schedule/storage/scheduleStorage', () => ({
   setCourses: jest.fn(),
+  clearCourses: jest.fn(),
 }));
 
 jest.mock('../../../traffic/storage/trafficStorage', () => ({
   setTrafficSnapshot: jest.fn(),
+  clearTrafficSnapshot: jest.fn(),
 }));
 
 jest.mock('../../../notifications/services/courseReminderService', () => ({
@@ -160,6 +164,7 @@ jest.mock('../../../tutoring/storage/tutoringStorage', () => ({
   setAllAssignments: jest.fn(),
   setCourseInfo: jest.fn(),
   setCourseDetail: jest.fn(),
+  clearAll: jest.fn(),
 }));
 
 jest.mock('../../../tutoring/store/useTutoringStore', () => ({
@@ -200,7 +205,10 @@ import { setDeveloperDebugEnabled } from '../../../settings/storage/developerSet
 import { clearScraperDebugPreviewFrame, setScraperDebugPreviewFrame } from '../scraperDebugPreview';
 import { clearRegisteredWebViewSession } from '../../../../core/sync/webview/webViewSessionControl';
 import { runRegisteredWebViewHostAcceptanceProbe } from '../../../../core/sync/webview/webViewAcceptanceProbe';
-import { setCourses as setTutoringCourses } from '../../../tutoring/storage/tutoringStorage';
+import {
+  clearAll as clearTutoringStorage,
+  setCourses as setTutoringCourses,
+} from '../../../tutoring/storage/tutoringStorage';
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -238,6 +246,7 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     mockNonceCounterRef.current = 0;
     mockTutoringStoreSetCourses.mockReset();
     jest.mocked(setTutoringCourses).mockReset().mockResolvedValue(undefined);
+    jest.mocked(clearTutoringStorage).mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(async () => {
@@ -592,6 +601,59 @@ describe('GlobalScraperWebView PCCU session gate', () => {
       await Promise.all([messagePromise, cleanupPromise]);
     });
 
+    expect(mockTutoringStoreSetCourses).not.toHaveBeenCalled();
+    expect(await requestPromise).toBeInstanceOf(Error);
+    rendered.unmount();
+  });
+
+  it('times out a stuck handler and lets a retry finish after late persistence settles', async () => {
+    const persistence = deferred<void>();
+    jest.mocked(setTutoringCourses).mockReturnValueOnce(persistence.promise);
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+    const requestPromise = engine.requestSync('tutoring').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: { url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123' },
+      });
+      await Promise.resolve();
+    });
+
+    let messagePromise!: Promise<void>;
+    await act(async () => {
+      messagePromise = webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          url: 'https://icas.pccu.edu.tw/cfp/',
+          data: JSON.stringify({ t: 'courses', courses: [{ courseCode: 'ACCOUNT_A' }] }),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    let firstCleanup!: Promise<void>;
+    await act(async () => {
+      firstCleanup = clearRegisteredWebViewSession('account_switch');
+      webViewPropsRef.current?.onLoadEnd?.({ nativeEvent: { url: 'about:blank' } });
+      jest.advanceTimersByTime(8_000);
+      await Promise.resolve();
+    });
+    await expect(firstCleanup).rejects.toThrow('webview_session_reset_timeout');
+
+    let retryCleanup!: Promise<void>;
+    await act(async () => {
+      retryCleanup = clearRegisteredWebViewSession('account_switch');
+      persistence.resolve();
+      webViewPropsRef.current?.onLoadEnd?.({ nativeEvent: { url: 'about:blank' } });
+      await Promise.all([messagePromise, retryCleanup]);
+    });
+
+    expect(clearTutoringStorage).toHaveBeenCalled();
     expect(mockTutoringStoreSetCourses).not.toHaveBeenCalled();
     expect(await requestPromise).toBeInstanceOf(Error);
     rendered.unmount();

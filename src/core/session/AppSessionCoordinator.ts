@@ -74,6 +74,11 @@ export class AppSessionCoordinator {
     failedOperationCount += quiescenceResults.filter(
       (result) => result.status === 'rejected',
     ).length;
+    try {
+      this.ports.clearActiveCredentials();
+    } catch {
+      failedOperationCount += 1;
+    }
 
     const cleanupResults = await Promise.allSettled([
       Promise.resolve().then(() => this.ports.clearPersistentCredentials()),

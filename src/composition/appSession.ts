@@ -11,6 +11,7 @@ import { clearAll as clearTutoring } from '../features/tutoring/storage/tutoring
 import { useTutoringStore } from '../features/tutoring/store/useTutoringStore';
 import { useGradeStore } from '../features/grade/store/useGradeStore';
 import { consumeNextSessionCleanupFailure } from '../shared/testing/acceptanceFaults';
+import { refreshScheduledCourseReminders } from '../features/notifications/services/courseReminderService';
 
 const rejectedReasons = (results: PromiseSettledResult<unknown>[]) =>
   results
@@ -23,6 +24,7 @@ const clearFeatureCaches = async (): Promise<void> => {
     clearGrades(),
     clearTrafficSnapshot(),
     clearTutoring(),
+    refreshScheduledCourseReminders([]),
   ];
   if (consumeNextSessionCleanupFailure()) {
     operations.push(Promise.reject(new Error('acceptance_cleanup_failure')));

@@ -36,9 +36,15 @@ import {
   type SemesterGrade,
   type CourseData,
 } from '../../pccu/parsers/pccuScraper';
-import { setGrades as saveGrades } from '../../grade/storage/gradeStorage';
-import { setCourses as saveCourses } from '../../schedule/storage/scheduleStorage';
-import { setTrafficSnapshot } from '../../traffic/storage/trafficStorage';
+import {
+  clearGrades as clearSavedGrades,
+  setGrades as saveGrades,
+} from '../../grade/storage/gradeStorage';
+import {
+  clearCourses as clearSavedCourses,
+  setCourses as saveCourses,
+} from '../../schedule/storage/scheduleStorage';
+import { clearTrafficSnapshot, setTrafficSnapshot } from '../../traffic/storage/trafficStorage';
 import {
   TRAFFIC_SOURCE_URL,
   type TrafficSnapshot,
@@ -62,6 +68,7 @@ import {
   setAllAssignments,
   setCourseDetail as persistCourseDetail,
   setCourseInfo as persistCourseInfo,
+  clearAll as clearTutoringStorage,
 } from '../../tutoring/storage/tutoringStorage';
 import { useTutoringStore } from '../../tutoring/store/useTutoringStore';
 import {
@@ -93,6 +100,21 @@ const withTimestamp = (url: string) => `${url}${url.includes('?') ? '&' : '?'}ts
 const isTutoringTransUrl = (url: string) => /TransUrl\.aspx\?PrjNo=1202/i.test(url || '');
 const isInternalBlankPage = (url: string) => url.startsWith('about:blank');
 const logger = createLogger('global-scraper');
+
+const clearLateMessagePersistence = async (): Promise<void> => {
+  const results = await Promise.allSettled([
+    clearSavedGrades(),
+    clearSavedCourses(),
+    clearTrafficSnapshot(),
+    clearTutoringStorage(),
+    refreshScheduledCourseReminders([]),
+    SecureStore.deleteItemAsync('user_name'),
+  ]);
+  const failureCount = results.filter((result) => result.status === 'rejected').length;
+  if (failureCount > 0) {
+    logger.warn('webview_late_session_cleanup_failed', { failureCount });
+  }
+};
 
 const USER_AGENT =
   Platform.OS === 'ios'
@@ -187,6 +209,7 @@ export default function GlobalScraperWebView() {
   const protocolGenerationRef = useRef(0);
   const messageSessionGenerationRef = useRef(0);
   const inFlightMessageHandlersRef = useRef<Set<Promise<void>>>(new Set());
+  const lateMessageCleanupRef = useRef<Promise<void> | null>(null);
   const sessionResetRef = useRef<PendingSessionReset | null>(null);
   const trafficPartialRef = useRef<TrafficPartial>({ downhill: [], uphill: [] });
   const activeModeRef = useRef<ActiveMode>('none');
@@ -222,18 +245,38 @@ export default function GlobalScraperWebView() {
         resolve = resolvePromise;
         reject = rejectPromise;
       });
-      const timeout = setTimeout(() => {
-        reject(new Error('webview_session_reset_timeout'));
-      }, SESSION_RESET_TIMEOUT_MS);
       const inFlightHandlers = [...inFlightMessageHandlersRef.current];
-      const promise = Promise.allSettled([blankPagePromise, ...inFlightHandlers]).then(
-        (results) => {
-          const blankPageResult = results[0];
-          if (blankPageResult.status === 'rejected') {
-            throw blankPageResult.reason;
-          }
-        },
-      );
+      const drainTargets: Promise<unknown>[] = [...inFlightHandlers];
+      if (lateMessageCleanupRef.current) {
+        drainTargets.push(lateMessageCleanupRef.current);
+      }
+      const drainPromise = Promise.allSettled(drainTargets).then(() => undefined);
+      let timeout!: ReturnType<typeof setTimeout>;
+      const timeoutPromise = new Promise<void>((_, rejectTimeout) => {
+        timeout = setTimeout(() => {
+          rejectTimeout(new Error('webview_session_reset_timeout'));
+        }, SESSION_RESET_TIMEOUT_MS);
+      });
+      const completionPromise = Promise.all([blankPagePromise, drainPromise]).then(() => undefined);
+      const promise = Promise.race([completionPromise, timeoutPromise]).catch((error) => {
+        if (
+          error instanceof Error &&
+          error.message === 'webview_session_reset_timeout' &&
+          !lateMessageCleanupRef.current
+        ) {
+          const cleanup = Promise.allSettled(inFlightHandlers)
+            .then(() => clearLateMessagePersistence())
+            .catch(() => undefined);
+          lateMessageCleanupRef.current = cleanup;
+          const releaseCleanup = () => {
+            if (lateMessageCleanupRef.current === cleanup) {
+              lateMessageCleanupRef.current = null;
+            }
+          };
+          void cleanup.then(releaseCleanup, releaseCleanup);
+        }
+        throw error;
+      });
       sessionResetRef.current = { promise, resolve, reject, timeout };
       const releaseReset = () => {
         if (sessionResetRef.current?.promise !== promise) return;
@@ -282,7 +325,6 @@ export default function GlobalScraperWebView() {
     const reset = sessionResetRef.current;
     if (!reset || !url.startsWith('about:blank')) return false;
 
-    clearTimeout(reset.timeout);
     reset.resolve();
     return true;
   }, []);

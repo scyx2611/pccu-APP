@@ -149,4 +149,28 @@ describe('AppSessionCoordinator', () => {
     expect(ports.clearProfile).toHaveBeenCalledTimes(1);
     expect(ports.clearFeatureCaches).toHaveBeenCalledTimes(1);
   });
+
+  it('clears active credentials again after an in-flight auth write quiesces', async () => {
+    const { ports } = createPorts();
+    const pendingAuth = deferred();
+    let activeAccount: string | null = 'ACCOUNT_A';
+    jest.mocked(ports.clearActiveCredentials).mockImplementation(() => {
+      activeAccount = null;
+    });
+    jest.mocked(ports.resetAuthSession).mockImplementation(async () => {
+      await pendingAuth.promise;
+      activeAccount = 'ACCOUNT_A';
+    });
+    const coordinator = new AppSessionCoordinator(ports);
+
+    const transition = coordinator.transition('logout');
+    await Promise.resolve();
+    expect(activeAccount).toBeNull();
+
+    pendingAuth.resolve();
+    await transition;
+
+    expect(activeAccount).toBeNull();
+    expect(ports.clearActiveCredentials).toHaveBeenCalledTimes(2);
+  });
 });
