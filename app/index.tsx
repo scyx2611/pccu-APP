@@ -4,7 +4,10 @@ import { router } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import WelcomeScreen from '../src/features/auth/screens/WelcomeScreen';
 import { useTheme } from '../src/providers/theme/ThemeProvider';
-import { getSavedPCCUCredentials } from '../src/features/auth/services/authService';
+import {
+  clearSavedPCCUCredentials,
+  getSavedPCCUCredentials,
+} from '../src/features/auth/services/authService';
 import { getBootstrapCacheSnapshot } from '../src/features/auth/services/bootstrapCache';
 import { getBiometricLoginEnabled } from '../src/features/settings/storage/securitySettings';
 
@@ -82,7 +85,12 @@ export default function IndexScreen() {
     };
 
     const bootstrap = async () => {
-      const savedCredentials = await getSavedPCCUCredentials();
+      let savedCredentials: Awaited<ReturnType<typeof getSavedPCCUCredentials>> = null;
+      try {
+        savedCredentials = await getSavedPCCUCredentials();
+      } catch {
+        await clearSavedPCCUCredentials().catch(() => undefined);
+      }
 
       if (!active) return;
 

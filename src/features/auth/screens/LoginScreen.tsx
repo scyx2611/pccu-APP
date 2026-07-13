@@ -14,6 +14,7 @@ import {
 import { router } from 'expo-router';
 import {
   clearPersistedPCCUCredentials,
+  clearSavedPCCUCredentials,
   ensurePCCUSession,
   getSavedPCCUCredentials,
   loginPCCU,
@@ -82,7 +83,12 @@ export default function LoginScreen() {
 
     const loadSavedCredentials = async () => {
       const biometricLoginEnabled = await getBiometricLoginEnabled();
-      const savedCredentials = await getSavedPCCUCredentials();
+      let savedCredentials: Awaited<ReturnType<typeof getSavedPCCUCredentials>> = null;
+      try {
+        savedCredentials = await getSavedPCCUCredentials();
+      } catch {
+        await clearSavedPCCUCredentials().catch(() => undefined);
+      }
 
       if (!active) return;
 

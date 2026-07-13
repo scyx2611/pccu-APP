@@ -85,6 +85,18 @@ describe('SecureStoreCredentialVault', () => {
     expect(mockDeleteItemAsync).not.toHaveBeenCalled();
   });
 
+  it('clears persisted credentials without dropping the active session', async () => {
+    const credentials = { account: 'B4123456', password: 'secret' };
+    vault.setActive(credentials);
+
+    await vault.clearPersisted();
+
+    expect(vault.getActive()).toEqual(credentials);
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith(ACCOUNT_KEY);
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith(PASSWORD_KEY);
+    expect(mockAsyncStorageRemoveItem).toHaveBeenCalledWith(LEGACY_CREDENTIALS_MIRROR_KEY);
+  });
+
   it('rolls back both secure values when a partial save fails', async () => {
     mockSetItemAsync.mockImplementation(async (key) => {
       if (key === PASSWORD_KEY) throw new Error('write failed');

@@ -49,6 +49,7 @@ export class SecureStoreCredentialVault implements CredentialVault {
     const account = normalize(accountRead.value);
     const password = normalize(passwordRead.value);
     if (!account || !password) {
+      this.clearActive();
       await this.clearPersisted();
       return { status: 'requires_sign_in' };
     }
@@ -100,7 +101,6 @@ export class SecureStoreCredentialVault implements CredentialVault {
   }
 
   async clearPersisted(): Promise<void> {
-    this.clearActive();
     this.migration = null;
     const results = await Promise.allSettled([
       SecureStore.deleteItemAsync(ACCOUNT_KEY),
@@ -128,6 +128,7 @@ export class SecureStoreCredentialVault implements CredentialVault {
     failedOperationResults: PromiseSettledResult<unknown>[],
   ): Promise<never> {
     const causes = failureReasons(failedOperationResults);
+    this.clearActive();
     try {
       await this.clearPersisted();
     } catch (error) {
