@@ -173,4 +173,27 @@ describe('AppSessionCoordinator', () => {
     expect(activeAccount).toBeNull();
     expect(ports.clearActiveCredentials).toHaveBeenCalledTimes(2);
   });
+
+  it('returns a retryable cleanup failure when bounded auth quiescence times out', async () => {
+    jest.useFakeTimers();
+    const { ports } = createPorts();
+    jest.mocked(ports.resetAuthSession).mockImplementation(
+      () =>
+        new Promise<void>((_, reject) => {
+          setTimeout(() => reject(new Error('auth_session_reset_timeout')), 8_000);
+        }),
+    );
+    const coordinator = new AppSessionCoordinator(ports);
+
+    try {
+      const transition = coordinator.transition('account_switch');
+      jest.advanceTimersByTime(8_000);
+      await expect(transition).rejects.toBeInstanceOf(SessionCleanupError);
+      expect(ports.clearPersistentCredentials).toHaveBeenCalledTimes(1);
+      expect(ports.clearFeatureCaches).toHaveBeenCalledTimes(1);
+      expect(ports.sync.allowNewRequests).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

@@ -178,6 +178,37 @@ describe('authService CredentialVault facade', () => {
     expect(resetSettled).toBe(true);
   });
 
+  it('times out a stuck credential write and compensates when it settles late', async () => {
+    jest.useFakeTimers();
+    const persistence = deferred<void>();
+    mockVaultSave.mockReturnValueOnce(persistence.promise);
+
+    try {
+      const login = loginPCCU('ACCOUNT_A', 'secret-a', { persistCredentials: true });
+      for (let index = 0; index < 5; index += 1) {
+        await Promise.resolve();
+      }
+      expect(mockVaultSave).toHaveBeenCalledTimes(1);
+
+      const reset = resetAuthSessionRuntime();
+      jest.advanceTimersByTime(8_000);
+      await expect(reset).rejects.toThrow('auth_session_reset_timeout');
+
+      const retry = resetAuthSessionRuntime();
+      persistence.resolve();
+      await expect(login).resolves.toEqual({ success: false, message: 'session_changed' });
+      await expect(retry).resolves.toBeUndefined();
+      for (let index = 0; index < 5; index += 1) {
+        await Promise.resolve();
+      }
+
+      expect(mockVaultClearActive).toHaveBeenCalled();
+      expect(mockVaultClearPersisted).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('keys the warm-session cache by account', async () => {
     const accountA = { account: 'ACCOUNT_A', password: 'secret-a' };
     const accountB = { account: 'ACCOUNT_B', password: 'secret-b' };
