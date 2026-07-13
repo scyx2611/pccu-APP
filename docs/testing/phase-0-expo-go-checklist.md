@@ -14,7 +14,7 @@
 ## 執行前準備
 
 1. 在專案根目錄執行 `npm.cmd ci` 與 `npm.cmd run verify`。
-2. 執行 `npm.cmd start`，以同一區域網路中的 Expo Go 掃描 QR code。
+2. 執行 `npm.cmd start -- --go`，強制 CLI 使用 Expo Go，再以同一區域網路中的 Expo Go 掃描 QR code。
 3. 準備兩個合法測試帳號 A/B；證據只寫「帳號 A／帳號 B」。
 4. 「設定 → 開發者 → Phase 0 Expo Go 驗收」只在開發模式出現：
    - 「測試 WebView 網域阻擋」會走正式 WebView navigation handler。

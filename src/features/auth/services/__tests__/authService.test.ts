@@ -51,11 +51,21 @@ jest.mock('../../../grade/storage/gradeStorage', () => ({
 import {
   clearPersistedPCCUCredentials,
   clearSessionPCCUCredentials,
+  ensurePCCUSession,
   getSavedPCCUCredentials,
   loginPCCU,
   logoutPCCU,
   savePCCUCredentials,
 } from '../authService';
+import { resetAuthSessionRuntime } from '../authSessionRuntime';
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+};
 
 const loginResponse = (hasError: boolean): Response =>
   ({
@@ -65,7 +75,8 @@ const loginResponse = (hasError: boolean): Response =>
   }) as unknown as Response;
 
 describe('authService CredentialVault facade', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await resetAuthSessionRuntime();
     mockVaultGetSaved.mockReset().mockResolvedValue(null);
     mockVaultGetActive.mockReset().mockReturnValue(null);
     mockVaultSave.mockReset().mockResolvedValue(undefined);
@@ -127,5 +138,71 @@ describe('authService CredentialVault facade', () => {
     expect(mockVaultClearActive).not.toHaveBeenCalled();
     expect(mockVaultClearPersisted).not.toHaveBeenCalled();
     expect(mockVaultClearProfile).not.toHaveBeenCalled();
+  });
+
+  it('does not restore an old account when login completes after a session reset', async () => {
+    const response = deferred<Response>();
+    mockFetch.mockReturnValueOnce(response.promise);
+
+    const login = loginPCCU('ACCOUNT_A', 'secret-a', { persistCredentials: true });
+    await Promise.resolve();
+    const reset = resetAuthSessionRuntime();
+    response.resolve(loginResponse(false));
+
+    await expect(login).resolves.toEqual({ success: false, message: 'session_changed' });
+    await reset;
+    expect(mockVaultSetActive).not.toHaveBeenCalled();
+    expect(mockVaultSave).not.toHaveBeenCalled();
+  });
+
+  it('waits for an already-started credential write before session cleanup continues', async () => {
+    const persistence = deferred<void>();
+    mockVaultSave.mockReturnValueOnce(persistence.promise);
+
+    const login = loginPCCU('ACCOUNT_A', 'secret-a', { persistCredentials: true });
+    for (let index = 0; index < 5; index += 1) {
+      await Promise.resolve();
+    }
+    expect(mockVaultSave).toHaveBeenCalledTimes(1);
+
+    let resetSettled = false;
+    const reset = resetAuthSessionRuntime().then(() => {
+      resetSettled = true;
+    });
+    await Promise.resolve();
+    expect(resetSettled).toBe(false);
+
+    persistence.resolve();
+    await expect(login).resolves.toEqual({ success: false, message: 'session_changed' });
+    await reset;
+    expect(resetSettled).toBe(true);
+  });
+
+  it('keys the warm-session cache by account', async () => {
+    const accountA = { account: 'ACCOUNT_A', password: 'secret-a' };
+    const accountB = { account: 'ACCOUNT_B', password: 'secret-b' };
+
+    await expect(ensurePCCUSession(accountA)).resolves.toEqual({ success: true });
+    await expect(ensurePCCUSession(accountA)).resolves.toEqual({ success: true });
+    await expect(ensurePCCUSession(accountB)).resolves.toEqual({ success: true });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('logs only a redacted error name when login fails unexpectedly', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockFetch.mockRejectedValueOnce(new Error('secret-a should never be logged'));
+
+    await expect(loginPCCU('ACCOUNT_A', 'secret-a')).resolves.toEqual(
+      expect.objectContaining({ success: false }),
+    );
+
+    expect(consoleError).toHaveBeenCalledWith({
+      event: 'login_failed',
+      scope: 'auth-service',
+      fields: { errorName: 'Error' },
+    });
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain('secret-a');
+    consoleError.mockRestore();
   });
 });

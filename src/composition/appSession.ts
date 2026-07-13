@@ -1,6 +1,7 @@
 import { AppSessionCoordinator } from '../core/session/AppSessionCoordinator';
 import { clearRegisteredWebViewSession } from '../core/sync/webview/webViewSessionControl';
 import { credentialVault } from '../features/auth/infrastructure/SecureStoreCredentialVault';
+import { resetAuthSessionRuntime } from '../features/auth/services/authSessionRuntime';
 import { clearGrades } from '../features/grade/storage/gradeStorage';
 import { PccuSyncEngine } from '../features/pccu/engine/PccuSyncEngine';
 import { clearCourses } from '../features/schedule/storage/scheduleStorage';
@@ -58,6 +59,7 @@ const resetFeatureStores = (): void => {
 export const appSessionCoordinator = new AppSessionCoordinator({
   sync: PccuSyncEngine.getInstance(),
   clearWebView: clearRegisteredWebViewSession,
+  resetAuthSession: resetAuthSessionRuntime,
   clearActiveCredentials: () => credentialVault.clearActive(),
   clearPersistentCredentials: () => credentialVault.clearPersisted(),
   clearProfile: () => credentialVault.clearProfile(),

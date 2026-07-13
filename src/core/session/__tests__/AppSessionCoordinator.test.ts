@@ -29,6 +29,9 @@ const createPorts = () => {
     clearWebView: jest.fn(async () => {
       calls.push('clear-webview');
     }),
+    resetAuthSession: jest.fn(async () => {
+      calls.push('reset-auth-session');
+    }),
     clearActiveCredentials: jest.fn(() => calls.push('clear-active-credentials')),
     clearPersistentCredentials: jest.fn(async () => {
       calls.push('clear-persistent-credentials');
@@ -52,7 +55,13 @@ describe('AppSessionCoordinator', () => {
 
     await coordinator.transition('logout');
 
-    expect(calls.slice(0, 3)).toEqual(['block', 'abort', 'clear-active-credentials']);
+    expect(calls.slice(0, 5)).toEqual([
+      'block',
+      'abort',
+      'reset-auth-session',
+      'clear-webview',
+      'clear-active-credentials',
+    ]);
     expect(calls.indexOf('clear-webview')).toBeGreaterThan(calls.indexOf('abort'));
     expect(calls.slice(-3)).toEqual(['reset-feature-stores', 'reset-sync', 'allow']);
     expect(ports.clearWebView).toHaveBeenCalledWith('logout');
@@ -114,5 +123,30 @@ describe('AppSessionCoordinator', () => {
 
     pendingWebView.resolve();
     await first;
+  });
+
+  it('waits for auth and WebView work to quiesce before clearing persistent state', async () => {
+    const { ports } = createPorts();
+    const pendingAuth = deferred();
+    const pendingWebView = deferred();
+    jest.mocked(ports.resetAuthSession).mockReturnValue(pendingAuth.promise);
+    jest.mocked(ports.clearWebView).mockReturnValue(pendingWebView.promise);
+    const coordinator = new AppSessionCoordinator(ports);
+
+    const transition = coordinator.transition('account_switch');
+    await Promise.resolve();
+
+    expect(ports.clearActiveCredentials).toHaveBeenCalledTimes(1);
+    expect(ports.clearPersistentCredentials).not.toHaveBeenCalled();
+    expect(ports.clearProfile).not.toHaveBeenCalled();
+    expect(ports.clearFeatureCaches).not.toHaveBeenCalled();
+
+    pendingAuth.resolve();
+    pendingWebView.resolve();
+    await transition;
+
+    expect(ports.clearPersistentCredentials).toHaveBeenCalledTimes(1);
+    expect(ports.clearProfile).toHaveBeenCalledTimes(1);
+    expect(ports.clearFeatureCaches).toHaveBeenCalledTimes(1);
   });
 });

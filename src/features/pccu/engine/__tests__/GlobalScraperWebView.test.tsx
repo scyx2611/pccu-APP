@@ -14,6 +14,7 @@ const mockProtocolIdentityRef: { current: Record<string, unknown> | null } = { c
 const mockCurrentUrlRef = { current: '' };
 const mockNonceCounterRef = { current: 0 };
 let consoleWarnSpy: jest.SpyInstance;
+const mockTutoringStoreSetCourses = jest.fn();
 
 const mockRecordInjectedJavaScript = (script: string) => {
   mockRawInjectJavaScript(script);
@@ -166,7 +167,7 @@ jest.mock('../../../tutoring/store/useTutoringStore', () => ({
     getState: () => ({
       setSyncPhase: jest.fn(),
       setSyncStatus: jest.fn(),
-      setCourses: jest.fn(),
+      setCourses: mockTutoringStoreSetCourses,
       setSemester: jest.fn(),
       setWelcomeText: jest.fn(),
       setPendingAssignments: jest.fn(),
@@ -199,6 +200,15 @@ import { setDeveloperDebugEnabled } from '../../../settings/storage/developerSet
 import { clearScraperDebugPreviewFrame, setScraperDebugPreviewFrame } from '../scraperDebugPreview';
 import { clearRegisteredWebViewSession } from '../../../../core/sync/webview/webViewSessionControl';
 import { runRegisteredWebViewHostAcceptanceProbe } from '../../../../core/sync/webview/webViewAcceptanceProbe';
+import { setCourses as setTutoringCourses } from '../../../tutoring/storage/tutoringStorage';
+
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+};
 
 describe('GlobalScraperWebView PCCU session gate', () => {
   beforeEach(async () => {
@@ -226,6 +236,8 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     mockProtocolIdentityRef.current = null;
     mockCurrentUrlRef.current = '';
     mockNonceCounterRef.current = 0;
+    mockTutoringStoreSetCourses.mockReset();
+    jest.mocked(setTutoringCourses).mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(async () => {
@@ -528,6 +540,61 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     expect(completed).toBe(true);
     rendered.unmount();
     await expect(clearRegisteredWebViewSession('logout')).resolves.toBeUndefined();
+  });
+
+  it('quiesces an old account message before session cleanup completes', async () => {
+    const persistence = deferred<void>();
+    jest.mocked(setTutoringCourses).mockReturnValueOnce(persistence.promise);
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+    const requestPromise = engine.requestSync('tutoring').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: { url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123' },
+      });
+      await Promise.resolve();
+    });
+    expect(mockProtocolIdentityRef.current).not.toBeNull();
+
+    let messagePromise!: Promise<void>;
+    await act(async () => {
+      messagePromise = webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          url: 'https://icas.pccu.edu.tw/cfp/',
+          data: JSON.stringify({ t: 'courses', courses: [{ courseCode: 'ACCOUNT_A' }] }),
+        },
+      });
+      await Promise.resolve();
+    });
+    expect(setTutoringCourses).toHaveBeenCalledTimes(1);
+
+    let cleanupSettled = false;
+    let cleanupPromise!: Promise<void>;
+    await act(async () => {
+      cleanupPromise = clearRegisteredWebViewSession('account_switch');
+      void cleanupPromise.then(() => {
+        cleanupSettled = true;
+      });
+      webViewPropsRef.current?.onLoadEnd?.({ nativeEvent: { url: 'about:blank' } });
+      await Promise.resolve();
+    });
+
+    expect(cleanupSettled).toBe(false);
+
+    persistence.resolve();
+    await act(async () => {
+      await Promise.all([messagePromise, cleanupPromise]);
+    });
+
+    expect(mockTutoringStoreSetCourses).not.toHaveBeenCalled();
+    expect(await requestPromise).toBeInstanceOf(Error);
+    rendered.unmount();
   });
 
   it('renders the live scraper preview only inside a registered debug slot', async () => {

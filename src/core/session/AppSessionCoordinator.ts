@@ -10,6 +10,7 @@ export interface SessionSyncPort {
 export interface SessionCleanupPorts {
   sync: SessionSyncPort;
   clearWebView(reason: SessionTransitionReason): Promise<void>;
+  resetAuthSession(): Promise<void>;
   clearActiveCredentials(): void;
   clearPersistentCredentials(): Promise<void>;
   clearProfile(): Promise<void>;
@@ -49,16 +50,38 @@ export class AppSessionCoordinator {
   private async runTransition(reason: SessionTransitionReason): Promise<void> {
     this.ports.sync.blockNewRequests(reason);
     this.ports.sync.abortActiveAndRejectQueue(reason);
-    this.ports.clearActiveCredentials();
 
-    const results = await Promise.allSettled([
-      Promise.resolve().then(() => this.ports.clearWebView(reason)),
+    const invoke = (operation: () => void | Promise<void>): Promise<void> => {
+      try {
+        return Promise.resolve(operation());
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    };
+
+    const quiescenceOperations = [
+      invoke(() => this.ports.resetAuthSession()),
+      invoke(() => this.ports.clearWebView(reason)),
+    ];
+    let failedOperationCount = 0;
+    try {
+      this.ports.clearActiveCredentials();
+    } catch {
+      failedOperationCount += 1;
+    }
+
+    const quiescenceResults = await Promise.allSettled(quiescenceOperations);
+    failedOperationCount += quiescenceResults.filter(
+      (result) => result.status === 'rejected',
+    ).length;
+
+    const cleanupResults = await Promise.allSettled([
       Promise.resolve().then(() => this.ports.clearPersistentCredentials()),
       Promise.resolve().then(() => this.ports.clearProfile()),
       Promise.resolve().then(() => this.ports.clearFeatureCaches()),
     ]);
 
-    let failedOperationCount = results.filter((result) => result.status === 'rejected').length;
+    failedOperationCount += cleanupResults.filter((result) => result.status === 'rejected').length;
     try {
       this.ports.resetFeatureStores();
     } catch {

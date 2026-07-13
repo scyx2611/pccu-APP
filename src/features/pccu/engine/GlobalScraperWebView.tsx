@@ -185,6 +185,8 @@ export default function GlobalScraperWebView() {
   const credRef = useRef<PCCUCredentials | null>(null);
   const pendingRef = useRef<PendingRequest | null>(null);
   const protocolGenerationRef = useRef(0);
+  const messageSessionGenerationRef = useRef(0);
+  const inFlightMessageHandlersRef = useRef<Set<Promise<void>>>(new Set());
   const sessionResetRef = useRef<PendingSessionReset | null>(null);
   const trafficPartialRef = useRef<TrafficPartial>({ downhill: [], uphill: [] });
   const activeModeRef = useRef<ActiveMode>('none');
@@ -213,18 +215,32 @@ export default function GlobalScraperWebView() {
     (reason: WebViewSessionClearReason): Promise<void> => {
       if (sessionResetRef.current) return sessionResetRef.current.promise;
 
+      messageSessionGenerationRef.current += 1;
       let resolve!: () => void;
       let reject!: (error: Error) => void;
-      const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+      const blankPagePromise = new Promise<void>((resolvePromise, rejectPromise) => {
         resolve = resolvePromise;
         reject = rejectPromise;
       });
       const timeout = setTimeout(() => {
-        if (sessionResetRef.current?.promise !== promise) return;
-        sessionResetRef.current = null;
         reject(new Error('webview_session_reset_timeout'));
       }, SESSION_RESET_TIMEOUT_MS);
+      const inFlightHandlers = [...inFlightMessageHandlersRef.current];
+      const promise = Promise.allSettled([blankPagePromise, ...inFlightHandlers]).then(
+        (results) => {
+          const blankPageResult = results[0];
+          if (blankPageResult.status === 'rejected') {
+            throw blankPageResult.reason;
+          }
+        },
+      );
       sessionResetRef.current = { promise, resolve, reject, timeout };
+      const releaseReset = () => {
+        if (sessionResetRef.current?.promise !== promise) return;
+        clearTimeout(timeout);
+        sessionResetRef.current = null;
+      };
+      void promise.then(releaseReset, releaseReset);
 
       webViewRef.current?.stopLoading();
       const pending = pendingRef.current;
@@ -267,7 +283,6 @@ export default function GlobalScraperWebView() {
     if (!reset || !url.startsWith('about:blank')) return false;
 
     clearTimeout(reset.timeout);
-    sessionResetRef.current = null;
     reset.resolve();
     return true;
   }, []);
@@ -488,6 +503,7 @@ export default function GlobalScraperWebView() {
 
     return () => {
       unmountedRef.current = true;
+      messageSessionGenerationRef.current += 1;
       releasePccuSessionLease();
     };
   }, [releasePccuSessionLease]);
@@ -653,34 +669,55 @@ export default function GlobalScraperWebView() {
   // Traffic helpers
   // -----------------------------------------------------------------------
 
-  const finishTraffic = useCallback(async (result: { success: boolean; message?: string }) => {
-    const pending = pendingRef.current;
-    if (!pending || pending.completed) return;
-    pending.completed = true;
+  const finishTraffic = useCallback(
+    async (
+      result: { success: boolean; message?: string },
+      expected?: { pending: PendingRequest; messageSessionGeneration: number },
+    ) => {
+      const pending = pendingRef.current;
+      if (!pending || pending.completed) return;
+      if (
+        expected &&
+        (expected.pending !== pending ||
+          expected.messageSessionGeneration !== messageSessionGenerationRef.current)
+      ) {
+        return;
+      }
 
-    if (result.success) {
-      const snapshot: TrafficSnapshot = {
-        downhill: sortTrafficArrivals('downhill', trafficPartialRef.current.downhill),
-        uphill: sortTrafficArrivals('uphill', trafficPartialRef.current.uphill),
-        updatedAt: Date.now(),
-        sourceUrl: TRAFFIC_SOURCE_URL,
-      };
-      await setTrafficSnapshot(snapshot);
-      pending.request.resolve({
-        success: true,
-        updatedAt: snapshot.updatedAt,
-        counts: {
-          downhill: snapshot.downhill.length,
-          uphill: snapshot.uphill.length,
-        },
-      });
-    } else {
-      pending.request.reject(new Error(result.message || 'Traffic sync failed'));
-    }
-    pendingRef.current = null;
-    activeModeRef.current = 'none';
-    trafficPhaseRef.current = 'done';
-  }, []);
+      if (result.success) {
+        const snapshot: TrafficSnapshot = {
+          downhill: sortTrafficArrivals('downhill', trafficPartialRef.current.downhill),
+          uphill: sortTrafficArrivals('uphill', trafficPartialRef.current.uphill),
+          updatedAt: Date.now(),
+          sourceUrl: TRAFFIC_SOURCE_URL,
+        };
+        await setTrafficSnapshot(snapshot);
+        if (
+          pendingRef.current !== pending ||
+          pending.completed ||
+          (expected && expected.messageSessionGeneration !== messageSessionGenerationRef.current)
+        ) {
+          return;
+        }
+        pending.completed = true;
+        pending.request.resolve({
+          success: true,
+          updatedAt: snapshot.updatedAt,
+          counts: {
+            downhill: snapshot.downhill.length,
+            uphill: snapshot.uphill.length,
+          },
+        });
+      } else {
+        pending.completed = true;
+        pending.request.reject(new Error(result.message || 'Traffic sync failed'));
+      }
+      pendingRef.current = null;
+      activeModeRef.current = 'none';
+      trafficPhaseRef.current = 'done';
+    },
+    [],
+  );
 
   const rejectActiveWebViewRequest = useCallback(
     (reason = 'webview_host_rejected') => {
@@ -960,11 +997,16 @@ export default function GlobalScraperWebView() {
   // Message handler
   // -----------------------------------------------------------------------
 
-  const handleMessage = useCallback(
-    async (event: any) => {
+  const processMessage = useCallback(
+    async (event: any, messageSessionGeneration: number) => {
+      const messagePending = pendingRef.current;
+      if (!messagePending) return;
       try {
-        const pending = pendingRef.current;
-        if (!pending) return;
+        const pending = messagePending;
+        const isCurrentMessageSession = () =>
+          messageSessionGenerationRef.current === messageSessionGeneration &&
+          pendingRef.current === pending &&
+          !pending.completed;
 
         const currentUrl = String(event?.nativeEvent?.url || '');
         if (!isAllowedWebViewUrl(currentUrl)) {
@@ -1043,7 +1085,9 @@ export default function GlobalScraperWebView() {
 
           if (data.t === 'html' && type === 'grade') {
             const parsed = parseGradesFromHtml(typeof data.h === 'string' ? data.h : '');
-            if (await persistGrades(parsed)) {
+            const persisted = await persistGrades(parsed);
+            if (!isCurrentMessageSession()) return;
+            if (persisted) {
               finishPccu({
                 success: true,
                 data: { success: true, updatedAt: Date.now(), semestersCount: parsed.length },
@@ -1075,7 +1119,9 @@ export default function GlobalScraperWebView() {
               );
             }
 
-            if (await persistCourses(parsed)) {
+            const persisted = await persistCourses(parsed);
+            if (!isCurrentMessageSession()) return;
+            if (persisted) {
               finishPccu({
                 success: true,
                 data: { success: true, updatedAt: Date.now(), coursesCount: parsed.length },
@@ -1189,6 +1235,7 @@ export default function GlobalScraperWebView() {
           if (data.t === 'courses') {
             const parsedCourses = Array.isArray(data.courses) ? data.courses : [];
             await storageSetCourses(parsedCourses);
+            if (!isCurrentMessageSession()) return;
             useTutoringStore.getState().setCourses(parsedCourses);
             if (data.semester) {
               useTutoringStore.getState().setSemester(data.semester);
@@ -1207,6 +1254,7 @@ export default function GlobalScraperWebView() {
           if (data.t === 'all_assignments') {
             const allItems = Array.isArray(data.items) ? data.items : [];
             await setAllAssignments(allItems);
+            if (!isCurrentMessageSession()) return;
             injectLegacyJavaScript(buildTutoringPendingAssignmentsScript());
             return;
           }
@@ -1214,6 +1262,7 @@ export default function GlobalScraperWebView() {
           if (data.t === 'pending') {
             const pendingItems = Array.isArray(data.items) ? data.items : [];
             await setPendingAssignments(pendingItems);
+            if (!isCurrentMessageSession()) return;
             useTutoringStore.getState().setPendingAssignments(pendingItems);
             useTutoringStore.getState().setLastSyncedAt(Date.now());
             if (!isSilentTutoring) {
@@ -1255,6 +1304,7 @@ export default function GlobalScraperWebView() {
               persistJobs.push(persistCourseInfo(courseCode, detail.courseInfo));
             }
             await Promise.all(persistJobs);
+            if (!isCurrentMessageSession()) return;
             useTutoringStore.getState().updateCourseDetail(courseCode, detail);
             if (!isSilentTutoring) {
               useTutoringStore.getState().setSyncPhase('complete');
@@ -1379,13 +1429,17 @@ export default function GlobalScraperWebView() {
               setTrafficUrl(withTimestamp(TRAFFIC_UPHILL_URL));
             } else if (data.direction === 'uphill') {
               trafficPartialRef.current.uphill = normalized;
-              await finishTraffic({ success: true });
+              await finishTraffic({ success: true }, { pending, messageSessionGeneration });
             }
           }
         }
       } catch (error) {
-        const pending = pendingRef.current;
-        if (pending && !pending.completed) {
+        const pending = messagePending;
+        if (
+          !pending.completed &&
+          messageSessionGenerationRef.current === messageSessionGeneration &&
+          pendingRef.current === pending
+        ) {
           const mode = activeModeRef.current;
           if (mode === 'pccu') {
             const type = pending.request.type as SyncType;
@@ -1416,6 +1470,18 @@ export default function GlobalScraperWebView() {
       navigateToAllowedUrl,
       updateDebugMessage,
     ],
+  );
+
+  const handleMessage = useCallback(
+    (event: any): Promise<void> => {
+      const messageSessionGeneration = messageSessionGenerationRef.current;
+      const promise = processMessage(event, messageSessionGeneration);
+      inFlightMessageHandlersRef.current.add(promise);
+      const remove = () => inFlightMessageHandlersRef.current.delete(promise);
+      void promise.then(remove, remove);
+      return promise;
+    },
+    [processMessage],
   );
 
   // -----------------------------------------------------------------------
