@@ -1,18 +1,12 @@
 import { AppState, type AppStateStatus } from 'react-native';
+import type { SyncKind } from '../../../core/sync/contracts';
 import { createLogger } from '../../../shared/utils/logger';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SyncType =
-  | 'grade'
-  | 'schedule'
-  | 'traffic'
-  | 'tutoring'
-  | 'tutoring-detail'
-  | 'tutoring-download'
-  | 'tutoring-upload';
+export type SyncType = SyncKind;
 
 export interface SyncRequest {
   id: string;

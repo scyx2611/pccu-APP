@@ -4,19 +4,76 @@ const mockGetSavedPCCUCredentials = jest.fn(async () => ({
 }));
 
 const mockInjectJavaScript = jest.fn();
+const mockRawInjectJavaScript = jest.fn();
 const mockReload = jest.fn();
 const mockStopLoading = jest.fn();
 const webViewPropsRef: { current: any | null } = { current: null };
+const mockProtocolIdentityRef: { current: Record<string, unknown> | null } = { current: null };
+const mockCurrentUrlRef = { current: '' };
+const mockNonceCounterRef = { current: 0 };
 let consoleWarnSpy: jest.SpyInstance;
+
+const mockRecordInjectedJavaScript = (script: string) => {
+  mockRawInjectJavaScript(script);
+  const identityMatch = script.match(/\/\*__MYCCU_PROTOCOL_IDENTITY__(.*?)__\*\//);
+  if (identityMatch) {
+    mockProtocolIdentityRef.current = JSON.parse(identityMatch[1]) as Record<string, unknown>;
+  }
+
+  const delimiter = '/*__MYCCU_PROTOCOL_PRELUDE_END__*/';
+  const delimiterIndex = script.indexOf(delimiter);
+  mockInjectJavaScript(
+    delimiterIndex >= 0 ? script.slice(delimiterIndex + delimiter.length).trim() : script,
+  );
+};
 
 jest.mock('react-native-webview', () => {
   const React = require('react');
 
   return {
     WebView: React.forwardRef((props: any, ref: any) => {
-      webViewPropsRef.current = props;
+      mockCurrentUrlRef.current = props.source?.uri || mockCurrentUrlRef.current;
+      webViewPropsRef.current = {
+        ...props,
+        onNavigationStateChange: (navigation: any) => {
+          mockCurrentUrlRef.current = navigation?.url || mockCurrentUrlRef.current;
+          return props.onNavigationStateChange?.(navigation);
+        },
+        onLoadEnd: (event: any) => {
+          mockCurrentUrlRef.current = event?.nativeEvent?.url || mockCurrentUrlRef.current;
+          return props.onLoadEnd?.(event);
+        },
+        onMessage: (event: any) => {
+          let data = event?.nativeEvent?.data;
+          try {
+            const parsed = JSON.parse(data);
+            if (
+              parsed &&
+              typeof parsed === 'object' &&
+              parsed.version !== 1 &&
+              mockProtocolIdentityRef.current
+            ) {
+              data = JSON.stringify({
+                version: 1,
+                ...mockProtocolIdentityRef.current,
+                event: 'legacy-message',
+                payload: parsed,
+              });
+            }
+          } catch {}
+
+          return props.onMessage?.({
+            ...event,
+            nativeEvent: {
+              ...event?.nativeEvent,
+              url: event?.nativeEvent?.url || mockCurrentUrlRef.current,
+              data,
+            },
+          });
+        },
+      };
       React.useImperativeHandle(ref, () => ({
-        injectJavaScript: mockInjectJavaScript,
+        injectJavaScript: mockRecordInjectedJavaScript,
         reload: mockReload,
         stopLoading: mockStopLoading,
       }));
@@ -28,6 +85,10 @@ jest.mock('react-native-webview', () => {
 
 jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
+}));
+
+jest.mock('expo-crypto', () => ({
+  randomUUID: () => `nonce-${++mockNonceCounterRef.current}`,
 }));
 
 jest.mock('../../../auth/services/authService', () => ({
@@ -143,6 +204,7 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     clearScraperDebugPreviewFrame();
     mockGetSavedPCCUCredentials.mockClear();
     mockInjectJavaScript.mockClear();
+    mockRawInjectJavaScript.mockClear();
     mockReload.mockClear();
     mockStopLoading.mockClear();
     (buildAdaptiveSchedulePageScript as jest.Mock).mockClear();
@@ -153,6 +215,9 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     (buildTutoringSingleCourseScript as jest.Mock).mockClear();
     (buildWaitForCourseFpScript as jest.Mock).mockClear();
     webViewPropsRef.current = null;
+    mockProtocolIdentityRef.current = null;
+    mockCurrentUrlRef.current = '';
+    mockNonceCounterRef.current = 0;
   });
 
   afterEach(async () => {
@@ -262,6 +327,156 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe('webview_host_rejected');
     rendered.unmount();
+  });
+
+  it('does not let a stale protocol generation settle the active request', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+
+    for (let generation = 1; generation < 5; generation += 1) {
+      const completedRequest = engine.requestSync('schedule').catch((error) => error);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      act(() => {
+        webViewPropsRef.current?.onShouldStartLoadWithRequest?.({
+          url: 'http://ecampus.pccu.edu.tw/eCampus/inside.aspx',
+        });
+      });
+      await expect(completedRequest).resolves.toBeInstanceOf(Error);
+      act(() => {
+        jest.advanceTimersByTime(1);
+      });
+    }
+
+    let settled = false;
+    const requestPromise = engine
+      .requestSync('schedule')
+      .catch((error) => error)
+      .finally(() => {
+        settled = true;
+      });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    const activeIdentity = mockProtocolIdentityRef.current;
+    expect(activeIdentity).toEqual(expect.objectContaining({ generation: 5 }));
+    if (!activeIdentity) throw new Error('Expected active protocol identity');
+
+    await act(async () => {
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx',
+          data: JSON.stringify({
+            version: 1,
+            ...activeIdentity,
+            generation: 4,
+            event: 'legacy-message',
+            payload: { t: 'login_fail' },
+            t: 'login_fail',
+          }),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(settled).toBe(false);
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('prefixes every injected legacy script with the active protocol identity', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+    const requestPromise = engine.requestSync('schedule').catch((error) => error);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockRawInjectJavaScript).toHaveBeenCalled();
+    for (const [script] of mockRawInjectJavaScript.mock.calls) {
+      expect(script).toContain('/*__MYCCU_PROTOCOL_IDENTITY__');
+      expect(script).toContain('/*__MYCCU_PROTOCOL_PRELUDE_END__*/');
+    }
+    expect(mockProtocolIdentityRef.current).toEqual(
+      expect.objectContaining({
+        generation: 1,
+        nonce: 'nonce-1',
+        syncKind: 'schedule',
+      }),
+    );
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it('rejects a bound message from a disallowed current page without settling', async () => {
+    const engine = PccuSyncEngine.getInstance();
+    const rendered = render(<GlobalScraperWebView />);
+    let settled = false;
+    const requestPromise = engine
+      .requestSync('schedule')
+      .catch((error) => error)
+      .finally(() => {
+        settled = true;
+      });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+        },
+      });
+      await Promise.resolve();
+      webViewPropsRef.current?.onMessage?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw.evil.example/inside.aspx?secret=value',
+          data: JSON.stringify({ t: 'login_fail' }),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(settled).toBe(false);
+    expect(consoleWarnSpy).toHaveBeenCalledWith('[global-scraper]', {
+      event: 'webview_message_rejected',
+      reason: 'disallowed_url',
+      syncKind: 'schedule',
+    });
+
+    rendered.unmount();
+    const error = await requestPromise;
+    expect(error).toBeInstanceOf(Error);
   });
 
   it('renders the live scraper preview only inside a registered debug slot', async () => {
@@ -401,6 +616,15 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      webViewPropsRef.current?.onLoadEnd?.({
+        nativeEvent: {
+          url: 'https://ecampus.pccu.edu.tw/eCampus/default.aspx?ts=123',
+        },
+      });
       await Promise.resolve();
     });
 

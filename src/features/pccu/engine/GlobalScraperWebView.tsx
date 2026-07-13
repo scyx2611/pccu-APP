@@ -2,10 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
 import {
   ALLOWED_WEBVIEW_ORIGINS,
   isAllowedWebViewUrl,
 } from '../../../core/sync/webview/hostPolicy';
+import {
+  buildLegacyProtocolPrelude,
+  decodeWebViewEnvelope,
+  type WebViewProtocolIdentity,
+} from '../../../core/sync/webview/protocol';
 import { PccuSyncEngine, type SyncRequest, type SyncType } from '../../pccu/engine/PccuSyncEngine';
 import { pccuBrowserSessionGate, type PccuBrowserSessionLease } from './pccuBrowserSessionGate';
 import { getSavedPCCUCredentials } from '../../auth/services/authService';
@@ -115,6 +121,7 @@ type ActiveMode = 'pccu' | 'pccu-tutoring' | 'traffic' | 'none';
 
 type PendingRequest = {
   request: SyncRequest;
+  protocolIdentity: WebViewProtocolIdentity;
   retries: number;
   phase: PccuPhase | TrafficPhase;
   lastHandledUrl: string;
@@ -163,6 +170,7 @@ export default function GlobalScraperWebView() {
   const webViewRef = useRef<WebView>(null);
   const credRef = useRef<PCCUCredentials | null>(null);
   const pendingRef = useRef<PendingRequest | null>(null);
+  const protocolGenerationRef = useRef(0);
   const trafficPartialRef = useRef<TrafficPartial>({ downhill: [], uphill: [] });
   const activeModeRef = useRef<ActiveMode>('none');
   const pccuPhaseRef = useRef<PccuPhase>('idle');
@@ -244,6 +252,12 @@ export default function GlobalScraperWebView() {
           setTrafficUrl(withTimestamp(TRAFFIC_DOWNHILL_URL));
           pendingRef.current = {
             request: { ...request, resolve: resolveOnce, reject: rejectOnce },
+            protocolIdentity: {
+              requestId: request.id,
+              generation: ++protocolGenerationRef.current,
+              nonce: Crypto.randomUUID(),
+              syncKind: request.type,
+            },
             retries: 0,
             phase: 'load_downhill',
             lastHandledUrl: '',
@@ -314,6 +328,12 @@ export default function GlobalScraperWebView() {
         updateDebugMessage(`${isTutoring ? 'pccu-tutoring' : 'pccu'}:start:${type}:${request.id}`);
         pendingRef.current = {
           request: { ...request, resolve: resolveOnce, reject: rejectOnce },
+          protocolIdentity: {
+            requestId: request.id,
+            generation: ++protocolGenerationRef.current,
+            nonce: Crypto.randomUUID(),
+            syncKind: request.type,
+          },
           retries: 0,
           phase: 'idle',
           lastHandledUrl: '',
@@ -380,6 +400,13 @@ export default function GlobalScraperWebView() {
     };
   }, [releasePccuSessionLease]);
 
+  const injectLegacyJavaScript = useCallback((script: string): boolean => {
+    const identity = pendingRef.current?.protocolIdentity;
+    if (!identity) return false;
+    webViewRef.current?.injectJavaScript(`${buildLegacyProtocolPrelude(identity)}\n${script}`);
+    return true;
+  }, []);
+
   const runLogin = useCallback(() => {
     const pending = pendingRef.current;
     if (!pending) return;
@@ -394,8 +421,8 @@ export default function GlobalScraperWebView() {
       pccuPhaseRef.current = 'logging_in';
     }
     updateDebugMessage(`pccu:login:${pending.request.type}`);
-    webViewRef.current?.injectJavaScript(buildLoginScript(cred));
-  }, [finishPccu, updateDebugMessage]);
+    injectLegacyJavaScript(buildLoginScript(cred));
+  }, [finishPccu, injectLegacyJavaScript, updateDebugMessage]);
 
   const injectPccuScript = useCallback(
     (type: SyncType, reason: string, rawUrl?: string, minIntervalMs = 1200) => {
@@ -434,9 +461,9 @@ export default function GlobalScraperWebView() {
         type === 'grade'
           ? buildRobustGradePageScript()
           : `${scheduleScriptPrefix}${buildAdaptiveSchedulePageScript()}`;
-      webViewRef.current?.injectJavaScript(script);
+      injectLegacyJavaScript(script);
     },
-    [],
+    [injectLegacyJavaScript],
   );
 
   const openPccuTarget = useCallback(
@@ -459,15 +486,15 @@ export default function GlobalScraperWebView() {
 
         if (type === 'schedule') {
           updateDebugMessage(`open-target:${type}:${reason}:1208`);
-          webViewRef.current?.injectJavaScript(buildServiceOpenScript('1208'));
+          injectLegacyJavaScript(buildServiceOpenScript('1208'));
           return;
         }
 
         updateDebugMessage(`open-target:${type}:${reason}:1220`);
-        webViewRef.current?.injectJavaScript(buildServiceOpenScript('1220'));
+        injectLegacyJavaScript(buildServiceOpenScript('1220'));
       }, delayMs);
     },
-    [updateDebugMessage],
+    [injectLegacyJavaScript, updateDebugMessage],
   );
 
   const persistGrades = useCallback(async (incomingGrades: SemesterGrade[]): Promise<boolean> => {
@@ -585,12 +612,10 @@ export default function GlobalScraperWebView() {
         return false;
       }
 
-      webViewRef.current?.injectJavaScript(
-        `window.location.href=${JSON.stringify(targetUrl)};true;`,
-      );
+      injectLegacyJavaScript(`window.location.href=${JSON.stringify(targetUrl)};true;`);
       return true;
     },
-    [rejectActiveWebViewRequest],
+    [injectLegacyJavaScript, rejectActiveWebViewRequest],
   );
 
   const handleShouldStartLoadWithRequest = useCallback(
@@ -602,15 +627,18 @@ export default function GlobalScraperWebView() {
     [rejectActiveWebViewRequest],
   );
 
-  const injectTrafficScript = useCallback((direction: 'downhill' | 'uphill', routeId: string) => {
-    const config = {
-      direction,
-      directionLabel: direction === 'downhill' ? '下山' : '上山',
-      branchLabel: direction === 'downhill' ? '②往劍潭經文大' : '④往陽明山經文大',
-      routeId,
-    };
-    webViewRef.current?.injectJavaScript(buildTrafficExtractionScript(config));
-  }, []);
+  const injectTrafficScript = useCallback(
+    (direction: 'downhill' | 'uphill', routeId: string) => {
+      const config = {
+        direction,
+        directionLabel: direction === 'downhill' ? '下山' : '上山',
+        branchLabel: direction === 'downhill' ? '②往劍潭經文大' : '④往陽明山經文大',
+        routeId,
+      };
+      injectLegacyJavaScript(buildTrafficExtractionScript(config));
+    },
+    [injectLegacyJavaScript],
+  );
 
   // -----------------------------------------------------------------------
   // Navigation handler
@@ -707,7 +735,7 @@ export default function GlobalScraperWebView() {
               useTutoringStore.getState().setSyncPhase('logging_in');
             }
             setTimeout(() => {
-              webViewRef.current?.injectJavaScript(buildServiceOpenScript('1202'));
+              injectLegacyJavaScript(buildServiceOpenScript('1202'));
             }, 1200);
             return;
           }
@@ -731,7 +759,7 @@ export default function GlobalScraperWebView() {
               return;
             }
             updateDebugMessage(`fallback:tutoring:icas:${url}`);
-            webViewRef.current?.injectJavaScript(
+            injectLegacyJavaScript(
               `window.location.href=${JSON.stringify(TUTORING_HOME_URL)};true;`,
             );
           }, 2500);
@@ -750,7 +778,7 @@ export default function GlobalScraperWebView() {
               useTutoringStore.getState().setSyncPhase('fetching_details');
             }
             setTimeout(() => {
-              webViewRef.current?.injectJavaScript(
+              injectLegacyJavaScript(
                 buildWaitForCourseFpScript(
                   buildTutoringFileDownloadScript(pending.request.options as any),
                 ),
@@ -762,7 +790,7 @@ export default function GlobalScraperWebView() {
               useTutoringStore.getState().setSyncPhase('fetching_details');
             }
             setTimeout(() => {
-              webViewRef.current?.injectJavaScript(
+              injectLegacyJavaScript(
                 buildWaitForCourseFpScript(
                   buildTutoringFileUploadScript(pending.request.options as any),
                 ),
@@ -774,7 +802,7 @@ export default function GlobalScraperWebView() {
               useTutoringStore.getState().setSyncPhase('fetching_details');
             }
             setTimeout(() => {
-              webViewRef.current?.injectJavaScript(
+              injectLegacyJavaScript(
                 buildWaitForCourseFpScript(buildTutoringSingleCourseScript(courseCode)),
               );
             }, 3000);
@@ -784,9 +812,7 @@ export default function GlobalScraperWebView() {
               useTutoringStore.getState().setSyncPhase('fetching_courses');
             }
             setTimeout(() => {
-              webViewRef.current?.injectJavaScript(
-                buildWaitForCourseFpScript(buildTutoringOverviewScript()),
-              );
+              injectLegacyJavaScript(buildWaitForCourseFpScript(buildTutoringOverviewScript()));
             }, 3000);
           }
           return;
@@ -800,6 +826,7 @@ export default function GlobalScraperWebView() {
     },
     [
       runLogin,
+      injectLegacyJavaScript,
       injectPccuScript,
       injectTrafficScript,
       openPccuTarget,
@@ -815,9 +842,50 @@ export default function GlobalScraperWebView() {
   const handleMessage = useCallback(
     async (event: any) => {
       try {
-        const data = JSON.parse(event.nativeEvent.data);
         const pending = pendingRef.current;
         if (!pending) return;
+
+        const currentUrl = String(event?.nativeEvent?.url || '');
+        if (!isAllowedWebViewUrl(currentUrl)) {
+          logger.warn({
+            event: 'webview_message_rejected',
+            reason: 'disallowed_url',
+            syncKind: pending.request.type,
+          });
+          return;
+        }
+
+        const decoded = decodeWebViewEnvelope(
+          String(event?.nativeEvent?.data || ''),
+          pending.protocolIdentity,
+        );
+        if (!decoded.ok) {
+          logger.warn({
+            event: 'webview_message_rejected',
+            reason: decoded.reason,
+            syncKind: pending.request.type,
+          });
+          return;
+        }
+        if (decoded.value.event !== 'legacy-message') {
+          logger.warn({
+            event: 'webview_message_rejected',
+            reason: 'malformed',
+            syncKind: pending.request.type,
+          });
+          return;
+        }
+
+        const payload = decoded.value.payload;
+        if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+          logger.warn({
+            event: 'webview_message_rejected',
+            reason: 'malformed',
+            syncKind: pending.request.type,
+          });
+          return;
+        }
+        const data = payload as Record<string, any>;
 
         const mode = activeModeRef.current;
 
@@ -838,9 +906,7 @@ export default function GlobalScraperWebView() {
             pccuPhaseRef.current = 'open_target';
             pending.lastHandledUrl = '';
             pending.targetOpenRequested = false;
-            webViewRef.current?.injectJavaScript(
-              `window.location.href=${JSON.stringify(PCCU_INSIDE_URL)};true;`,
-            );
+            injectLegacyJavaScript(`window.location.href=${JSON.stringify(PCCU_INSIDE_URL)};true;`);
             return;
           }
 
@@ -979,9 +1045,7 @@ export default function GlobalScraperWebView() {
             if (!isSilentTutoring) {
               useTutoringStore.getState().setSyncPhase('logging_in');
             }
-            webViewRef.current?.injectJavaScript(
-              `window.location.href=${JSON.stringify(PCCU_INSIDE_URL)};true;`,
-            );
+            injectLegacyJavaScript(`window.location.href=${JSON.stringify(PCCU_INSIDE_URL)};true;`);
             return;
           }
 
@@ -1013,14 +1077,14 @@ export default function GlobalScraperWebView() {
             if (!isSilentTutoring) {
               useTutoringStore.getState().setSyncPhase('fetching_details');
             }
-            webViewRef.current?.injectJavaScript(buildTutoringAllAssignmentsScript());
+            injectLegacyJavaScript(buildTutoringAllAssignmentsScript());
             return;
           }
 
           if (data.t === 'all_assignments') {
             const allItems = Array.isArray(data.items) ? data.items : [];
             await setAllAssignments(allItems);
-            webViewRef.current?.injectJavaScript(buildTutoringPendingAssignmentsScript());
+            injectLegacyJavaScript(buildTutoringPendingAssignmentsScript());
             return;
           }
 
@@ -1136,15 +1200,13 @@ export default function GlobalScraperWebView() {
                 }
                 updateDebugMessage(`retry:tutoring:${pending.retries}`);
                 if (pending.request.type === 'tutoring-detail' && tutoringCourseCodeRef.current) {
-                  webViewRef.current?.injectJavaScript(
+                  injectLegacyJavaScript(
                     buildWaitForCourseFpScript(
                       buildTutoringSingleCourseScript(tutoringCourseCodeRef.current),
                     ),
                   );
                 } else {
-                  webViewRef.current?.injectJavaScript(
-                    buildWaitForCourseFpScript(buildTutoringOverviewScript()),
-                  );
+                  injectLegacyJavaScript(buildWaitForCourseFpScript(buildTutoringOverviewScript()));
                 }
               } else {
                 if (!isSilentTutoring) {
@@ -1222,6 +1284,7 @@ export default function GlobalScraperWebView() {
     [
       finishPccu,
       finishTraffic,
+      injectLegacyJavaScript,
       persistGrades,
       persistCourses,
       restartPccuLogin,
@@ -1422,9 +1485,7 @@ export default function GlobalScraperWebView() {
         if (isTutoringTransUrl(failingUrl)) {
           tutoringPhaseRef.current = 'open_target';
           updateDebugMessage(`fallback:tutoring:http-error:${failingUrl}`);
-          webViewRef.current?.injectJavaScript(
-            `window.location.href=${JSON.stringify(TUTORING_HOME_URL)};true;`,
-          );
+          injectLegacyJavaScript(`window.location.href=${JSON.stringify(TUTORING_HOME_URL)};true;`);
           return;
         }
         if (pending.request.options?.silent !== true) {
@@ -1436,7 +1497,7 @@ export default function GlobalScraperWebView() {
         finishTraffic({ success: false, message: '交通資訊頁面載入失敗' });
       }
     },
-    [finishPccu, finishTraffic, updateDebugMessage],
+    [finishPccu, finishTraffic, injectLegacyJavaScript, updateDebugMessage],
   );
 
   const handleHttpError = useCallback(
@@ -1451,11 +1512,9 @@ export default function GlobalScraperWebView() {
       updateDebugMessage(
         `fallback:tutoring:http-${event?.nativeEvent?.statusCode ?? 'unknown'}:${failingUrl}`,
       );
-      webViewRef.current?.injectJavaScript(
-        `window.location.href=${JSON.stringify(TUTORING_HOME_URL)};true;`,
-      );
+      injectLegacyJavaScript(`window.location.href=${JSON.stringify(TUTORING_HOME_URL)};true;`);
     },
-    [updateDebugMessage],
+    [injectLegacyJavaScript, updateDebugMessage],
   );
 
   // -----------------------------------------------------------------------
