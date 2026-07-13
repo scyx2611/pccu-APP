@@ -1,3 +1,5 @@
+import type { TrafficSnapshot } from '../types';
+
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(() => Promise.resolve(null)),
   setItem: jest.fn(() => Promise.resolve()),
@@ -20,7 +22,7 @@ jest.mock('../../pccu/engine/PccuSyncEngine', () => ({
   },
 }));
 
-const mockGetTrafficSnapshot = jest.fn(async () => null);
+const mockGetTrafficSnapshot = jest.fn<Promise<TrafficSnapshot | null>, []>(async () => null);
 
 jest.mock('../storage/trafficStorage', () => ({
   getTrafficSnapshot: () => mockGetTrafficSnapshot(),
@@ -54,10 +56,21 @@ describe('useTrafficSync (PccuSyncEngine wrapper)', () => {
   });
 
   it('returns success with snapshot when sync succeeds', async () => {
-    const fakeSnapshot = {
-      downhill: [{ stopName: 'A', etaText: '3 分' }],
+    const fakeSnapshot: TrafficSnapshot = {
+      downhill: [
+        {
+          stopName: 'A',
+          direction: 'downhill',
+          directionLabel: '下山',
+          branchLabel: '主線',
+          etaText: '3 分',
+          etaMinutes: 3,
+          isDue: false,
+        },
+      ],
       uphill: [],
       updatedAt: 12345,
+      sourceUrl: 'https://ebus.gov.taipei',
     };
     mockGetTrafficSnapshot.mockResolvedValue(fakeSnapshot);
     mockRequestSync.mockResolvedValue({ success: true, updatedAt: 12345 } as any);

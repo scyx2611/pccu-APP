@@ -6,6 +6,22 @@ jest.mock('react-native', () => ({
 
 import { PccuSyncEngine } from '../PccuSyncEngine';
 
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+};
+
+const createDeferred = <T,>(): Deferred<T> => {
+  let resolve!: Deferred<T>['resolve'];
+  let reject!: Deferred<T>['reject'];
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
+
 describe('PccuSyncEngine executor lifecycle', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -29,13 +45,8 @@ describe('PccuSyncEngine executor lifecycle', () => {
   it('rejects the active request if the executor is cleared during execution', async () => {
     const engine = PccuSyncEngine.getInstance();
 
-    let resolveExecutor: ((value: unknown) => void) | null = null;
-    const executorId = engine.setExecutor(
-      () =>
-        new Promise((resolve) => {
-          resolveExecutor = resolve;
-        })
-    );
+    const executor = createDeferred<unknown>();
+    const executorId = engine.setExecutor(() => executor.promise);
 
     const requestPromise = engine.requestSync('schedule');
     await Promise.resolve();
@@ -46,7 +57,7 @@ describe('PccuSyncEngine executor lifecycle', () => {
       'Sync executor became unavailable. Shared scraper was unmounted.'
     );
 
-    resolveExecutor?.({ success: true });
+    executor.resolve({ success: true });
   });
 
   it('can accept a fresh executor after cleanup and process new requests', async () => {
@@ -104,20 +115,13 @@ describe('PccuSyncEngine executor lifecycle', () => {
   it('does not start queued requests after resume while an active request is still pending', async () => {
     const engine = PccuSyncEngine.getInstance();
     const calls: string[] = [];
-    let resolveGrade: ((value: unknown) => void) | null = null;
-    let resolveSchedule: ((value: unknown) => void) | null = null;
+    const grade = createDeferred<unknown>();
+    const schedule = createDeferred<unknown>();
 
-    engine.setExecutor(
-      (request) =>
-        new Promise((resolve) => {
-          calls.push(request.type);
-          if (request.type === 'grade') {
-            resolveGrade = resolve;
-          } else {
-            resolveSchedule = resolve;
-          }
-        })
-    );
+    engine.setExecutor((request) => {
+      calls.push(request.type);
+      return request.type === 'grade' ? grade.promise : schedule.promise;
+    });
 
     const gradePromise = engine.requestSync('grade');
     await Promise.resolve();
@@ -132,14 +136,14 @@ describe('PccuSyncEngine executor lifecycle', () => {
 
     expect(calls).toEqual(['grade']);
 
-    resolveGrade?.({ success: true, type: 'grade' });
+    grade.resolve({ success: true, type: 'grade' });
     await Promise.resolve();
     jest.advanceTimersByTime(300);
     await Promise.resolve();
 
     expect(calls).toEqual(['grade', 'schedule']);
 
-    resolveSchedule?.({ success: true, type: 'schedule' });
+    schedule.resolve({ success: true, type: 'schedule' });
 
     await expect(gradePromise).resolves.toEqual({ success: true, type: 'grade' });
     await expect(schedulePromise).resolves.toEqual({ success: true, type: 'schedule' });

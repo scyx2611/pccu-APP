@@ -1,4 +1,33 @@
 {
-  "compilerOptions": {},
-  "extends": "expo/tsconfig.base"
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.js",
+    "scripts/**/*.cjs",
+    "scripts/**/*.mjs",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "expo-ios26-app-demo-master",
+    ".expo",
+    ".expo-export-*",
+    "dist",
+    "coverage",
+    ".codex",
+    ".agents",
+    ".superpowers",
+    ".worktrees",
+    "**/backups/**"
+  ]
 }
