@@ -36,9 +36,19 @@ describe('logger', () => {
     process.env.EXPO_PUBLIC_DEBUG_LOGS = '1';
     const logger = createLogger('sync');
 
-    logger.debug('queued');
+    logger.debug('queued', {
+      url: 'https://ecampus.pccu.edu.tw/private?token=secret',
+      password: 'secret',
+    });
 
-    expect(consoleLogSpy).toHaveBeenCalledWith('[sync]', 'queued');
+    expect(consoleLogSpy).toHaveBeenCalledWith({
+      event: 'queued',
+      scope: 'sync',
+      fields: {
+        url: 'https://ecampus.pccu.edu.tw',
+        password: '[Redacted]',
+      },
+    });
   });
 
   it('suppresses debug output in production unless explicitly enabled', () => {
@@ -56,7 +66,7 @@ describe('logger', () => {
     logger.warn('slow');
     logger.error('failed');
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith('[sync]', 'slow');
-    expect(consoleErrorSpy).toHaveBeenCalledWith('[sync]', 'failed');
+    expect(consoleWarnSpy).toHaveBeenCalledWith({ event: 'slow', scope: 'sync' });
+    expect(consoleErrorSpy).toHaveBeenCalledWith({ event: 'failed', scope: 'sync' });
   });
 });

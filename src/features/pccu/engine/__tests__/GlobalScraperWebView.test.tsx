@@ -300,9 +300,10 @@ describe('GlobalScraperWebView PCCU session gate', () => {
 
     expect(rejected).toBe(false);
     expect(mockStopLoading).toHaveBeenCalledTimes(1);
-    expect(consoleWarnSpy).toHaveBeenCalledWith('[global-scraper]', {
+    expect(consoleWarnSpy).toHaveBeenCalledWith({
       event: 'webview_host_rejected',
-      syncKind: 'schedule',
+      scope: 'global-scraper',
+      fields: { syncKind: 'schedule' },
     });
     const error = await requestPromise;
     expect(error).toBeInstanceOf(Error);
@@ -475,10 +476,10 @@ describe('GlobalScraperWebView PCCU session gate', () => {
     });
 
     expect(settled).toBe(false);
-    expect(consoleWarnSpy).toHaveBeenCalledWith('[global-scraper]', {
+    expect(consoleWarnSpy).toHaveBeenCalledWith({
       event: 'webview_message_rejected',
-      reason: 'disallowed_url',
-      syncKind: 'schedule',
+      scope: 'global-scraper',
+      fields: { reason: 'disallowed_url', syncKind: 'schedule' },
     });
 
     rendered.unmount();

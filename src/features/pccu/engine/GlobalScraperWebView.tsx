@@ -531,7 +531,11 @@ export default function GlobalScraperWebView() {
       pending.lastInjectKey = key;
       pending.lastInjectAt = now;
       updateDebugMessage(`inject:${type}:${reason}:${rawUrl || key || 'no-url'}`);
-      logger.debug('[inject]', type, reason, rawUrl || key);
+      logger.debug('webview_script_injected', {
+        syncKind: type,
+        reason,
+        url: rawUrl || key,
+      });
 
       const scheduleScriptPrefix = `
 (function() {
@@ -683,7 +687,7 @@ export default function GlobalScraperWebView() {
       const pending = pendingRef.current;
       if (!pending || pending.completed) return;
 
-      logger.warn({ event: reason, syncKind: pending.request.type });
+      logger.warn(reason, { syncKind: pending.request.type });
       updateDebugMessage(`${reason}:${pending.request.type}`);
 
       if (activeModeRef.current === 'traffic') {
@@ -758,7 +762,11 @@ export default function GlobalScraperWebView() {
         const type = pending.request.type as SyncType;
         pending.request.refreshTimeout?.();
         updateDebugMessage(`nav:${pccuPhaseRef.current}:${type}:${url}`);
-        logger.debug('[nav][pccu]', pccuPhaseRef.current, url);
+        logger.debug('webview_navigation', {
+          mode: 'pccu',
+          phase: pccuPhaseRef.current,
+          url,
+        });
 
         if (url.includes('inside.aspx')) {
           pending.lastHandledUrl = url;
@@ -809,7 +817,11 @@ export default function GlobalScraperWebView() {
           setTimeout(() => injectPccuScript('schedule', 'nav', url), 1200);
         }
       } else if (mode === 'traffic') {
-        logger.debug('[nav][traffic]', trafficPhaseRef.current, url);
+        logger.debug('webview_navigation', {
+          mode: 'traffic',
+          phase: trafficPhaseRef.current,
+          url,
+        });
         updateDebugMessage(`nav:${trafficPhaseRef.current}:traffic:${url}`);
 
         if (trafficPhaseRef.current === 'load_downhill' && url.includes('0111000505')) {
@@ -823,7 +835,11 @@ export default function GlobalScraperWebView() {
         pending.request.refreshTimeout?.();
         const isSilentTutoring = pending.request.options?.silent === true;
         updateDebugMessage(`nav:${tutoringPhaseRef.current}:${pending.request.type}:${url}`);
-        logger.debug('[nav][pccu-tutoring]', tutoringPhaseRef.current, url);
+        logger.debug('webview_navigation', {
+          mode: 'pccu-tutoring',
+          phase: tutoringPhaseRef.current,
+          url,
+        });
 
         if (url.includes('inside.aspx')) {
           if (tutoringPhaseRef.current === 'open_target') {
@@ -943,8 +959,7 @@ export default function GlobalScraperWebView() {
 
         const currentUrl = String(event?.nativeEvent?.url || '');
         if (!isAllowedWebViewUrl(currentUrl)) {
-          logger.warn({
-            event: 'webview_message_rejected',
+          logger.warn('webview_message_rejected', {
             reason: 'disallowed_url',
             syncKind: pending.request.type,
           });
@@ -956,16 +971,14 @@ export default function GlobalScraperWebView() {
           pending.protocolIdentity,
         );
         if (!decoded.ok) {
-          logger.warn({
-            event: 'webview_message_rejected',
+          logger.warn('webview_message_rejected', {
             reason: decoded.reason,
             syncKind: pending.request.type,
           });
           return;
         }
         if (decoded.value.event !== 'legacy-message') {
-          logger.warn({
-            event: 'webview_message_rejected',
+          logger.warn('webview_message_rejected', {
             reason: 'malformed',
             syncKind: pending.request.type,
           });
@@ -974,8 +987,7 @@ export default function GlobalScraperWebView() {
 
         const payload = decoded.value.payload;
         if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
-          logger.warn({
-            event: 'webview_message_rejected',
+          logger.warn('webview_message_rejected', {
             reason: 'malformed',
             syncKind: pending.request.type,
           });
@@ -991,7 +1003,10 @@ export default function GlobalScraperWebView() {
           updateDebugMessage(
             `msg:${pccuPhaseRef.current}:${type}:${data.t}${data.m ? `:${String(data.m)}` : ''}`,
           );
-          logger.debug('[msg][pccu]', data.t, data.m || '');
+          logger.debug('webview_message_received', {
+            mode: 'pccu',
+            messageType: String(data.t || 'unknown'),
+          });
 
           if (data.t === 'user_name' && data.n) {
             await SecureStore.setItemAsync('user_name', data.n);
@@ -1094,7 +1109,10 @@ export default function GlobalScraperWebView() {
           updateDebugMessage(
             `msg:${tutoringPhaseRef.current}:${pending.request.type}:${data.t}${data.m ? `:${String(data.m)}` : ''}`,
           );
-          logger.debug('[msg][pccu-tutoring]', data.t, data.m || '');
+          logger.debug('webview_message_received', {
+            mode: 'pccu-tutoring',
+            messageType: String(data.t || 'unknown'),
+          });
 
           if (
             pending.request.type === 'tutoring-detail' ||
@@ -1210,17 +1228,13 @@ export default function GlobalScraperWebView() {
                   ? data.courseInfo
                   : undefined,
             };
-            logger.debug(
-              '[tutoring-detail] progress',
-              JSON.stringify({
-                courseCode,
-                count: detail.progress.length,
-                source: data.progressSource || 'unknown',
-                methods: Array.isArray(data.progressMethodCandidates)
-                  ? data.progressMethodCandidates.slice(0, 12)
-                  : [],
-              }),
-            );
+            logger.debug('tutoring_detail_progress', {
+              count: detail.progress.length,
+              source: String(data.progressSource || 'unknown'),
+              methodCount: Array.isArray(data.progressMethodCandidates)
+                ? data.progressMethodCandidates.length
+                : 0,
+            });
             const persistJobs = [
               persistCourseDetail(courseCode, 'announcements', detail.announcements),
               persistCourseDetail(courseCode, 'materials', detail.materials),
@@ -1334,11 +1348,16 @@ export default function GlobalScraperWebView() {
             data.t === 'final_diagnostic' ||
             data.t === 'status'
           ) {
-            logger.debug('[tutoring]', data.t, data);
+            logger.debug('tutoring_status_received', {
+              messageType: String(data.t || 'unknown'),
+            });
             return;
           }
         } else if (mode === 'traffic') {
-          logger.debug('[msg][traffic]', data.t);
+          logger.debug('webview_message_received', {
+            mode: 'traffic',
+            messageType: String(data.t || 'unknown'),
+          });
           updateDebugMessage(`msg:${trafficPhaseRef.current}:traffic:${data.t}`);
 
           if (data.t === 'traffic_rows') {
@@ -1495,7 +1514,11 @@ export default function GlobalScraperWebView() {
             : pccuPhaseRef.current;
 
       updateDebugMessage(`openwindow:${phase}:${pending.request.type}:${targetUrl}`);
-      logger.debug('[openwindow]', mode, pending.request.type, targetUrl);
+      logger.debug('webview_open_window', {
+        mode,
+        syncKind: pending.request.type,
+        url: targetUrl,
+      });
 
       pending.lastHandledUrl = '';
       navigateToAllowedUrl(targetUrl);

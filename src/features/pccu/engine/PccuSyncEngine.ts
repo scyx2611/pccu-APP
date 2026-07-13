@@ -282,9 +282,12 @@ export class PccuSyncEngine {
       };
 
       this.queue.enqueue(request);
-      logger.debug(
-        `Enqueued ${type} (id=${request.id}, priority=${priority ?? 5}, queue=${this.queue.size})`,
-      );
+      logger.debug('sync_request_enqueued', {
+        syncKind: type,
+        requestId: request.id,
+        priority: priority ?? 5,
+        queueSize: this.queue.size,
+      });
 
       this.processQueue();
     });
@@ -299,7 +302,7 @@ export class PccuSyncEngine {
     this._pausedReason = reason ?? 'app_background';
     this.clearActiveTimeout();
     this.clearProcessingTimer();
-    logger.debug(`Paused - reason: ${this._pausedReason}`);
+    logger.debug('sync_engine_paused', { reason: this._pausedReason });
   }
 
   /**
@@ -308,7 +311,7 @@ export class PccuSyncEngine {
   resume(): void {
     if (this.state !== 'paused') return;
     this._pausedReason = null;
-    logger.debug('Resumed');
+    logger.debug('sync_engine_resumed');
 
     if (this.activeRequest) {
       this.state = 'processing';
@@ -340,7 +343,7 @@ export class PccuSyncEngine {
   clearQueue(): void {
     const count = this.queue.size;
     this.queue.clear();
-    logger.debug(`Cleared ${count} pending requests`);
+    logger.debug('sync_queue_cleared', { count });
   }
 
   blockNewRequests(reason: SessionTransitionReason): void {
@@ -453,7 +456,7 @@ export class PccuSyncEngine {
           }
           request.abortHandler = null;
           request.resolve(data);
-          logger.debug(`Completed ${request.id}`);
+          logger.debug('sync_request_completed', { requestId: request.id });
           this.scheduleNext();
         })
         .catch((error) => {
@@ -465,7 +468,10 @@ export class PccuSyncEngine {
           }
           request.abortHandler = null;
           request.reject(error instanceof Error ? error : new Error(String(error)));
-          logger.debug(`Error - ${request.id}:`, error);
+          logger.debug('sync_request_failed', {
+            requestId: request.id,
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+          });
           this.scheduleNext();
         });
     } catch (error) {
@@ -491,7 +497,7 @@ export class PccuSyncEngine {
       );
       request.abortHandler?.('timeout', error);
       request.reject(error);
-      logger.debug(`Timeout - ${request.id}`);
+      logger.debug('sync_request_timed_out', { requestId: request.id, syncKind: request.type });
       this.scheduleNext();
     }, TASK_TIMEOUT_MS);
   }

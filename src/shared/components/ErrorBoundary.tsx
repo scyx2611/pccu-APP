@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../providers/theme/ThemeProvider';
+import { reportBoundaryError } from '../observability/errorReporting';
 
 type ErrorBoundaryProps = {
   label?: string;
@@ -8,32 +9,49 @@ type ErrorBoundaryProps = {
 };
 
 type ErrorBoundaryState = {
-  error: Error | null;
-  info: React.ErrorInfo | null;
+  hasError: boolean;
+  retryCount: number;
 };
 
 class ErrorBoundaryBase extends React.Component<
-  ErrorBoundaryProps & { theme: any },
+  ErrorBoundaryProps & { theme: ReturnType<typeof useTheme>['theme'] },
   ErrorBoundaryState
 > {
-  state: ErrorBoundaryState = { error: null, info: null };
+  state: ErrorBoundaryState = { hasError: false, retryCount: 0 };
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    this.setState({ error, info });
+  static getDerivedStateFromError(): Partial<ErrorBoundaryState> {
+    return { hasError: true };
   }
 
-  render() {
-    if (!this.state.error) return this.props.children;
-    const { theme, label } = this.props;
-    const title = label ? `${label} 發生錯誤` : '畫面發生錯誤';
-    const detail = this.state.error?.message || '未知錯誤';
-    const stack = this.state.info?.componentStack?.trim();
+  componentDidCatch(error: Error): void {
+    reportBoundaryError({
+      errorName: error.name || 'Error',
+      boundary: this.props.label ?? 'unknown',
+      retryCount: this.state.retryCount,
+    });
+  }
 
+  private retry = (): void => {
+    this.setState((state) => ({ hasError: false, retryCount: state.retryCount + 1 }));
+  };
+
+  render(): React.ReactNode {
+    if (!this.state.hasError) {
+      return <React.Fragment key={this.state.retryCount}>{this.props.children}</React.Fragment>;
+    }
+
+    const { theme } = this.props;
     return (
       <View style={[styles.container, { backgroundColor: theme.bg }]}>
-        <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-        <Text style={[styles.detail, { color: theme.textSub }]}>{detail}</Text>
-        {stack ? <Text style={[styles.stack, { color: theme.textSub }]}>{stack}</Text> : null}
+        <Text style={[styles.title, { color: theme.text }]}>畫面暫時無法顯示</Text>
+        <Text style={[styles.detail, { color: theme.textSub }]}>請重試，或稍後再開啟此畫面。</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={this.retry}
+          style={[styles.retryButton, { backgroundColor: theme.primary }]}
+        >
+          <Text style={styles.retryText}>重試</Text>
+        </Pressable>
       </View>
     );
   }
@@ -45,8 +63,9 @@ export default function ErrorBoundary(props: ErrorBoundaryProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, justifyContent: 'center' },
+  container: { flex: 1, padding: 24, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
-  detail: { fontSize: 14, marginBottom: 12 },
-  stack: { fontSize: 12, lineHeight: 16 },
+  detail: { fontSize: 14, marginBottom: 20, textAlign: 'center' },
+  retryButton: { borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
+  retryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });
